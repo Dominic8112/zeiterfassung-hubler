@@ -1182,12 +1182,7 @@ function generateWeeklyReport(empId, weekStart) {
   weekEnd.setHours(23,59,59,999);
 
   const empName = empId ? EMPLOYEES.find(e=>e.id===empId)?.name : null;
-  const entries = (window._allEntries||[]).filter(e => {
-    const d = new Date(e.date);
-    const matchDate = d >= weekStart && d <= weekEnd;
-    const matchEmp = empId ? e.date && true : true; // all entries for selected emp
-    return matchDate;
-  });
+  const entries = []; // Entries loaded separately by showWeeklyReports
 
   // Group by day
   const days = {};
@@ -1199,68 +1194,8 @@ function generateWeeklyReport(empId, weekStart) {
     days[key]={date:key, dayName, entries:[], totalHours:0, warnings:[]};
   }
 
-  entries.forEach(e => {
-    const key = e.date;
-    if(days[key]) {
-      days[key].entries.push(e);
-      days[key].totalHours += (e.hours||0);
-    }
-  });
-
-  // Analyze each day for warnings
   const empSettings = getEmpSetting(empId);
-  const sollPerDay = empSettings ? (empSettings.sollStunden / (empSettings.arbeitsTage||[1,2,3,4,5]).length) : 8.5;
-
-  Object.values(days).forEach(day => {
-    if(day.entries.length === 0) {
-      // Check if it's a workday
-      const d = new Date(day.date);
-      const dow = d.getDay();
-      const workDays = empSettings?.arbeitsTage || [1,2,3,4,5];
-      if(workDays.includes(dow)) {
-        // Check for absence
-        day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
-      }
-      return;
-    }
-
-    // Sort entries by start time
-    const sorted = [...day.entries].sort((a,b) => (a.start||'').localeCompare(b.start||''));
-
-    // Check Znüni pause
-    let hasZnueni = false;
-    let hasMittag = false;
-    let totalBreak = 0;
-
-    sorted.forEach(e => {
-      if(e.pauseZnueni) hasZnueni = true;
-      if(e.pauseMittag && e.pauseMittag !== 'none') hasMittag = true;
-      totalBreak += (e.breakMinutes||0);
-    });
-
-    // Calculate gross time
-    const firstStart = sorted[0]?.start;
-    const lastEnd = sorted[sorted.length-1]?.end;
-
-    if(day.totalHours > 6 && !hasMittag) {
-      day.warnings.push({type:'warn', msg:'Keine Mittagspause bei >6h Arbeit'});
-    }
-    if(!hasZnueni && day.totalHours > 2) {
-      day.warnings.push({type:'warn', msg:'Keine Zn\u00fcni-Pause erfasst'});
-    }
-    if(day.totalHours > 10) {
-      day.warnings.push({type:'warn', msg:'\u00dcber 10h Arbeitszeit'});
-    }
-    if(day.totalHours > 0 && day.totalHours < sollPerDay * 0.5 && day.entries.length > 0) {
-      day.warnings.push({type:'info', msg:'Weniger als 50% der Sollzeit'});
-    }
-    // Check if pause data exists at all
-    sorted.forEach(e => {
-      if(!e.pauseZnueni && !e.pauseMittag && !e.breakMinutes && day.totalHours > 4) {
-        day.warnings.push({type:'info', msg:'Keine Pauseninformationen erfasst'});
-      }
-    });
-  });
+  const sollPerDay = empSettings ? ((empSettings.sollStunden||42.5) / (empSettings.arbeitsTage||[1,2,3,4,5]).length) : 8.5;
 
   return {empId, empName, weekStart, weekEnd, days, empSettings, sollPerDay};
 }
@@ -1349,15 +1284,13 @@ function renderWeeklyReportHTML(report) {
 function showWeeklyReports() {
   if(!user || (!user.admin && !user.approver)) return;
 
-  // Get selected week
   const weekInput = $('weeklyReportWeek');
   let weekStart;
   if(weekInput && weekInput.value) {
-    // Input type=week gives "2026-W07" format
     const parts = weekInput.value.split('-W');
     const year = parseInt(parts[0]);
     const week = parseInt(parts[1]);
-    // Calculate Monday of that week
+    // ISO week: Monday of week 1 is the week containing Jan 4
     const jan4 = new Date(year, 0, 4);
     const d = new Date(jan4);
     d.setDate(jan4.getDate() - ((jan4.getDay()+6)%7) + (week-1)*7);
@@ -1367,40 +1300,115 @@ function showWeeklyReports() {
     weekStart = new Date(now);
     weekStart.setDate(now.getDate() - ((now.getDay()+6)%7));
   }
+  weekStart.setHours(0,0,0,0);
 
   const empFilter = $('weeklyReportEmp')?.value || 'all';
   const container = $('weeklyReportResult');
   if(!container) return;
 
-  container.innerHTML = '<div class="loading">Lade Daten...</div>';
+  container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim)">Lade Daten...</div>';
 
-  // Load entries for each employee
   const emps = empFilter === 'all' ? EMPLOYEES : EMPLOYEES.filter(e=>e.id===empFilter);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate()+6);
+  const fromStr = weekStart.toISOString().split('T')[0];
+  const toStr = weekEnd.toISOString().split('T')[0];
 
+  // Load from SharePoint for each employee
   let allReports = [];
   let loaded = 0;
+  const total = emps.length;
+
+  if(total === 0) { container.innerHTML = '<div class="empty-state">Keine Mitarbeiter</div>'; return; }
 
   emps.forEach(emp => {
-    getEntriesForEmployee(emp.id, weekStart, weekEnd).then(entries => {
-      window._allEntries = entries;
+    loadWeeklyEntries(emp, fromStr, toStr).then(entries => {
+      const report = generateWeeklyReport(emp.id, new Date(weekStart));
+      report.empName = emp.name;
+      report._entries = entries;
+      // Fill days with actual entries
+      entries.forEach(e => {
+        const key = e.date;
+        if(report.days[key]) {
+          report.days[key].entries.push(e);
+          report.days[key].totalHours += (e.hours || (e.durationMin ? e.durationMin/60 : 0));
+        }
+      });
+      // Re-analyze warnings
+      analyzeWeeklyWarnings(report);
+      allReports.push(report);
+    }).catch(err => {
+      console.error('Weekly report error for', emp.name, err);
       const report = generateWeeklyReport(emp.id, new Date(weekStart));
       report.empName = emp.name;
       allReports.push(report);
+    }).finally(() => {
       loaded++;
-      if(loaded === emps.length) {
+      if(loaded === total) {
         allReports.sort((a,b) => a.empName.localeCompare(b.empName));
         let html = '';
         allReports.forEach(r => { html += renderWeeklyReportHTML(r); });
-        container.innerHTML = html || '<div class="empty-state">Keine Daten gefunden</div>';
-      }
-    }).catch(err => {
-      loaded++;
-      if(loaded === emps.length) {
-        container.innerHTML = '<div class="empty-state">Fehler beim Laden</div>';
+        container.innerHTML = html || '<div class="empty-state"><p>Keine Daten f\u00fcr diese Woche gefunden</p></div>';
       }
     });
+  });
+}
+
+async function loadWeeklyEntries(emp, fromStr, toStr) {
+  // Try SharePoint first
+  if(accessToken) {
+    try {
+      const year = fromStr.substring(0,4);
+      const fn = 'Mitarbeiter/' + emp.name.replace(/\s/g,'_') + '_' + year + '.json';
+      const data = await SP.readFile(fn);
+      if(data) {
+        const entries = Array.isArray(data) ? data : (data.entries || []);
+        return entries.filter(e => e.date >= fromStr && e.date <= toStr);
+      }
+    } catch(e) { console.log('SP load failed for', emp.name, e); }
+  }
+  // Fallback: localStorage
+  try {
+    const key = C.LS + emp.id + '_entries';
+    const data = JSON.parse(localStorage.getItem(key) || '[]');
+    return data.filter(e => e.date >= fromStr && e.date <= toStr);
+  } catch(e) { return []; }
+}
+
+function analyzeWeeklyWarnings(report) {
+  const empSettings = getEmpSetting(report.empId);
+  const workDays = empSettings?.arbeitsTage || [1,2,3,4,5];
+  const sollPerDay = empSettings ? (empSettings.sollStunden || 42.5) / workDays.length : 8.5;
+
+  Object.values(report.days).forEach(day => {
+    day.warnings = [];
+    const d = new Date(day.date);
+    const dow = d.getDay();
+
+    if(day.entries.length === 0) {
+      if(workDays.includes(dow)) {
+        day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
+      }
+      return;
+    }
+
+    let hasZnueni = false;
+    let hasMittag = false;
+    day.entries.forEach(e => {
+      if(e.pauseZnueni || e.znueniPause) hasZnueni = true;
+      if(e.pauseMittag && e.pauseMittag !== 'none' && e.pauseMittag !== 'durchgearbeitet') hasMittag = true;
+      if(e.mittagsPause && e.mittagsPause !== 'none' && e.mittagsPause !== 'durchgearbeitet') hasMittag = true;
+    });
+
+    if(day.totalHours > 6 && !hasMittag) {
+      day.warnings.push({type:'warn', msg:'Keine Mittagspause bei >6h Arbeit'});
+    }
+    if(!hasZnueni && day.totalHours > 2) {
+      day.warnings.push({type:'warn', msg:'Keine Zn\u00fcni-Pause erfasst'});
+    }
+    if(day.totalHours > 10) {
+      day.warnings.push({type:'warn', msg:'\u00dcber 10h Arbeitszeit'});
+    }
   });
 }
 
