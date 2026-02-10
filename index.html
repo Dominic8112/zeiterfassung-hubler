@@ -727,7 +727,7 @@ const SP={
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';const data=await this.readFile(fn);if(data&&Array.isArray(data.entries)){const local=getEntries(),ids=new Set(local.map(e=>e.id)),merged=[...local];data.entries.forEach(e=>{if(!ids.has(e.id))merged.push(e)});localStorage.setItem(lk('entries'),JSON.stringify(merged));refreshView();return true}return false},
   async saveEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getEntries()})},
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadEmployeesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
 };
 function setSyncStatus(s){const el=$('syncStatus');if(s==='online'){el.className='sync-status online';el.textContent='SharePoint'}else if(s==='syncing'){el.className='sync-status syncing';el.textContent='Sync...'}else if(s==='offline'){el.className='sync-status offline';el.textContent='Offline'}else{el.className='sync-status';el.textContent='Lokal'}$('spStatusText').textContent=s==='online'?'Verbunden mit SharePoint':s==='syncing'?'Synchronisiere...':'Lokaler Modus (Demo)'}
 let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||localStorage.getItem(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
@@ -1634,13 +1634,50 @@ function generateReport(){
 }
 
 function getEntriesForEmployee(empId,from,to){
-  // Try to load from global entries store or localStorage
   const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return[];
   const key=C.LS+empId+'_entries';
   try{
     const data=JSON.parse(localStorage.getItem(key)||'[]');
     return data.filter(e=>e.date>=from&&e.date<=to);
   }catch{return[]}
+}
+
+// Save another employee's entries to SharePoint
+function syncEmpEntriesToSP(empId){
+  if(!accessToken)return;
+  const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return;
+  const key=C.LS+empId+'_entries';
+  try{
+    const all=JSON.parse(localStorage.getItem(key)||'[]');
+    const fn='Mitarbeiter/'+emp.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';
+    SP.writeFile(fn,{employee:emp.name,employeeId:empId,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:all})
+      .then(()=>console.log('[SP] Einträge gespeichert für:',emp.name))
+      .catch(e=>console.warn('[SP] Einträge Fehler für',emp.name,':',e));
+  }catch(e){console.warn('syncEmpEntries:',e)}
+}
+
+// Load all employees' entries from SP (for admin/reports)
+async function loadAllEntriesFromSP(){
+  if(!accessToken)return;
+  const year=new Date().getFullYear();
+  for(const emp of EMPLOYEES){
+    try{
+      const fn='Mitarbeiter/'+emp.name.replace(/\s/g,'_')+'_'+year+'.json';
+      const data=await SP.readFile(fn);
+      if(data&&Array.isArray(data.entries)){
+        const key=C.LS+emp.id+'_entries';
+        const local=JSON.parse(localStorage.getItem(key)||'[]');
+        const localIds=new Set(local.map(e=>e.id));
+        const spIds=new Set(data.entries.map(e=>e.id));
+        // SP has priority, add local-only entries
+        const localOnly=local.filter(e=>!spIds.has(e.id));
+        const merged=[...data.entries,...localOnly];
+        localStorage.setItem(key,JSON.stringify(merged));
+      }
+    }catch(e){/* skip - file might not exist */}
+  }
+  console.log('[SP] Alle MA-Einträge geladen');
+  refreshView();
 }
 
 function exportReportCSV(){
@@ -1965,6 +2002,7 @@ function maeSaveEdit(){
   }
   $('maeEditModal').classList.remove('show');
   _maeEditId=null;
+  syncEmpEntriesToSP(_maeEmpId);
   maeLoad();
 }
 
@@ -1975,6 +2013,7 @@ function maeDeleteEntry(id){
     let all=JSON.parse(localStorage.getItem(empKey)||'[]');
     all=all.filter(e=>e.id!==id);
     localStorage.setItem(empKey,JSON.stringify(all));
+    syncEmpEntriesToSP(_maeEmpId);
     toast('Eintrag gelöscht','success');
     maeLoad();
   }catch(e){toast('Fehler','error')}
@@ -2154,6 +2193,7 @@ function maeDoImport(){
       });
     });
     localStorage.setItem(empKey,JSON.stringify(all));
+    syncEmpEntriesToSP(_maeEmpId);
     toast(valid.length+' Einträge importiert!','success');
     $('maeImportArea').style.display='none';
     _maeImportData=[];
