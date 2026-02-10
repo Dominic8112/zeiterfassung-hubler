@@ -149,6 +149,15 @@
       <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="timerKS"><option value="">— Bitte wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
       <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="timerNote" placeholder="Optional..."></div>
     </div>
+    <!-- Personal Notifications -->
+    <div class="card" style="margin-top:24px">
+      <div class="card-title">🔔 Benachrichtigungen</div>
+      <div class="sp-info"><strong>Status:</strong> <span id="myNotifStatus">...</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn btn-primary btn-sm" id="myNotifEnableBtn">🔔 Aktivieren</button><button class="btn btn-secondary btn-sm" id="myNotifTestBtn">🧪 Test</button></div>
+      <div class="form-group"><label class="form-label">⏰ Morgen-Erinnerung</label><div class="form-row"><input type="time" class="form-input" id="myNotifMorning" value="06:55"><select class="form-select" id="myNotifMorningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🏠 Feierabend-Erinnerung</label><div class="form-row"><input type="time" class="form-input" id="myNotifEvening" value="16:45"><select class="form-select" id="myNotifEveningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <button class="btn btn-primary btn-block btn-sm" id="myNotifSaveBtn">💾 Speichern</button>
+    </div>
   </div>
 
   <!-- MANUAL -->
@@ -205,7 +214,11 @@
     <div class="card">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="dashPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="custom">Benutzerdefiniert</option></select></div>
-        <div class="form-group"><label class="form-label">Projekte</label><input type="text" class="form-input" id="dashProjFilter" placeholder="🔍 Filtern..."></div>
+        <div class="form-group" style="flex:2"><label class="form-label">Projekte filtern</label><input type="text" class="form-input" id="dashProjSearch" placeholder="🔍 Suchen..." oninput="dashFilterProjects()"></div>
+      </div>
+      <div id="dashProjPicker" style="max-height:180px;overflow-y:auto;padding:8px;margin:8px 0;border:1px solid var(--border);border-radius:8px">
+        <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center"><button class="btn btn-secondary btn-sm" onclick="dashSelectAll()" style="font-size:.72rem">Alle</button><button class="btn btn-secondary btn-sm" onclick="dashSelectNone()" style="font-size:.72rem">Keine</button><span id="dashProjCount" style="font-size:.75rem;color:var(--text-dim)"></span></div>
+        <div id="dashProjCheckboxes"></div>
       </div>
       <div id="dashCustomRange" style="display:none" class="form-row"><div class="form-group"><label class="form-label">Von</label><input type="date" class="form-input" id="dashFrom"></div><div class="form-group"><label class="form-label">Bis</label><input type="date" class="form-input" id="dashTo"></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="loadDashboard()">📊 Laden</button><button class="btn btn-secondary btn-sm" onclick="exportDashboardHTML()">🖨 Report Export</button><button class="btn btn-secondary btn-sm" onclick="exportDashboardCSV()">📤 CSV Export</button></div>
@@ -275,6 +288,15 @@
     <div class="form-group"><label class="form-label">Status</label><select class="form-select" id="maeAbsStatus"><option value="pending">Pendent</option><option value="approved">Genehmigt</option><option value="rejected">Abgelehnt</option></select></div>
     <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="maeAbsNote"></div>
     <div class="modal-actions"><button class="btn btn-secondary" onclick="$('maeAbsEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="maeSaveAbsEdit()">💾 Speichern</button></div>
+  </div></div>
+
+  <!-- Employee Edit Modal -->
+  <div class="modal-overlay" id="empEditModal"><div class="modal"><div class="modal-title">✏️ Mitarbeiter bearbeiten</div>
+    <div class="form-group"><label class="form-label">MA-Nr</label><input type="text" class="form-input" id="empEditId" disabled></div>
+    <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="empEditName"></div>
+    <div class="form-group"><label class="form-label">E-Mail</label><input type="email" class="form-input" id="empEditEmail" placeholder="name@firma.ch oder privat"></div>
+    <div class="form-group"><label class="form-label">Rolle</label><select class="form-select" id="empEditRole"><option value="employee">Mitarbeiter</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="$('empEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveEmpEditModal()">💾 Speichern</button></div>
   </div></div>
 
   <!-- ABSENCE -->
@@ -744,7 +766,7 @@ const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(s
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences()}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif()}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -2188,7 +2210,7 @@ function renderEmpManagement(){
   EMPLOYEES.forEach(e=>{
     const role=e.admin?'Admin':e.approver?'Approver':'Mitarbeiter';
     const archived=e.archived;
-    html+='<tr style="'+(archived?'opacity:.5':'')+'"><td>'+e.id+'</td><td>'+e.name+'</td><td style="font-size:.75rem">'+(e.email||'-')+'</td><td>'+role+'</td><td>'+(archived?'\uD83D\uDD12 Archiviert'+(e.archivedDate?' ('+fmtDate(e.archivedDate)+')':''):'\u2705 Aktiv')+'</td><td class="mae-actions">'+(archived?'<button onclick="reactivateEmployee(\''+e.id+'\')" title="Reaktivieren">\u267B\uFE0F</button>':'<button onclick="archiveEmployee(\''+e.id+'\')" title="Archivieren">\uD83D\uDD12</button>')+'</td></tr>';
+    html+='<tr style="'+(archived?'opacity:.5':'')+'"><td>'+e.id+'</td><td>'+e.name+'</td><td style="font-size:.75rem">'+(e.email||'<span style="color:var(--danger)">fehlt</span>')+'</td><td>'+role+'</td><td>'+(archived?'\uD83D\uDD12 Archiviert'+(e.archivedDate?' ('+fmtDate(e.archivedDate)+')':''):'\u2705 Aktiv')+'</td><td class="mae-actions"><button onclick="openEmpEditModal(\''+e.id+'\')" title="Bearbeiten">\u270F\uFE0F</button>'+(archived?'<button onclick="reactivateEmployee(\''+e.id+'\')" title="Reaktivieren">\u267B\uFE0F</button>':'<button onclick="archiveEmployee(\''+e.id+'\')" title="Archivieren">\uD83D\uDD12</button>')+'</td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -2330,7 +2352,7 @@ function maeDoAbsImport(){
 }
 
 // ==================== DASHBOARD ====================
-let _dashData=null;
+let _dashData=null,_dashSelectedProj=new Set();
 
 function getDashRange(){
   const p=$('dashPeriod').value;
@@ -2343,12 +2365,10 @@ function getDashRange(){
 
 function loadDashboard(){
   const range=getDashRange();
-  const filter=($('dashProjFilter').value||'').toLowerCase();
   const emps=getActiveEmployees();
   const allAbs=getAllAbsences();
   const empSettings=getEmpSettings();
 
-  // Collect all data
   let totalMin=0,totalEntries=0,krankTotal=0,unfallTotal=0;
   const ksBrk={},projBrk={},empData=[];
 
@@ -2383,56 +2403,96 @@ function loadDashboard(){
     empData.push({emp,entries:entries.length,istH:Math.round(empMin/6)/10,sollH:Math.round(sollH*10)/10,ferienAnspruch,ferienBez:ferienDays+bfDays,ferienRest:Math.round((ferienAnspruch-ferienDays-bfDays)*10)/10,krankDays,unfallDays,bfDays});
   });
 
-  _dashData={range,totalMin,totalEntries,krankTotal,unfallTotal,ksBrk,projBrk,empData,filter};
+  _dashData={range,totalMin,totalEntries,krankTotal,unfallTotal,ksBrk,projBrk,empData};
+
+  // Build project picker checkboxes
+  _dashSelectedProj=new Set(Object.keys(projBrk));
+  renderDashProjPicker();
+
+  // Render with all projects selected
+  renderDashboard();
+
+  $('dashPeriod').onchange=function(){$('dashCustomRange').style.display=this.value==='custom'?'grid':'none'};
+}
+
+function renderDashProjPicker(){
+  if(!_dashData)return;
+  const search=($('dashProjSearch')?$('dashProjSearch').value:'').toLowerCase();
+  const allProj=Object.entries(_dashData.projBrk).sort((a,b)=>b[1].min-a[1].min);
+  const filtered=search?allProj.filter(([p])=>p.toLowerCase().includes(search)):allProj;
+  let html='';
+  filtered.forEach(([p,d])=>{
+    const checked=_dashSelectedProj.has(p)?'checked':'';
+    const h=Math.round(d.min/6)/10;
+    html+='<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:.8rem;cursor:pointer;border-bottom:1px solid var(--border)"><input type="checkbox" '+checked+' onchange="dashToggleProj(this,\''+p.replace(/'/g,"\\'")+'\')">'+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p+'</span><span style="font-family:var(--font-mono);color:var(--accent);font-size:.75rem">'+h+'h</span></label>';
+  });
+  if($('dashProjCheckboxes'))$('dashProjCheckboxes').innerHTML=html||'<p style="color:var(--text-dim);font-size:.8rem">Keine Projekte gefunden</p>';
+  if($('dashProjCount'))$('dashProjCount').textContent=_dashSelectedProj.size+' von '+allProj.length+' Projekte gew\u00e4hlt';
+}
+
+function dashToggleProjCB(cb){const p=cb.getAttribute('data-proj').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&lt;/g,'<');if(cb.checked)_dashSelectedProj.add(p);else _dashSelectedProj.delete(p);if($('dashProjCount'))$('dashProjCount').textContent=_dashSelectedProj.size+' von '+Object.keys(_dashData.projBrk).length+' Projekte gew\u00e4hlt';renderDashboard()}
+function dashToggleProj(cb,proj){dashToggleProjCB(cb)}
+function dashSelectAll(){if(!_dashData)return;_dashSelectedProj=new Set(Object.keys(_dashData.projBrk));renderDashProjPicker();renderDashboard()}
+function dashSelectNone(){_dashSelectedProj=new Set();renderDashProjPicker();renderDashboard()}
+function dashFilterProjects(){renderDashProjPicker()}
+
+function renderDashboard(){
+  if(!_dashData)return;
+  const d=_dashData;
+  const selProj=_dashSelectedProj;
+
+  // Recalculate with selected projects only
+  let selMin=0,selEntries=0;
+  const selKsBrk={};
+  const projArr=Object.entries(d.projBrk).filter(([p])=>selProj.has(p)).sort((a,b)=>b[1].min-a[1].min);
+  projArr.forEach(([p,pd])=>{
+    selMin+=pd.min;selEntries+=pd.entries;
+    Object.entries(pd.ks).forEach(([k,m])=>{selKsBrk[k]=(selKsBrk[k]||0)+m});
+  });
 
   // KPIs
-  const totalH=Math.round(totalMin/6)/10;
+  const totalH=Math.round(d.totalMin/6)/10;
+  const selH=Math.round(selMin/6)/10;
+  const emps=getActiveEmployees();
   const avgH=emps.length?Math.round(totalH/emps.length*10)/10:0;
-  $('dashKPIs').innerHTML='<div class="stat-grid" style="margin:12px 0"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Total Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+avgH+'h</div><div class="stat-label">\u00d8 pro MA</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTotal+'</div><div class="stat-label">Krankheitstage</div></div><div class="stat-box"><div class="stat-num" style="color:var(--warning)">'+unfallTotal+'</div><div class="stat-label">Unfalltage</div></div><div class="stat-box"><div class="stat-num">'+totalEntries+'</div><div class="stat-label">Eintr\u00e4ge</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+emps.length+'</div><div class="stat-label">Mitarbeiter</div></div></div>';
+  $('dashKPIs').innerHTML='<div class="stat-grid" style="margin:12px 0"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Total Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+selH+'h</div><div class="stat-label">Gew\u00e4hlte Projekte</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+avgH+'h</div><div class="stat-label">\u00d8 pro MA</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+d.krankTotal+'</div><div class="stat-label">Krankheitstage</div></div><div class="stat-box"><div class="stat-num" style="color:var(--warning)">'+d.unfallTotal+'</div><div class="stat-label">Unfalltage</div></div><div class="stat-box"><div class="stat-num">'+selProj.size+'/'+Object.keys(d.projBrk).length+'</div><div class="stat-label">Projekte</div></div></div>';
 
   // KS
   $('dashKS').style.display='block';
-  const ksTotal=Object.values(ksBrk).reduce((s,v)=>s+v,0);
-  $('dashKSContent').innerHTML=Object.entries(ksBrk).sort((a,b)=>b[1]-a[1]).map(([k,m])=>{
+  const ksTotal=Object.values(selKsBrk).reduce((s,v)=>s+v,0);
+  $('dashKSContent').innerHTML=Object.entries(selKsBrk).sort((a,b)=>b[1]-a[1]).map(([k,m])=>{
     const pct=ksTotal?Math.round(m/ksTotal*100):0;
     return '<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+(KS_COLORS[k]||'#666')+'"></div></div><div class="stat-bar-value">'+(Math.round(m/6)/10)+'h ('+pct+'%)</div></div>';
-  }).join('');
+  }).join('')||'<p style="color:var(--text-dim);font-size:.82rem">Keine Daten</p>';
 
   // Projects
   $('dashProjects').style.display='block';
-  let projArr=Object.entries(projBrk).sort((a,b)=>b[1].min-a[1].min);
-  if(filter)projArr=projArr.filter(([p])=>p.toLowerCase().includes(filter));
   $('dashProjTitle').textContent='Projekt-\u00dcbersicht ('+projArr.length+' Projekte)';
-  $('dashProjectsList').innerHTML=projArr.slice(0,50).map(([p,d])=>{
-    const h=Math.round(d.min/6)/10;
-    const ksHtml=Object.entries(d.ks).sort((a,b)=>b[1]-a[1]).map(([k,m])=>'<span style="font-size:.72rem;color:var(--text-dim)">'+k+': '+(Math.round(m/6)/10)+'h</span>').join(' \u00b7 ');
-    return '<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%" title="'+p+'">'+p+'</span><span style="font-family:var(--font-mono);font-weight:600;color:var(--accent)">'+h+'h</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'+ksHtml+' \u00b7 <span style="font-size:.72rem;color:var(--text-dim)">'+d.emps.size+' MA \u00b7 '+d.entries+' Eintr.</span></div></div>';
+  $('dashProjectsList').innerHTML=projArr.slice(0,50).map(([p,pd])=>{
+    const h=Math.round(pd.min/6)/10;
+    const ksHtml=Object.entries(pd.ks).sort((a,b)=>b[1]-a[1]).map(([k,m])=>'<span style="font-size:.72rem;color:var(--text-dim)">'+k+': '+(Math.round(m/6)/10)+'h</span>').join(' \u00b7 ');
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%" title="'+p+'">'+p+'</span><span style="font-family:var(--font-mono);font-weight:600;color:var(--accent)">'+h+'h</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'+ksHtml+' \u00b7 <span style="font-size:.72rem;color:var(--text-dim)">'+pd.emps.size+' MA \u00b7 '+pd.entries+' Eintr.</span></div></div>';
   }).join('')+(projArr.length>50?'<p style="color:var(--text-dim);font-size:.8rem;padding:8px 0">...und '+(projArr.length-50)+' weitere</p>':'');
 
   // Absence overview
   $('dashAbsence').style.display='block';
   let absHtml='<table class="mae-table"><thead><tr><th>Mitarbeiter</th><th>Ferien Anspruch</th><th>Bezogen</th><th>BF</th><th>Rest</th><th>Krankheit</th><th>Unfall</th></tr></thead><tbody>';
-  empData.forEach(d=>{
-    absHtml+='<tr><td>'+d.emp.name+'</td><td>'+d.ferienAnspruch+'</td><td>'+d.ferienBez+'</td><td>'+d.bfDays+'</td><td style="color:'+(d.ferienRest>=0?'var(--success)':'var(--danger)')+';font-weight:600">'+d.ferienRest+'</td><td style="color:var(--danger)">'+d.krankDays+'</td><td>'+d.unfallDays+'</td></tr>';
+  d.empData.forEach(ed=>{
+    absHtml+='<tr><td>'+ed.emp.name+'</td><td>'+ed.ferienAnspruch+'</td><td>'+ed.ferienBez+'</td><td>'+ed.bfDays+'</td><td style="color:'+(ed.ferienRest>=0?'var(--success)':'var(--danger)')+';font-weight:600">'+ed.ferienRest+'</td><td style="color:var(--danger)">'+ed.krankDays+'</td><td>'+ed.unfallDays+'</td></tr>';
   });
   absHtml+='</tbody></table>';
   $('dashAbsContent').innerHTML=absHtml;
-
-  // Period change handler
-  $('dashPeriod').onchange=function(){$('dashCustomRange').style.display=this.value==='custom'?'grid':'none'};
 }
 
 function exportDashboardCSV(){
   if(!_dashData){toast('Zuerst Dashboard laden','warning');return}
-  const d=_dashData;const filter=($('dashProjFilter').value||'').toLowerCase();
+  const d=_dashData;
   let csv='\uFEFF';
 
-  // Project data
   csv+='Projekt;Stunden;Eintr\u00e4ge;Mitarbeiter';
   const ksList=Object.keys(d.ksBrk);ksList.forEach(k=>csv+=';'+k);
   csv+='\n';
-  let projArr=Object.entries(d.projBrk).sort((a,b)=>b[1].min-a[1].min);
-  if(filter)projArr=projArr.filter(([p])=>p.toLowerCase().includes(filter));
+  let projArr=Object.entries(d.projBrk).filter(([p])=>_dashSelectedProj.has(p)).sort((a,b)=>b[1].min-a[1].min);
   projArr.forEach(([p,pd])=>{
     csv+=p+';'+Math.round(pd.min/6)/10+';'+pd.entries+';'+pd.emps.size;
     ksList.forEach(k=>csv+=';'+(pd.ks[k]?Math.round(pd.ks[k]/6)/10:0));
@@ -2456,6 +2516,92 @@ function exportDashboardHTML(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Dashboard_Report_'+r.from+'_'+r.to+'.html';a.click();
   toast('Report heruntergeladen','success');
 }
+
+// ==================== EMPLOYEE EDIT MODAL ====================
+let _empEditId=null;
+function openEmpEditModal(id){
+  const emp=EMPLOYEES.find(e=>e.id===id);if(!emp)return;
+  _empEditId=id;
+  $('empEditId').value=emp.id;
+  $('empEditName').value=emp.name;
+  $('empEditEmail').value=emp.email||'';
+  $('empEditRole').value=emp.admin?'admin':emp.approver?'approver':'employee';
+  $('empEditModal').classList.add('show');
+}
+
+function saveEmpEditModal(){
+  const emp=EMPLOYEES.find(e=>e.id===_empEditId);if(!emp)return;
+  const name=$('empEditName').value.trim();
+  const email=$('empEditEmail').value.trim();
+  const role=$('empEditRole').value;
+  if(!name){toast('Name eingeben','warning');return}
+  emp.name=name;
+  emp.email=email||null;
+  emp.admin=role==='admin';
+  emp.approver=role==='approver'||role==='admin';
+  saveEmployees(EMPLOYEES);
+  $('empEditModal').classList.remove('show');
+  renderEmpManagement();renderEmpSettings();
+  toast(name+' aktualisiert','success');
+}
+
+// ==================== PERSONAL NOTIFICATIONS ====================
+function getMyNotifSettings(){
+  try{return JSON.parse(localStorage.getItem(C.LS+(user?user.id+'_':'')+'my_notif'))||{morning:'06:55',morningOn:true,evening:'16:45',eveningOn:true}}catch{return{morning:'06:55',morningOn:true,evening:'16:45',eveningOn:true}}
+}
+function saveMyNotifSettings(s){localStorage.setItem(C.LS+(user?user.id+'_':'')+'my_notif',JSON.stringify(s))}
+
+function initMyNotif(){
+  const s=getMyNotifSettings();
+  if($('myNotifMorning'))$('myNotifMorning').value=s.morning||'06:55';
+  if($('myNotifMorningOn'))$('myNotifMorningOn').value=s.morningOn!==false?'1':'0';
+  if($('myNotifEvening'))$('myNotifEvening').value=s.evening||'16:45';
+  if($('myNotifEveningOn'))$('myNotifEveningOn').value=s.eveningOn!==false?'1':'0';
+  updateMyNotifStatus();
+}
+
+function updateMyNotifStatus(){
+  const el=$('myNotifStatus');if(!el)return;
+  if(!('Notification' in window)){el.textContent='Nicht unterst\u00fctzt';return}
+  el.textContent=Notification.permission==='granted'?'\u2705 Aktiviert':Notification.permission==='denied'?'\u274C Blockiert':'\u23F3 Noch nicht aktiviert';
+}
+
+if($('myNotifEnableBtn'))$('myNotifEnableBtn').onclick=async function(){
+  if(!('Notification' in window)){toast('Browser unterst\u00fctzt keine Benachrichtigungen','error');return}
+  const perm=await Notification.requestPermission();
+  if(perm==='granted'){toast('Benachrichtigungen aktiviert!','success');updateMyNotifStatus();showNotif('Hubler Zeiterfassung','Benachrichtigungen aktiv!')}
+  else{toast('Berechtigung abgelehnt','warning');updateMyNotifStatus()}
+};
+
+if($('myNotifTestBtn'))$('myNotifTestBtn').onclick=function(){
+  if(Notification.permission!=='granted'){toast('Zuerst aktivieren','warning');return}
+  showNotif('Test','Benachrichtigungen funktionieren! \uD83D\uDE80');
+};
+
+if($('myNotifSaveBtn'))$('myNotifSaveBtn').onclick=function(){
+  const s={morning:$('myNotifMorning').value,morningOn:$('myNotifMorningOn').value==='1',evening:$('myNotifEvening').value,eveningOn:$('myNotifEveningOn').value==='1'};
+  saveMyNotifSettings(s);
+  toast('Benachrichtigungen gespeichert','success');
+};
+
+// Personal notification check (runs every minute)
+function checkMyNotifications(){
+  if(Notification.permission!=='granted'||!user)return;
+  const s=getMyNotifSettings();
+  const now=new Date();
+  const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const dow=now.getDay();
+  if(dow===0||dow===6)return;
+
+  if(s.morningOn&&hm===s.morning){
+    const entries=getEntries().filter(e=>e.date===todayKey());
+    if(!entries.length&&!timer.on)showNotif('\u23F0 Guten Morgen!','Vergiss nicht den Timer zu starten','morning-'+todayKey());
+  }
+  if(s.eveningOn&&hm===s.evening){
+    if(timer.on)showNotif('\uD83C\uDFE0 Feierabend?','Timer l\u00e4uft noch - nicht vergessen zu stoppen!','evening-'+todayKey());
+  }
+}
+setInterval(checkMyNotifications,60000);
 
 </script>
 </body>
