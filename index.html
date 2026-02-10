@@ -659,34 +659,65 @@ const SP={
   _driveId:null,
   async getDriveId(){
     if(this._driveId)return this._driveId;
+    // Try cached driveId from localStorage first
+    const cached=localStorage.getItem(C.LS+'sp_driveId');
+    if(cached){
+      console.log('[SP] Using cached driveId');
+      this._driveId=cached;
+      // Verify it still works in background
+      this.gf('/drives/'+cached+'/root').then(()=>{console.log('[SP] Cached driveId valid')}).catch(()=>{
+        console.warn('[SP] Cached driveId invalid, clearing');
+        localStorage.removeItem(C.LS+'sp_driveId');this._driveId=null;
+      });
+      return this._driveId;
+    }
     try{
       console.log('[SP] Suche SharePoint-Site...');
-      const search=await this.gf('/sites?search=HublerMetallbauDatenablage');
-      if(search&&search.value&&search.value.length>0){
-        const site=search.value[0];
-        console.log('[SP] Site gefunden:',site.displayName,'ID:',site.id);
+      // Method 1: Search by name
+      let site=null;
+      try{
+        const search=await this.gf('/sites?search=HublerMetallbauDatenablage');
+        if(search&&search.value&&search.value.length>0)site=search.value[0];
+      }catch(e){console.warn('[SP] Search failed:',e.message)}
+      // Method 2: Try direct site access by hostname
+      if(!site){
+        try{
+          site=await this.gf('/sites/hublermetallbau.sharepoint.com:/sites/HublerMetallbauDatenablage');
+        }catch(e){console.warn('[SP] Direct site failed:',e.message)}
+      }
+      // Method 3: Try root site
+      if(!site){
+        try{
+          site=await this.gf('/sites/hublermetallbau.sharepoint.com');
+        }catch(e){console.warn('[SP] Root site failed:',e.message)}
+      }
+      if(site){
+        console.log('[SP] Site gefunden:',site.displayName||site.name,'ID:',site.id);
         const drives=await this.gf('/sites/'+site.id+'/drives');
         if(drives&&drives.value){
           const docDrive=drives.value.find(d=>d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')||drives.value[0];
           this._driveId=docDrive.id;
+          localStorage.setItem(C.LS+'sp_driveId',this._driveId);
           console.log('[SP] Drive gefunden:',docDrive.name,'ID:',docDrive.id);
           return this._driveId;
         }
       }
-      console.warn('[SP] Site nicht gefunden');return null;
-    }catch(e){console.error('[SP] getDriveId:',e);return null}
+      console.warn('[SP] Site nicht gefunden - SharePoint nicht verf\u00fcgbar');
+      setSyncStatus('offline');
+      return null;
+    }catch(e){console.error('[SP] getDriveId:',e);setSyncStatus('offline');return null}
   },
-  async gf(ep,opts){if(!accessToken)return null;const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+accessToken,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok)throw new Error('Graph '+resp.status);return resp.json()},
+  async gf(ep,opts){if(!accessToken)return null;const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+accessToken,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){console.warn('[SP] Zugriff verweigert ('+resp.status+') f\u00fcr:',ep);throw new Error('Kein Zugriff ('+resp.status+')')}throw new Error('Graph '+resp.status)}return resp.json()},
   async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){console.warn('SP read:',e);return null}},
   async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){console.warn('SP write:',e);return false}},
   async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';const data=await this.readFile(fn);if(data&&Array.isArray(data.entries)){const local=getEntries(),ids=new Set(local.map(e=>e.id)),merged=[...local];data.entries.forEach(e=>{if(!ids.has(e.id))merged.push(e)});localStorage.setItem(lk('entries'),JSON.stringify(merged));refreshView();return true}return false},
   async saveEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getEntries()})},
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadEmployeesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('Sync: '+e.message,'error')}}
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadEmployeesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
 };
 function setSyncStatus(s){const el=$('syncStatus');if(s==='online'){el.className='sync-status online';el.textContent='SharePoint'}else if(s==='syncing'){el.className='sync-status syncing';el.textContent='Sync...'}else if(s==='offline'){el.className='sync-status offline';el.textContent='Offline'}else{el.className='sync-status';el.textContent='Lokal'}$('spStatusText').textContent=s==='online'?'Verbunden mit SharePoint':s==='syncing'?'Synchronisiere...':'Lokaler Modus (Demo)'}
-let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch{setSyncStatus('offline')}},3000)}
+let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||localStorage.getItem(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
 
 // OAUTH
 function loginWithMicrosoft(){
