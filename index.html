@@ -619,7 +619,23 @@ const PROJECTS_DATA=[
 {id:"4",name:"Pavillion Kindergarten, 8953 Dietikon",aktiv:true},
 {id:"3",name:"Faltwand und Festverglasung",aktiv:true},
 {id:"2",name:"Durchbruch Coop",aktiv:true},
-{id:"1",name:"Ferrum",aktiv:true}
+{id:"1",name:"Ferrum",aktiv:true},
+{id:"AD1720",name:"AD1720 – Büro Diverses",aktiv:true},
+{id:"AD1730",name:"AD1730 – Organisation, Vorbereitung, Führung",aktiv:true},
+{id:"AD1740",name:"AD1740 – Marketing",aktiv:true},
+{id:"V1800",name:"V1800 – Verkauf allg.",aktiv:true},
+{id:"W1500",name:"W1500 – Magazin",aktiv:true},
+{id:"W1510",name:"W1510 – Aufräumen",aktiv:true},
+{id:"W1520",name:"W1520 – Werkstattaufsicht",aktiv:true},
+{id:"W1530",name:"W1530 – Unterh. Rep. Fahrzeuge",aktiv:true},
+{id:"W1540",name:"W1540 – Unterh. Rep. Maschinen",aktiv:true},
+{id:"W1550",name:"W1550 – Transporte div.",aktiv:true},
+{id:"G1900",name:"G1900 – Garantie / Mängel",aktiv:true},
+{id:"P1400",name:"P1400 – Einführung (neu/wechsel)",aktiv:true},
+{id:"P1410",name:"P1410 – Weiterbildung Extern",aktiv:true},
+{id:"P1420",name:"P1420 – int. Schulung/Kurs",aktiv:true},
+{id:"P1430",name:"P1430 – MA-Gespräch",aktiv:true},
+{id:"S2000",name:"S2000 – Service / Wartung",aktiv:true}
 ];
 
 // HUBLER METALLBAU ZEITERFASSUNG - Complete App JS
@@ -1914,6 +1930,19 @@ function showWeeklyReports() {
 
 
 
+function exportWeeklyReportPrint(){
+  const container=$('weeklyReportResult');
+  if(!container||!container.innerHTML||container.innerHTML.includes('Keine Daten')){toast('Zuerst Report anzeigen','warning');return}
+  const weekInput=$('weeklyReportWeek');
+  const weekLabel=weekInput?weekInput.value:'';
+  const printHTML='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wochenreport</title><style>body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#333;font-size:13px}h1{font-size:1.3rem;border-bottom:2px solid #FF6B35;padding-bottom:8px}.weekly-report{border:1px solid #ddd;border-radius:8px;padding:16px;margin-bottom:20px;page-break-inside:avoid}.report-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #eee;padding-bottom:8px}.report-header h3{margin:0;font-size:1.1rem}.report-period{color:#666;font-size:.85rem}.report-day{padding:8px 0;border-bottom:1px solid #f0f0f0}.report-day-header{display:flex;justify-content:space-between;font-weight:600;margin-bottom:4px}.report-entry{padding:4px 0 4px 16px;font-size:.85rem;color:#444}.report-entry.empty{color:#999;font-style:italic}.report-entry-time{font-family:monospace}.report-entry-pause{color:#888;font-size:.8rem}.report-entry-note{color:#666;font-size:.8rem;font-style:italic}.report-warning{padding:2px 8px;margin:2px 0;border-radius:4px;font-size:.8rem}.report-warning.warn{background:#fff3cd;color:#856404}.report-warning.info{background:#d1ecf1;color:#0c5460}.report-summary{background:#f8f9fa;padding:12px;border-radius:6px;margin-top:12px}.report-sum-row{display:flex;justify-content:space-between;padding:3px 0;font-size:.9rem}.report-sum-row.positive{color:#28a745}.report-sum-row.negative{color:#dc3545}.report-sum-row.warn{color:#ffc107}.text-dim{color:#999}@media print{.weekly-report{break-inside:avoid;border:1px solid #ccc}}</style></head><body><h1>\u23F1 Wochenreport \u2013 Hubler Metallbau AG</h1><p style="color:#666;margin-bottom:20px">'+weekLabel+' \u2022 Erstellt am '+fmtDate(dateKey(new Date()))+'</p>'+container.innerHTML+'</body></html>';
+  const blob=new Blob([printHTML],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='Wochenreport_'+weekLabel.replace(/[^a-zA-Z0-9]/g,'_')+'.html';
+  a.click();toast('Druckversion heruntergeladen','success');
+}
+
+
 function exportReportHTML(){
   const output=$('reportOutput');if(!output||!output.innerHTML){toast('Zuerst Report anzeigen','warning');return}
   const range=getReportDateRange();
@@ -2527,11 +2556,19 @@ function loadDashboard(){
 
   _dashData={range,totalMin,totalEntries,krankTotal,unfallTotal,ksBrk,projBrk,empData};
 
-  // Build project picker checkboxes
-  _dashSelectedProj=new Set(Object.keys(projBrk));
+  // Build project picker: only reset selection if first load or period changed
+  const newProjects=new Set(Object.keys(projBrk));
+  if(_dashSelectedProj.size===0){
+    // First load: select all
+    _dashSelectedProj=new Set(newProjects);
+  }else{
+    // Remove projects no longer in data, keep user's deselections
+    const toRemove=[..._dashSelectedProj].filter(p=>!newProjects.has(p));
+    toRemove.forEach(p=>_dashSelectedProj.delete(p));
+  }
   renderDashProjPicker();
 
-  // Render with all projects selected
+  // Render with current selection
   renderDashboard();
 
   $('dashPeriod').onchange=function(){$('dashCustomRange').style.display=this.value==='custom'?'grid':'none'};
@@ -2546,14 +2583,14 @@ function renderDashProjPicker(){
   filtered.forEach(([p,d])=>{
     const checked=_dashSelectedProj.has(p)?'checked':'';
     const h=Math.round(d.min/6)/10;
-    html+='<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:.8rem;cursor:pointer;border-bottom:1px solid var(--border)"><input type="checkbox" '+checked+' onchange="dashToggleProj(this,\''+p.replace(/'/g,"\\'")+'\')">'+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p+'</span><span style="font-family:var(--font-mono);color:var(--accent);font-size:.75rem">'+h+'h</span></label>';
+    const safe=p.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    html+='<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:.8rem;cursor:pointer;border-bottom:1px solid var(--border)"><input type="checkbox" '+checked+' data-proj="'+safe+'" onchange="dashToggleProjCB(this)"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+safe+'</span><span style="font-family:var(--font-mono);color:var(--accent);font-size:.75rem">'+h+'h</span></label>';
   });
   if($('dashProjCheckboxes'))$('dashProjCheckboxes').innerHTML=html||'<p style="color:var(--text-dim);font-size:.8rem">Keine Projekte gefunden</p>';
   if($('dashProjCount'))$('dashProjCount').textContent=_dashSelectedProj.size+' von '+allProj.length+' Projekte gew\u00e4hlt';
 }
 
 function dashToggleProjCB(cb){const p=cb.getAttribute('data-proj').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&lt;/g,'<');if(cb.checked)_dashSelectedProj.add(p);else _dashSelectedProj.delete(p);if($('dashProjCount'))$('dashProjCount').textContent=_dashSelectedProj.size+' von '+Object.keys(_dashData.projBrk).length+' Projekte gew\u00e4hlt';renderDashboard()}
-function dashToggleProj(cb,proj){dashToggleProjCB(cb)}
 function dashSelectAll(){if(!_dashData)return;_dashSelectedProj=new Set(Object.keys(_dashData.projBrk));renderDashProjPicker();renderDashboard()}
 function dashSelectNone(){_dashSelectedProj=new Set();renderDashProjPicker();renderDashboard()}
 function dashFilterProjects(){renderDashProjPicker()}
