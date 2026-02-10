@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a1628">
+<title>Zeiterfassung - Hubler Metallbau</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--primary:#FF6B35;--primary-glow:rgba(255,107,53,.25);--primary-dim:rgba(255,107,53,.08);--secondary:#004E89;--accent:#F7B801;--bg-deep:#0a1628;--bg-card:#111d33;--bg-card-hover:#162440;--bg-input:#0d1a2e;--bg-surface:#1a2a45;--border:rgba(255,255,255,.06);--border-active:rgba(255,107,53,.3);--text:#e8edf5;--text-dim:#7a8ba8;--text-muted:#4a5a75;--success:#22c55e;--success-glow:rgba(34,197,94,.2);--danger:#ef4444;--danger-glow:rgba(239,68,68,.15);--warning:#F7B801;--radius:12px;--radius-sm:8px;--radius-lg:16px;--shadow:0 4px 24px rgba(0,0,0,.3);--shadow-lg:0 8px 40px rgba(0,0,0,.4);--transition:.2s cubic-bezier(.4,0,.2,1);--font-ui:'DM Sans',sans-serif;--font-mono:'JetBrains Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{font-size:16px;scroll-behavior:smooth}body{font-family:var(--font-ui);background:var(--bg-deep);color:var(--text);min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased}body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 20% 20%,rgba(0,78,137,.15) 0%,transparent 50%),radial-gradient(ellipse at 80% 80%,rgba(255,107,53,.08) 0%,transparent 50%);pointer-events:none;z-index:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:var(--text-muted);border-radius:3px}
+#login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:2rem;position:relative;z-index:1}.login-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:3rem 2.5rem;max-width:420px;width:100%;text-align:center;box-shadow:var(--shadow-lg);animation:fadeUp .6s ease}@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}.login-logo{font-size:2.5rem;margin-bottom:.5rem}.login-title{font-size:1.5rem;font-weight:700;margin-bottom:.25rem;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}.login-subtitle{color:var(--text-dim);font-size:.9rem;margin-bottom:2rem}
+.ms-login-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:14px 24px;background:#2f2f2f;color:#fff;border:1px solid rgba(255,255,255,.1);border-radius:var(--radius);font-size:1rem;font-weight:500;font-family:var(--font-ui);cursor:pointer;transition:var(--transition)}.ms-login-btn:hover{background:#3a3a3a;transform:translateY(-1px)}.ms-login-btn svg{width:20px;height:20px}
+.login-divider{display:flex;align-items:center;gap:1rem;margin:1.5rem 0;color:var(--text-muted);font-size:.8rem}.login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.demo-section{margin-top:8px}.demo-pin{display:flex;gap:8px;justify-content:center;margin-bottom:12px}.demo-pin input{width:44px;height:44px;text-align:center;font-size:1.2rem;font-family:var(--font-mono);background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none}.demo-pin input:focus{border-color:var(--primary)}.demo-users{display:none;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}.demo-users.show{display:flex}.demo-user-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-ui);font-size:.875rem;cursor:pointer;transition:var(--transition);text-align:left}.demo-user-btn:hover{border-color:var(--border-active);background:var(--bg-card-hover)}.demo-user-btn .uid{color:var(--text-muted);font-family:var(--font-mono);font-size:.72rem;min-width:52px}
+#app{display:none;min-height:100dvh;position:relative;z-index:1}
+.topbar{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:rgba(10,22,40,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}.topbar-brand{font-weight:700;font-size:1.1rem;color:var(--primary)}.topbar-right{display:flex;align-items:center;gap:10px}.topbar-avatar{width:32px;height:32px;border-radius:50%;background:var(--primary-dim);border:2px solid var(--primary);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:.75rem;color:var(--primary)}.topbar-name{font-size:.85rem;color:var(--text-dim)}
+.sync-status{font-size:.7rem;padding:3px 8px;border-radius:10px;font-weight:500}.sync-status.online{background:var(--success-glow);color:var(--success)}.sync-status.offline{background:var(--danger-glow);color:var(--danger)}.sync-status.syncing{background:rgba(247,184,1,.15);color:var(--warning);animation:blink 1s infinite}@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--text-dim);padding:6px 12px;border-radius:var(--radius-sm);font-family:var(--font-ui);font-size:.8rem;cursor:pointer}.logout-btn:hover{border-color:var(--danger);color:var(--danger)}
+.nav-tabs{display:flex;flex-wrap:wrap;gap:2px;padding:8px 12px;background:rgba(10,22,40,.5);border-bottom:1px solid var(--border)}.nav-tab{flex:0 0 calc(25% - 2px);min-width:0;padding:10px 6px;border:none;background:transparent;color:var(--text-dim);font-family:var(--font-ui);font-size:.75rem;font-weight:500;cursor:pointer;border-radius:var(--radius-sm);white-space:nowrap;text-align:center}.nav-tab:hover{color:var(--text);background:var(--bg-surface)}.nav-tab.active{color:var(--primary);background:var(--primary-dim);font-weight:600}
+.tab-content{display:none;padding:20px;max-width:800px;margin:0 auto}.tab-content.active{display:block;animation:fadeIn .3s ease}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.timer-display{text-align:center;padding:2rem 0}.timer-time{font-family:var(--font-mono);font-size:4rem;font-weight:700;letter-spacing:-2px;line-height:1;margin-bottom:.5rem}.timer-time.running{color:var(--success)}.timer-time.paused{color:var(--warning);animation:blink 1s infinite}.timer-date{color:var(--text-dim);font-size:.9rem;margin-bottom:.25rem}.timer-project-display{color:var(--primary);font-size:.85rem;font-weight:500;min-height:1.2em}.timer-controls{display:flex;justify-content:center;gap:12px;margin-top:1.5rem}
+.timer-btn{width:64px;height:64px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.4rem;background:transparent;font-family:var(--font-ui)}.timer-btn.start{border-color:var(--success);color:var(--success)}.timer-btn.start:hover{background:var(--success);color:#fff;transform:scale(1.05)}.timer-btn.pause{border-color:var(--warning);color:var(--warning)}.timer-btn.pause:hover{background:var(--warning);color:#000}.timer-btn.stop{border-color:var(--danger);color:var(--danger)}.timer-btn.stop:hover{background:var(--danger);color:#fff}
+.form-group{margin-bottom:1rem}.form-label{display:block;font-size:.8rem;font-weight:500;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}.form-label .req{color:var(--primary)}.form-input,.form-select{width:100%;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-ui);font-size:.95rem;outline:none}.form-input:focus,.form-select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}.form-select{appearance:none;cursor:pointer}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.autocomplete-wrapper{position:relative}.autocomplete-list{position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;z-index:50;display:none;box-shadow:var(--shadow-lg)}.autocomplete-list.show{display:block}.autocomplete-item{padding:10px 14px;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border)}.autocomplete-item:hover,.autocomplete-item.hl{background:var(--primary-dim);color:var(--primary)}.autocomplete-item .pn{font-family:var(--font-mono);color:var(--accent);font-weight:600;margin-right:6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border:none;border-radius:var(--radius-sm);font-family:var(--font-ui);font-size:.9rem;font-weight:600;cursor:pointer}.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{transform:translateY(-1px)}.btn-secondary{background:var(--bg-surface);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{border-color:var(--border-active)}.btn-danger{background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.2)}.btn-success{background:rgba(34,197,94,.1);color:var(--success);border:1px solid rgba(34,197,94,.2)}.btn-block{width:100%}.btn-sm{padding:8px 16px;font-size:.8rem}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}.card-title{font-size:.8rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;text-align:center}.stat-box{background:var(--bg-surface);padding:12px;border-radius:8px}.stat-num{font-family:var(--font-mono);font-size:1.3rem;font-weight:700}.stat-label{font-size:.7rem;color:var(--text-dim);margin-top:2px}
+.stat-total{font-family:var(--font-mono);font-size:2rem;font-weight:700;color:var(--primary)}.stat-bar-item{display:flex;align-items:center;gap:12px;margin-bottom:10px}.stat-bar-label{width:90px;font-size:.8rem;color:var(--text-dim);flex-shrink:0}.stat-bar-track{flex:1;height:8px;background:var(--bg-surface);border-radius:4px;overflow:hidden}.stat-bar-fill{height:100%;border-radius:4px}.stat-bar-value{width:50px;text-align:right;font-family:var(--font-mono);font-size:.8rem}
+.calendar-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:20px}.cal-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}.cal-btn:hover{border-color:var(--primary);color:var(--primary)}.cal-btn:disabled{opacity:.3}.cal-date{font-family:var(--font-mono);font-size:1.05rem;font-weight:600;min-width:180px;text-align:center}
+.entry-card{background:var(--bg-surface);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;border-left:3px solid var(--primary);display:flex;justify-content:space-between;align-items:flex-start;gap:8px}.entry-info{flex:1;min-width:0}.entry-time{font-family:var(--font-mono);font-size:.85rem;font-weight:500}.entry-meta{font-size:.78rem;color:var(--text-dim);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entry-right{display:flex;align-items:center;gap:6px;flex-shrink:0}.entry-duration{font-family:var(--font-mono);font-size:.85rem;color:var(--accent);font-weight:600}.entry-action{width:28px;height:28px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center}.entry-action:hover{background:var(--bg-card);color:var(--text)}
+.week-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}.week-day{width:30px;font-size:.75rem;font-weight:600;color:var(--text-dim)}.week-bar{flex:1;height:24px;background:var(--bg-surface);border-radius:4px;overflow:hidden;display:flex}.week-seg{height:100%}.week-hrs{width:45px;text-align:right;font-family:var(--font-mono);font-size:.8rem}
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}.modal-overlay.show{display:flex}.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;max-width:500px;width:100%;box-shadow:var(--shadow-lg);max-height:90vh;overflow-y:auto}.modal-title{font-size:1.1rem;font-weight:700;margin-bottom:16px}.modal-actions{display:flex;gap:12px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap}
+.pause-opt{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);margin-bottom:8px}.pause-opt:hover{border-color:var(--border-active)}.pause-opt.sel{border-color:var(--primary);background:var(--primary-dim)}.pause-opt input{accent-color:var(--primary)}.pause-opt label{cursor:pointer;flex:1;font-size:.9rem}.pause-opt .pt{font-family:var(--font-mono);color:var(--text-dim);font-size:.8rem}
+.pause-summary{background:var(--bg-surface);border-radius:var(--radius-sm);padding:14px}.pause-row{display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:4px}.pause-row.total{border-top:1px solid var(--border);padding-top:8px;margin-top:8px;font-weight:700;font-size:1rem;color:var(--primary)}
+.export-card{display:flex;align-items:center;gap:16px;padding:20px;cursor:pointer}.export-card:hover{background:var(--bg-card-hover)}.export-icon{font-size:2rem}.export-info h3{font-size:1rem;margin-bottom:4px}.export-info p{font-size:.8rem;color:var(--text-dim)}
+.proj-list-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:.85rem}.proj-list-item .proj-id{font-family:var(--font-mono);color:var(--accent);font-weight:600;min-width:35px}.proj-list-item .proj-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proj-list-item .proj-badge{font-size:.7rem;padding:2px 8px;border-radius:10px}.proj-scroll{max-height:400px;overflow-y:auto}.proj-count{font-size:.8rem;color:var(--text-dim);margin-bottom:8px}
+.sp-info{background:var(--bg-surface);border-radius:var(--radius-sm);padding:14px;font-size:.85rem;margin-bottom:16px;line-height:1.5}
+.abs-badge{font-size:.7rem;padding:2px 10px;border-radius:10px;font-weight:600}.abs-badge.pending{background:rgba(247,184,1,.15);color:var(--warning)}.abs-badge.approved{background:var(--success-glow);color:var(--success)}.abs-badge.rejected{background:var(--danger-glow);color:var(--danger)}
+.abs-btn{padding:6px 14px;border:none;border-radius:6px;font-family:var(--font-ui);font-size:.8rem;font-weight:600;cursor:pointer}.abs-btn.yes{background:var(--success-glow);color:var(--success)}.abs-btn.yes:hover{background:var(--success);color:#fff}.abs-btn.no{background:var(--danger-glow);color:var(--danger)}.abs-btn.no:hover{background:var(--danger);color:#fff}
+.day-check{display:inline-flex;align-items:center;gap:4px;padding:8px 12px;background:var(--bg-surface);border-radius:6px;cursor:pointer;font-size:.85rem}.day-check input{accent-color:var(--primary)}
+.toast-container{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:8px;pointer-events:none}.toast{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 20px;font-size:.875rem;box-shadow:var(--shadow-lg);animation:toastIn .3s ease;pointer-events:auto;white-space:nowrap}.toast.success{border-left:3px solid var(--success)}.toast.error{border-left:3px solid var(--danger)}.toast.warning{border-left:3px solid var(--warning)}.toast.info{border-left:3px solid var(--secondary)}@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--text-dim)}.empty-icon{font-size:3rem;margin-bottom:1rem;opacity:.5}
+.timer-indicator{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--success),var(--primary));z-index:999;display:none}.timer-indicator.on{display:block;animation:pulse-bar 2s infinite}@keyframes pulse-bar{0%,100%{opacity:1}50%{opacity:.4}}
+@media(max-width:600px){.topbar{padding:10px 14px}.topbar-name{display:none}.nav-tab{flex:0 0 calc(25% - 2px);padding:8px 4px;font-size:.68rem}.tab-content{padding:14px}.timer-time{font-size:3rem}.timer-btn{width:56px;height:56px}.form-row{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+<div class="timer-indicator" id="timerIndicator"></div>
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">⏱️</div><h1 class="login-title">Zeiterfassung</h1><p class="login-subtitle">Hubler Metallbau AG</p>
+    <button class="ms-login-btn" id="msLoginBtn"><svg viewBox="0 0 23 23"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg>Mit Microsoft anmelden</button>
+    <div id="authDebug" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px;margin:12px 0;text-align:left;font-size:.75rem;color:#f87171;font-family:var(--font-mono);word-break:break-all;max-height:120px;overflow-y:auto"></div>
+    <div class="login-divider">Demo-Modus</div>
+    <div class="demo-section">
+      <div class="demo-pin" id="demoPin">
+        <input type="password" maxlength="1" inputmode="numeric" id="pin1" autocomplete="off">
+        <input type="password" maxlength="1" inputmode="numeric" id="pin2" autocomplete="off">
+        <input type="password" maxlength="1" inputmode="numeric" id="pin3" autocomplete="off">
+        <input type="password" maxlength="1" inputmode="numeric" id="pin4" autocomplete="off">
+        <input type="password" maxlength="1" inputmode="numeric" id="pin5" autocomplete="off">
+      </div>
+      <div class="demo-users" id="demoUsers"></div>
+    </div>
+  </div>
+</div>
+<div id="app">
+  <div class="topbar"><span class="topbar-brand">⏱ Hubler</span><div class="topbar-right"><span class="sync-status" id="syncStatus">⚡ Lokal</span><div class="topbar-avatar" id="userAvatar"></div><span class="topbar-name" id="userName"></span><button class="logout-btn" id="logoutBtn">⏻</button></div></div>
+  <nav class="nav-tabs" id="navTabs">
+    <button class="nav-tab active" data-tab="timer">⏱ Timer</button>
+    <button class="nav-tab" data-tab="manual">✏️ Manuell</button>
+    <button class="nav-tab" data-tab="today">📊 Heute</button>
+    <button class="nav-tab" data-tab="week">📈 Woche</button>
+    <button class="nav-tab" data-tab="calendar">📅 Kalender</button>
+    <button class="nav-tab" data-tab="absence">🏖 Abwesenheit</button>
+    <button class="nav-tab" data-tab="report" style="display:none">📊 Report</button>
+    <button class="nav-tab" data-tab="export">💾 Export</button>
+    <button class="nav-tab" data-tab="admin" style="display:none">⚙️ Admin</button>
+  </nav>
+
+  <!-- TIMER -->
+  <div class="tab-content active" id="tab-timer">
+    <div class="timer-display"><div class="timer-date" id="timerDate"></div><div class="timer-time" id="timerDisplay">00:00:00</div><div class="timer-project-display" id="timerProjDisp"></div></div>
+    <div class="timer-controls"><button class="timer-btn start" id="btnStart">▶</button><button class="timer-btn pause" id="btnPause" style="display:none">⏸</button><button class="timer-btn stop" id="btnStop" style="display:none">⏹</button></div>
+    <div style="text-align:center;margin-top:8px"><button class="btn btn-secondary btn-sm" id="btnSwitch" style="display:none" onclick="switchProject()">🔄 Projekt wechseln</button></div>
+    <div id="segmentInfo"></div>
+    <div style="margin-top:1.5rem">
+      <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt <span class="req">*</span></label><input type="text" class="form-input" id="timerProject" placeholder="Nummer oder Name..." autocomplete="off"><div class="autocomplete-list" id="timerProjectAC"></div></div>
+      <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="timerKS"><option value="">— Bitte wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
+      <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="timerNote" placeholder="Optional..."></div>
+    </div>
+  </div>
+
+  <!-- MANUAL -->
+  <div class="tab-content" id="tab-manual">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Manuelle Zeiterfassung</h2>
+    <div class="form-group"><label class="form-label">Datum <span class="req">*</span></label><input type="date" class="form-input" id="manDate"></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Start <span class="req">*</span></label><input type="time" class="form-input" id="manStart" value="07:00"></div><div class="form-group"><label class="form-label">Ende <span class="req">*</span></label><input type="time" class="form-input" id="manEnd" value="17:00"></div></div>
+    <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt <span class="req">*</span></label><input type="text" class="form-input" id="manProject" placeholder="Suchen..." autocomplete="off"><div class="autocomplete-list" id="manProjectAC"></div></div>
+    <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="manKS"><option value="">— Wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
+    <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="manNote" placeholder="Optional..."></div>
+    <button class="btn btn-primary btn-block" id="manSaveBtn">💾 Speichern</button>
+  </div>
+
+  <!-- TODAY -->
+  <div class="tab-content" id="tab-today"><div class="card"><div class="card-title" id="todayTitle">Heute</div><div class="stat-total" id="todayTotal">0.0h</div><div id="todayBars" style="margin-top:12px"></div></div><div id="todayEntries"></div></div>
+
+  <!-- WEEK -->
+  <div class="tab-content" id="tab-week"><div class="card"><div class="card-title">Diese Woche</div><div class="stat-total" id="weekTotal">0.0h</div><div id="weekDayBars" style="margin-top:16px"></div></div><div class="card"><div class="card-title">Nach Kostenstelle</div><div id="weekKSBars"></div></div></div>
+
+  <!-- CALENDAR -->
+  <div class="tab-content" id="tab-calendar"><div class="calendar-nav"><button class="cal-btn" id="calPrev">‹</button><div class="cal-date" id="calDate"></div><button class="cal-btn" id="calNext">›</button></div><div class="card"><div class="card-title">Kostenstellen</div><div class="stat-total" id="calTotal">0.0h</div><div id="calKS" style="margin-top:12px"></div></div><div class="card"><div class="card-title">Projekte</div><div id="calProj"></div></div><div class="card"><div class="card-title" id="calEntriesTitle">Einträge</div><div id="calEntries"></div></div></div>
+
+  <!-- ABSENCE -->
+  <div class="tab-content" id="tab-absence">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">🏖 Abwesenheiten & Ferien</h2>
+    <div class="card">
+      <div class="card-title">Neue Abwesenheit beantragen</div>
+      <div class="form-group"><label class="form-label">Typ <span class="req">*</span></label><select class="form-select" id="absType"><option value="">— Bitte wählen —</option><option value="Ferien">🏖️ Ferien</option><option value="Krankheit">🤒 Krankheit</option><option value="Unfall">🤕 Unfall</option><option value="Militär/Zivildienst">🎖️ Militär/Zivildienst</option><option value="Mutterschaft/Vaterschaft">👶 Mutterschaft/Vaterschaft</option><option value="Umzug">📦 Umzug</option><option value="Unbezahlt">🚫 Unbezahlt</option><option value="Sonstiges">📋 Sonstiges</option></select></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Von <span class="req">*</span></label><input type="date" class="form-input" id="absFrom"></div><div class="form-group"><label class="form-label">Bis <span class="req">*</span></label><input type="date" class="form-input" id="absTo"></div></div>
+      <div class="form-group"><label class="form-label">Dauer</label><select class="form-select" id="absDuration"><option value="full">Ganzer Tag</option><option value="morning">Nur Vormittag (halber Tag)</option><option value="afternoon">Nur Nachmittag (halber Tag)</option></select></div>
+      <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="absNote" placeholder="Optional..."></div>
+      <button class="btn btn-primary btn-block" id="absSaveBtn">📨 Antrag einreichen</button>
+    </div>
+    <div class="card"><div class="card-title">Ferienübersicht <span id="absYear"></span></div><div id="absStats"></div></div>
+    <div class="card" id="absApprovalCard" style="display:none"><div class="card-title">✅ Anträge zur Freigabe</div><div id="absPendingList"></div></div>
+    <div class="card"><div class="card-title">Meine Abwesenheiten</div><div id="absList"></div></div>
+  </div>
+
+  <!-- EXPORT -->
+  <div class="tab-content" id="tab-report">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Mitarbeiter-Report</h2>
+    <div class="card">
+      <div class="card-title">Auswertung für Qualifikationsgespräche</div>
+      <div id="reportContent"></div>
+    </div>
+  </div>
+  <div class="tab-content" id="tab-export"><h2 style="font-size:1.1rem;margin-bottom:16px">Export & Backup</h2><div class="card export-card" id="expWeek"><div class="export-icon">📊</div><div class="export-info"><h3>Diese Woche</h3><p>CSV der aktuellen Woche</p></div></div><div class="card export-card" id="expMonth"><div class="export-icon">📅</div><div class="export-info"><h3>Dieser Monat</h3><p>CSV des aktuellen Monats</p></div></div><div class="card export-card" id="expAll"><div class="export-icon">💾</div><div class="export-info"><h3>Alle Daten</h3><p>Alle Zeiteinträge</p></div></div></div>
+
+  <!-- ADMIN -->
+  <div class="tab-content" id="tab-admin">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">⚙️ Administration</h2>
+
+    <!-- EMPLOYEE SETTINGS -->
+    <div class="card"><div class="card-title">👥 Mitarbeiter-Einstellungen</div><div class="sp-info"><p style="color:var(--text-dim)">Pensum, Arbeitstage, Ferienanspruch und Vorjahres-Guthaben pro Mitarbeiter.</p></div><div id="empSettingsList"></div></div>
+
+    <!-- ABSENCE OVERVIEW (all employees) -->
+    <div class="card"><div class="card-title">🏖 Abwesenheiten aller Mitarbeiter</div><div id="adminAbsList"></div><button class="btn btn-secondary btn-sm" id="exportAbsBtn" style="margin-top:12px">📤 CSV Export</button></div>
+
+    <!-- SHAREPOINT -->
+    <div class="card"><div class="card-title">📡 SharePoint</div><div class="sp-info"><strong>Status:</strong> <span id="spStatusText">⚡ Lokal</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" id="syncNowBtn">🔄 Sync</button><button class="btn btn-secondary btn-sm" id="forceSPUpload">📤 Upload</button></div></div>
+
+    <!-- PROJECTS -->
+    <div class="card"><div class="card-title">📋 Projekte (<span id="projCountDisp">0</span>)</div><div class="form-row" style="margin-bottom:12px"><input type="text" class="form-input" id="projSearch" placeholder="🔍 Filtern..."><div><button class="btn btn-success btn-sm" id="addProjBtn">+ Neu</button></div></div><div class="proj-count" id="projFilterCount"></div><div class="proj-scroll" id="projList"></div></div>
+
+    <!-- PROJECT IMPORT/EXPORT -->
+    <div class="card"><div class="card-title">📥 Projekte Import/Export</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" id="loadSPProj">📡 SP laden</button><label class="btn btn-secondary btn-sm" style="cursor:pointer">📁 JSON<input type="file" accept=".json" id="importProjFile" style="display:none"></label><button class="btn btn-secondary btn-sm" id="exportProjBtn">📤 JSON</button></div></div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="card"><div class="card-title">🔔 Push-Benachrichtigungen</div><div class="sp-info"><strong>Status:</strong> <span id="notifStatus">...</span></div><div style="display:flex;gap:8px;margin-bottom:16px"><button class="btn btn-primary btn-sm" id="notifEnableBtn">🔔 Aktivieren</button><button class="btn btn-secondary btn-sm" id="notifTestBtn">🧪 Test</button></div>
+      <div class="form-group"><label class="form-label">⏰ Morgen</label><div class="form-row"><input type="time" class="form-input" id="notifMorning" value="06:55"><select class="form-select" id="notifMorningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🍽 Mittag</label><div class="form-row"><input type="time" class="form-input" id="notifLunch" value="12:00"><select class="form-select" id="notifLunchOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🏠 Feierabend Mo–Do</label><div class="form-row"><input type="time" class="form-input" id="notifEveningMoDo" value="16:45"><select class="form-select" id="notifEveningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🌟 Freitag</label><div class="form-row"><input type="time" class="form-input" id="notifEveningFr" value="13:45"><select class="form-select" id="notifFridayOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">⚠️ Überlauf (h)</label><div class="form-row"><input type="number" class="form-input" id="notifOverflow" value="10" min="6" max="14"><select class="form-select" id="notifOverflowOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <button class="btn btn-primary btn-block btn-sm" id="notifSaveBtn">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="pauseModal"><div class="modal"><div class="modal-title">⏱ Arbeitszeit bestätigen</div><div id="pauseBody"></div><div class="modal-actions"><button class="btn btn-secondary" id="pauseCancel">Korrigieren</button><button class="btn btn-primary" id="pauseConfirm">✓ Speichern</button></div></div></div>
+<div class="modal-overlay" id="editModal"><div class="modal"><div class="modal-title">✏️ Eintrag bearbeiten</div><div id="editBody"></div><div class="modal-actions"><button class="btn btn-danger btn-sm" id="editDelete">🗑 Löschen</button><button class="btn btn-secondary" id="editCancel">Abbrechen</button><button class="btn btn-primary" id="editSave">Speichern</button></div></div></div>
+<div class="modal-overlay" id="recoveryModal"><div class="modal"><div class="modal-title">🔄 Timer wiederherstellen?</div><div id="recoveryBody"></div><div class="modal-actions"><button class="btn btn-secondary" id="recoveryDiscard">Verwerfen</button><button class="btn btn-primary" id="recoveryRestore">Wiederherstellen</button></div></div></div>
+<div class="modal-overlay" id="addProjModal"><div class="modal"><div class="modal-title">➕ Neues Projekt</div><div class="form-group"><label class="form-label">Nr.</label><input type="text" class="form-input" id="newProjId"></div><div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="newProjName"></div><div class="modal-actions"><button class="btn btn-secondary" id="addProjCancel">Abbrechen</button><button class="btn btn-primary" id="addProjSave">Hinzufügen</button></div></div></div>
+<div class="modal-overlay" id="splitModal"><div class="modal" style="max-width:600px"><div class="modal-title">✂️ Zeit aufteilen</div><div id="splitBody"></div><div class="modal-actions"><button class="btn btn-secondary" onclick="$('splitModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveSplitEntries()">✓ Alle speichern</button></div></div></div>
+<div class="modal-overlay" id="empEditModal"><div class="modal"><div class="modal-title">✏️ <span id="empEditTitle"></span></div>
+  <div class="form-group"><label class="form-label">Jahr</label><input type="number" class="form-input" id="empYear" value="2026" min="2024" max="2030"></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="42.5" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
+  <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="25" min="10" max="40" oninput="calcEmpPreview()"></div>
+  <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div></div>
+  <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">📅 Vorjahres-Guthaben</div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Ferienübertrag (Tage)</label><input type="number" class="form-input" id="empFerienUe" value="0" min="-10" max="30" step="0.5"></div><div class="form-group"><label class="form-label">Überstunden (h)</label><input type="number" class="form-input" id="empUeStd" value="0" min="-50" max="200" step="0.5"></div></div>
+  </div>
+  <div id="empPreview"></div>
+  <div class="modal-actions"><button class="btn btn-secondary" onclick="$('empEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveEmpEdit()">💾 Speichern</button></div>
+</div></div>
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const PROJECTS_DATA=[
+{id:"210",name:"Loogartenstrasse 50, 8048 Zürich - Eingangstüre",aktiv:true},
+{id:"209",name:"Lohnarbeiten",aktiv:true},
+{id:"208",name:"In der Luberzen 19, 8902 Urdorf",aktiv:true},
+{id:"207",name:"Wehntalerstrasse 45-49, 8057 Zürich - ENB",aktiv:true},
+{id:"206",name:"Drusbergstrasse 96-102, 8053 Zürich-Witikon, WÜB - BKP 221.6",aktiv:true},
+{id:"205",name:"Zentralstrasse 19, 8953 Dietikon - ZKB Dietikon",aktiv:true},
+{id:"204",name:"Greifengasse 36+38, 4058 Basel - Clara-Shopping Basel",aktiv:true},
+{id:"203",name:"Tannenrauchstrasse 35, 8038 Zürich-Wollishofen - Studentenwohnheim",aktiv:true},
+{id:"202",name:"ZKB Thalwil - Schneebeli",aktiv:true},
+{id:"201",name:"Grabenstrasse 1, 8952 Schlieren - Eingangstür Varitech",aktiv:true},
+{id:"200",name:"Ifangstrasse 8, Schlieren - Ersatzeingangstür Bowling West",aktiv:true},
+{id:"199",name:"Anbau Einstellhalle LKW, Wilstrasse 55, 5610 Wohlen",aktiv:true},
+{id:"198",name:"Überbauung \"Zentrum 104\", Zürcherstrasse 104/106, 5432 Neuenhof",aktiv:true},
+{id:"197",name:"Sporthalle Langacker, Herrliberg",aktiv:true},
+{id:"196",name:"Langensteinenstrasse 32, 8057 Zürich - 21/036",aktiv:true},
+{id:"195",name:"Böllistrasse / Föhrenweg, 5702 Niederlenz - 3459-23 Bölli Süd",aktiv:true},
+{id:"194",name:"Winterthurerstrasse 625, 8051 Schwamendingen - Neubau MFH",aktiv:true},
+{id:"193",name:"ENB Lägernstrasse, 8953 Dietikon - BF 1-3",aktiv:true},
+{id:"192",name:"Zürcherstrasse - Lohnfertigung",aktiv:true},
+{id:"191",name:"Talstrasse 61, 8001 Zürich",aktiv:true},
+{id:"190",name:"Sanierung Löwenzentrum Wohn- und Geschäftsliegenschaft Löwenstrasse 28 / Zentralstrasse 17, 8953 Dietikon",aktiv:true},
+{id:"189",name:"Neubau Parking und Energiezentrale, SSH TP5-6",aktiv:true},
+{id:"188",name:"Klybeckstrasse 206, 4057 Basel - BKP 221.6",aktiv:true},
+{id:"187",name:"Überbauung Erlenpark, KTN 95, 8752 Näfels, BKP 221.6",aktiv:true},
+{id:"186",name:"Erweiterung Siedlung Brunnenhof - Hofwiesenstrasse 126, 8057 Zürich",aktiv:true},
+{id:"185",name:"Sanierung Schwimmbad Fohrbach, Gemeinde Zollikon",aktiv:true},
+{id:"184",name:"Dübendorf, LFZ Französische Schule - BKP 272",aktiv:true},
+{id:"183",name:"Poststrasse 135-159, 8957 Spreitenbach - MFH",aktiv:true},
+{id:"182",name:"PEP Umbau Zentrum St. Peter & Paul",aktiv:true},
+{id:"181",name:"Neubau Badenerstrasse Franz AG",aktiv:true},
+{id:"180",name:"Rebhaldensteig 19, 8700 Küsnacht - Abbruch und Neubau EFH",aktiv:true},
+{id:"179",name:"Nordstrasse 171, 8037 Zürich - MFH WiNo",aktiv:true},
+{id:"178",name:"Schächenstrasse 4, 8048 Zürich - Eingangstür Neubau MFH",aktiv:true},
+{id:"177",name:"Quellenhof, Albisstr. 8-10 / Renggerstr. 57, 8038 Zürich",aktiv:true},
+{id:"176",name:"DS Concepts Schweiz GmbH",aktiv:true},
+{id:"175",name:"Allmendstrasse 24, 8914 Aeugst am Albis - Umbau Bauernhaus und Neubauten",aktiv:true},
+{id:"174",name:"Zürichstrasse 12a, 8610 Uster - Rückbau alte Niederlassung - Migros Bank AG",aktiv:true},
+{id:"173",name:"Brüelmatt, 8903 Birmensdorf - NB 3-fach Schulsporthalle",aktiv:true},
+{id:"172",name:"Grundstrasse 1, 8154 Oberglatt, MFH",aktiv:true},
+{id:"171",name:"Windschutzverglasung - quendoz-glas",aktiv:true},
+{id:"170",name:"Heimentalstrasse 48, 5430 Wettingen",aktiv:true},
+{id:"169",name:"Spitalstrasse 76+78, 8952 Schlieren",aktiv:true},
+{id:"168",name:"Neubau Spalenring 56, 58, 60, 62, 4055 Basel",aktiv:true},
+{id:"167",name:"Brunaustrasse 164, 8951 Fahrweid",aktiv:true},
+{id:"166",name:"Seebahnstrasse 141, 8003 Zürich - MFH",aktiv:true},
+{id:"165",name:"Teilumnutzung Nordtrakt Zürich HB",aktiv:true},
+{id:"164",name:"Bleicherstrasse 24/26/28, 8953 Dietikon",aktiv:true},
+{id:"163",name:"Haldenbachstrasse 24, 8006 Zürich - BKP 272.2 allg Metallbauarbeiten",aktiv:true},
+{id:"162",name:"Schulhaus Mettlen, 8241 Uitikon - äussere Bekleidung Metall",aktiv:true},
+{id:"161",name:"Hotel Leoneck Zürich - Leonhardstrasse 1, 8001 Zürich",aktiv:true},
+{id:"160",name:"Hans Schweri - Brüelstrasse 11, 5425 Schneisingen",aktiv:true},
+{id:"159",name:"Schulhaus Mettlen, 8241 Uitikon - allg. Metallbauarbeiten",aktiv:true},
+{id:"158",name:"Schule Spinnergut, Nidelbadstrasse 49, 8802 Kilchberg",aktiv:true},
+{id:"157",name:"Limmatstrasse 285, 8005 Zürich, Metalltüren",aktiv:true},
+{id:"156",name:"Stelzenackerstrasse 2-4, 8953 Dietikon",aktiv:true},
+{id:"155",name:"Schützenstrasse 31+33, 8953 Dietikon",aktiv:true},
+{id:"154",name:"Zürichstrasse 12a, 8610 Uster, Migros Bank AG",aktiv:true},
+{id:"153",name:"Spital Limmattal - UK Schiebetür",aktiv:true},
+{id:"152",name:"Dorfstrasse 14, 6417 Sattel - Dorfzentrum Vista Sattel",aktiv:true},
+{id:"151",name:"Bahnhof Baden - SBB Kundentoilette",aktiv:true},
+{id:"150",name:"Risigrundstrasse 14a, 8903 Birmensdorf",aktiv:true},
+{id:"149",name:"Bahnhofstrasse 46, 8001 Zürich - Schaufenster",aktiv:true},
+{id:"148",name:"Neudorfstrasse 11 - 17, 8050 Zürich - Oerlikon - GS Neudorf",aktiv:true},
+{id:"147",name:"Menzingen - BKP 221.6",aktiv:true},
+{id:"146",name:"Belsitostrasse 15, 8044 Zürich",aktiv:true},
+{id:"145",name:"In der Halden 20, 8902 Urdorf",aktiv:true},
+{id:"144",name:"Bahnhofstrasse 2, 4144 Arlesheim - \"Bayer PK, MFH Arlesheim\"",aktiv:true},
+{id:"143",name:"Obrechtstrasse 20, 4132 Muttenz - DEFH",aktiv:true},
+{id:"142",name:"Wiesenstrasse 31, 5734 Reinach",aktiv:true},
+{id:"141",name:"Neubau MFH Burghof, 6110 Wolhusen, Parzelle 53, Stampfel- und Menznauerstrasse",aktiv:true},
+{id:"140",name:"Industriestrasse, 4665 Oftringen - Erweiterung Industriegebäude",aktiv:true},
+{id:"139",name:"Sonnerbergstrasse, 5734 Reinach AG - WÜB \"Sonne\"",aktiv:true},
+{id:"138",name:"Werkhofstrasse 7, 8902 Urdorf - Umbau/Optimierung Materialdienst",aktiv:true},
+{id:"137",name:"Kemptpark 12, 8310 Kemptthal - Sandbox Spaces",aktiv:true},
+{id:"136",name:"Güterstrasse 23, 5014 Gretzenbach - Schütz AG",aktiv:true},
+{id:"135",name:"In der Rüti, 8967 Widen / 8965 Berikon - Neubau WÜ Bachpark",aktiv:true},
+{id:"133",name:"Rütistrasse 28, 30, 32, 8702 Zollikon - MFH Ersatz Haustürfront",aktiv:true},
+{id:"132",name:"Guggerstrasse 26, 8702 Zollikon - Ersatz Hausfronttür",aktiv:true},
+{id:"131",name:"Sonnenbergstrasse 11, 8134 Adliswil - Neubau REFH",aktiv:true},
+{id:"130",name:"Kreuzhaldenstrasse 11, 8192 Glattfelden - Neubau MFH",aktiv:true},
+{id:"129",name:"Kirchweg 49, 8102 Oberengstringen - Ersatz Metalltüre Fahrradraum",aktiv:true},
+{id:"128",name:"Solothurnerstrasse, 3294 Büren a. A. - Coop",aktiv:true},
+{id:"127",name:"EFH Böhi, 8585 Langrickenbach",aktiv:true},
+{id:"126",name:"Stationsstrasse 11b, 8952 Schlieren - Absturzsicherung & Geländer",aktiv:true},
+{id:"125",name:"Gheidstrasse 137, 8105 Watt -",aktiv:true},
+{id:"124",name:"Weissenbrunnenstrasse 29+31, 8903 Birmensdorf - Geländer",aktiv:true},
+{id:"123",name:"Hänggässli 3, 8703 Erlenbach - 454 EFH Trinity",aktiv:true},
+{id:"122",name:"ParkLife 4124 Schönenbuch - MFH + REFH",aktiv:true},
+{id:"121",name:"Burkertsmatt 11, 8967 Widen - Sportzentrum Widen",aktiv:true},
+{id:"120",name:"Allmendstrasse 1, 8180 Bülach - Alterszentrum Grampen 2",aktiv:true},
+{id:"119",name:"DRAWAG - Webereistrasse 45, 8134 Adliswil - Fenster",aktiv:true},
+{id:"118",name:"St. Josefenstr. 20, 9000 St Gallen",aktiv:true},
+{id:"117",name:"Schönbühlstrasse 5a, 5442 Fislisbach - Fassade Doktorhaus",aktiv:true},
+{id:"116",name:"Rebbergstrasse 3,  8157 Dielsdorf - Ersatzneubau MFH Rain",aktiv:true},
+{id:"115",name:"Kurlistrasse15, 8404 Winterthur - Ersatzneubau MFH Kurli",aktiv:true},
+{id:"113",name:"Rue du Faubourg 18, La Neuveville - Umbau / Sanierung",aktiv:true},
+{id:"112",name:"Weihermattstrasse 47, 8902 Urdorf - René Leiser",aktiv:true},
+{id:"111",name:"Unterdorfstrasse 21, 8114 Dänikon - Brandschutzfenster 19320 Klärwerk",aktiv:true},
+{id:"110",name:"ENB Brunnenrain, 8038 Zürich - BKP 221.6",aktiv:true},
+{id:"109",name:"Trottenstrasse 2, 8037 Zürich - TRO Gesamtinstandsetzung MFH - Aussentüren",aktiv:true},
+{id:"108",name:"Im Struppen 11, 8048 Zürich - Micoma AG - Ganzglasanlage",aktiv:true},
+{id:"107",name:"Dolderstrasse 15, 8032 Zürich - Schaufensterfront",aktiv:true},
+{id:"106",name:"Brückenstrasse 73, 3005 Bern - Campus BFH Bern - Bühnentechnik",aktiv:true},
+{id:"105",name:"Roosmatten 4, 8967 Widen - Überdachung",aktiv:true},
+{id:"104",name:"Rütifeldstrasse 1, 3380 Wangen a. d. A. - TGW - Erweiterung Logistikzenter Neubau",aktiv:true},
+{id:"103",name:"Zürich HB - Brandschutzfassade",aktiv:true},
+{id:"102",name:"Mööslimatten 10, 6218 Ettiswil - Fenster und Tür IBOR AG",aktiv:true},
+{id:"101",name:"Augenweidstrasse, 8966 Oberwil-Lieli - Eingangstüren Alu",aktiv:true},
+{id:"100",name:"Kirchgasse 6, 8902 Urdorf - Geländer/Tor Friedhof",aktiv:true},
+{id:"99",name:"Steinstrasse, 8003 Zürich - Türelement",aktiv:true},
+{id:"98",name:"Beethovenstrasse 21, 8002 Zürich - PHZ - Park Hyatt - Zurich Refurbishment - Sunblinds Projekt",aktiv:true},
+{id:"97",name:"Zürich HB, Nordtrakt - Teilumnutzung - BKP 272.0",aktiv:true},
+{id:"96",name:"Dorfstrasse 5, 4423 Hersberg - Neubau MFH",aktiv:true},
+{id:"95",name:"Püntstrasse, 8132 Egg - Ersatzneubau - Aussentüren aus Metall",aktiv:true},
+{id:"94",name:"Schürstrasse 58, 6020 Emmen - ALC-O Aussenstelle Emmen - Aussentüren aus Metall",aktiv:true},
+{id:"93",name:"Langholzstrasse 10-14, 8618 Oetwil am See - Neubau Siedlung \"Hohwies\"",aktiv:true},
+{id:"92",name:"Provisorien Hinterbirch, 8180 Bülach",aktiv:true},
+{id:"91",name:"Zepra, 4133 Pratteln",aktiv:true},
+{id:"90",name:"Zürichstrasse 133/135, 8910 Affoltern a. A. - Reparatur Ladenservice",aktiv:true},
+{id:"89",name:"Im Stockenhof, 8105 Regensdorf - Haupteingangstür",aktiv:true},
+{id:"88",name:"Gruebstrasse 95, 8706 Meilen - Tiefgaragendecke",aktiv:true},
+{id:"86",name:"Gemeinde Hitzkirch 6284 - Schulraumprovisorium",aktiv:true},
+{id:"85",name:"Limmatstrasse 4, 8957 Spreitenbach - Sanierung WC Experience Center",aktiv:true},
+{id:"84",name:"Villigen PSI Laborgebäude - Express Türen",aktiv:true},
+{id:"83",name:"Pavillonschule Stelzenacher - 8953 Dietikon",aktiv:true},
+{id:"82",name:"BP23 ZHUS Migros Bank - Umbau Alternativstandort NL - Bankstrasse 11, 8610 Uster",aktiv:true},
+{id:"80",name:"Nöschikonerstrasse 3, 8172 Niederglatt - Kirchenzentrum Eichi - Baukommission Sanierung - Reparatur und Wartung Türen",aktiv:true},
+{id:"79",name:"MFH Birchdörfli 50, Oerlikon",aktiv:true},
+{id:"78",name:"Belvédèrestrasse / Pilatusweg, parz. Nr. 203, 5621 Zufikon - Neubau Wohnüberbauung Collina",aktiv:true},
+{id:"77",name:"Dachlissen 40, 8932 Mettmenstetten - Metallbauarbeiten",aktiv:true},
+{id:"76",name:"Coop City St. Annahof, Bahnhofstrasse 57, 8001 Zürich - Stützenverkleidungen",aktiv:true},
+{id:"75",name:"en Sauvy Schule - Aussen- & Brandschutztüren",aktiv:true},
+{id:"74",name:"W+P 351 - Thiersteinerallee 12, 4053 Basel - Transgourmet - Fassadenausbau",aktiv:true},
+{id:"72",name:"Ifangstrasse 6 + 8, 8952 Schlieren - Revisionsarbeit",aktiv:true},
+{id:"71",name:"SoZo, 8707 Uetikon a S,  Scheug Areal - Neubau",aktiv:true},
+{id:"70",name:"Feldstrasse 19, 8942 Oberrieden - 221.8 Spezielle lichtdurchlässige Bauteile (äussere)",aktiv:true},
+{id:"69",name:"Teuschenstrasse 6, 8500 Gerlikon - Reparatur Fenstertüre",aktiv:true},
+{id:"68",name:"Margarethenstrasse 87, 4102 Binningen - Reparatur Glasgeländer",aktiv:true},
+{id:"67",name:"Poststrasse 42, 8957 Spreitenbach - Stahlstützen",aktiv:true},
+{id:"66",name:"Blaurockstrasse, 8260 Stein am Rhein - Aussentüre aus Metall",aktiv:true},
+{id:"65",name:"MFH Glattfelden, Ladex AG",aktiv:true},
+{id:"64",name:"Bachema AG - Ifangstrasse, 8952 Schlieren - Konsole - Anzeigepanel",aktiv:true},
+{id:"63",name:"Limmattalstrasse 110, 8049 Zürich - HMSU Haus Meili - Sanierung und Umbau Dachgeschoss",aktiv:true},
+{id:"58",name:"Seestrasse 6, 8266 Steckborn - Metallbauarbeiten Bootshaus",aktiv:true},
+{id:"57",name:"Virgin Lenzburg - Alu-Türen",aktiv:true},
+{id:"56",name:"Seebachstrasse 3, ZH-Seebach, 272.21 - 303 Devisierung - Geländer",aktiv:true},
+{id:"55",name:"Seebachstrasse 3, ZH-Seebach, 221.61 - 303 Devisierung",aktiv:true},
+{id:"54",name:"Aufträge Leiser Storenbau AG",aktiv:true},
+{id:"53",name:"Rebhaldenstrasse 22a, 8303 Bassersdorf - Reparatur",aktiv:true},
+{id:"52",name:"Garage Hangg Wohlen - Fassadenanpassung",aktiv:true},
+{id:"51",name:"Steinackerstrasse 39, 8902 Urdorf - MTU 5",aktiv:true},
+{id:"50",name:"Schaffhauserstrasse 418, 8050 Zürich",aktiv:true},
+{id:"49",name:"VC11940_Stadt ZH Entsorgung & Recycling",aktiv:true},
+{id:"48",name:"In der Au, 8706 Meilen - Nachtragsarbeiten",aktiv:true},
+{id:"47",name:"Marti Containerdorf, PLZ - Biel - Laubengang",aktiv:true},
+{id:"46",name:"Frischmarkt Zürich, Geiser AG",aktiv:true},
+{id:"45",name:"Badenerstrasse 50 | Stauffacherstrasse 33a | 33b, 8004 Zürich - Tchibo",aktiv:true},
+{id:"44",name:"Höhenweg 11, 8832 Wollerau - Glas wechseln und Entwässerung",aktiv:true},
+{id:"43",name:"Rütihofstrasse 1, 8049 Zürich - Sanierung Gebäudehülle Häuser 2-12 und 14-24",aktiv:true},
+{id:"42",name:"10217, Hofacherstrasse 12, 5443 Niederrohrdorf - Reparatur Hauseingangstür",aktiv:true},
+{id:"40",name:"Kaserne Reppischtal, 8903 Birmensdorf - Blechestorenführung",aktiv:true},
+{id:"39",name:"Obere Sterngasse 1, 4500 Solothurn - Türen, Festverglasung",aktiv:true},
+{id:"38",name:"Mühlemattstrasse 15b, 8903 Birmensdorf - Hauseingang",aktiv:true},
+{id:"37",name:"Frauchwilerstrasse 2a, 3257 Grossaffoltern - Faltwand",aktiv:true},
+{id:"36",name:"Industriestrasse 37A, 8304 Wallisellen - Mahof - Pergola & RWA",aktiv:true},
+{id:"35",name:"Lilien Zentrum, 8952 Schlieren - Stahlbauarbeiten",aktiv:true},
+{id:"34",name:"Neusatzweg 46, 4106 Therwil - Allg. Metallbauarbeiten",aktiv:true},
+{id:"33",name:"Weihermattstrasse 89, 8902 Urdorf - Begrünung Fassade",aktiv:true},
+{id:"32",name:"MFH Neuwiesen, 8706 Meilen, Wohnüberbauung",aktiv:true},
+{id:"31",name:"Würzgrabenstrasse 5, 8048 Zürich, Türe richten",aktiv:true},
+{id:"30",name:"Herrenrütistrasse 8, 9050 Appenzell - Fenster und Türen",aktiv:true},
+{id:"28",name:"Amerbachstrasse 57, 4057 Basel - Treppenaufgang",aktiv:true},
+{id:"27",name:"Route des Jeunes 1, 1227 Les Acacias - Türen",aktiv:true},
+{id:"26",name:"Route des Jeunes 1, 1227 Les Acacias - Fenster",aktiv:true},
+{id:"25",name:"Freiestrasse 206, 8032 Zürich - Fassade",aktiv:true},
+{id:"24",name:"Panoramastrasse 22, 8903 Brimensdorf - Verglasungen",aktiv:true},
+{id:"23",name:"Büroumbau",aktiv:true},
+{id:"22",name:"Alpenstrasse 23, 8136 Thalwil - Pergola",aktiv:true},
+{id:"21",name:"Rietbachstrasse 11, 8952 Schlieren - Türrep.",aktiv:true},
+{id:"20",name:"Hubring 55, 8303 Bassersdorf - Allg. Metallbauarbeiten",aktiv:true},
+{id:"19",name:"Bienenweg 23, 4106 Therwil - Abdeckung Storen",aktiv:true},
+{id:"18",name:"Riedmühle 57, 8306 Wangen-Brüttisellen - Mängelbehebung",aktiv:true},
+{id:"17",name:"Stockenhof  10+14,  8105 Regensdorf - Türrep.",aktiv:true},
+{id:"16",name:"Bankstrasse 11, 8606 Uster - Fenster Türen",aktiv:true},
+{id:"15",name:"Maschine Emmegi Satellite XL",aktiv:true},
+{id:"14",name:"Zertifizierung EN 16034",aktiv:true},
+{id:"13",name:"Steinackerstrasse 20, 8902 Urdorf - Türe defektes Blech",aktiv:true},
+{id:"12",name:"Mutschellenstrasse 22, 8964 Rudolfstetten-Friedlisberg - Geländererhöhung",aktiv:true},
+{id:"11",name:"Grossmattstrasse 9, 8902 Urdorf -Div. Arbeiten",aktiv:true},
+{id:"8",name:"Ifangstrasse 8, 8952 Schlieren - Magnetkontakte",aktiv:true},
+{id:"7",name:"Test Projekt Leonie",aktiv:true},
+{id:"6",name:"Spitalstrasse 76/1.OG, 8902 Urdorf",aktiv:true},
+{id:"5",name:"KAPO Urdorf",aktiv:true},
+{id:"4",name:"Pavillion Kindergarten, 8953 Dietikon",aktiv:true},
+{id:"3",name:"Faltwand und Festverglasung",aktiv:true},
+{id:"2",name:"Durchbruch Coop",aktiv:true},
+{id:"1",name:"Ferrum",aktiv:true}
+];
+
+// HUBLER METALLBAU ZEITERFASSUNG - Complete App JS
+// SharePoint Integration + 197 Bexio Projects + Push Notifications
+
+const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
+const EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:null,admin:false}];
+const KS_COLORS={"Büro":'#3b82f6',Zuschnitt:'#8b5cf6',BAZ:'#06b6d4',Werkstatt:'#22c55e',Montage:'#FF6B35'};
+const DAYS_S=['So','Mo','Di','Mi','Do','Fr','Sa'],DAYS_L=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],MO=['Januar','Februar','M\u00e4rz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+let user=null,accessToken=null,projects=[...PROJECTS_DATA];
+let timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,project:'',ks:'',note:'',segments:[]};
+let timerIv=null,calOff=0,editId=null,pendingEntry=null;
+const $=s=>document.getElementById(s);const lk=k=>C.LS+(user?user.id+'_':'')+k;
+const getEntries=()=>{try{return JSON.parse(localStorage.getItem(lk('entries'))||'[]')}catch{return[]}};
+const saveEntries=e=>{localStorage.setItem(lk('entries'),JSON.stringify(e));queueSync()};
+function addEntry(e){const a=getEntries();e.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);e.created=new Date().toISOString();a.push(e);saveEntries(a);toast('Eintrag gespeichert','success');refreshView()}
+function updateEntry(id,u){const a=getEntries(),i=a.findIndex(e=>e.id===id);if(i>=0){a[i]={...a[i],...u};saveEntries(a);refreshView();return true}return false}
+function removeEntry(id){saveEntries(getEntries().filter(e=>e.id!==id));refreshView()}
+function dateKey(d){const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
+function todayKey(){return dateKey(new Date())}
+function fmtDate(d){const x=new Date(d);return String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+x.getFullYear()}
+function timeToMin(t){const p=t.split(':');return parseInt(p[0])*60+parseInt(p[1])}
+function fmtMin(m){if(m<0)m=0;const h=Math.floor(m/60),r=m%60;return h>0?h+'h '+(r>0?r+'min':''):r+'min'}
+function fmtH(m){return(m/60).toFixed(1)+'h'}
+function projLabel(p){return p.id+' - '+p.name}
+function getActiveProjects(){return projects.filter(p=>p.aktiv)}
+function getWeekDates(){const t=new Date(),d=t.getDay(),mon=new Date(t);mon.setDate(t.getDate()-(d===0?6:d-1));return Array.from({length:7},(_,i)=>{const x=new Date(mon);x.setDate(mon.getDate()+i);return x})}
+function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type||'info');t.textContent=msg;$('toasts').appendChild(t);setTimeout(()=>t.remove(),3000)}
+function getHolidays(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1,easter=new Date(y,mo-1,da);const ad=(d2,n)=>{const r=new Date(d2);r.setDate(r.getDate()+n);return r},dk=d2=>dateKey(d2);const hol={};hol[dk(new Date(y,0,1))]='Neujahr';hol[dk(new Date(y,0,2))]='Berchtoldstag';hol[dk(ad(easter,-2))]='Karfreitag';hol[dk(ad(easter,1))]='Ostermontag';hol[dk(new Date(y,4,1))]='Tag der Arbeit';hol[dk(ad(easter,39))]='Auffahrt';hol[dk(ad(easter,50))]='Pfingstmontag';hol[dk(new Date(y,7,1))]='Bundesfeier';hol[dk(new Date(y,11,25))]='Weihnachten';hol[dk(new Date(y,11,26))]='Stephanstag';const s1=new Date(y,8,1),fm=new Date(s1);fm.setDate(1+(8-s1.getDay())%7);const ks2=new Date(fm);ks2.setDate(fm.getDate()+7);hol[dk(ks2)]='Knabenschiessen';return hol}
+
+// SHAREPOINT GRAPH API
+const SP={
+  _driveId:null,
+  async getDriveId(){
+    if(this._driveId)return this._driveId;
+    try{
+      console.log('[SP] Suche SharePoint-Site...');
+      const search=await this.gf('/sites?search=HublerMetallbauDatenablage');
+      if(search&&search.value&&search.value.length>0){
+        const site=search.value[0];
+        console.log('[SP] Site gefunden:',site.displayName,'ID:',site.id);
+        const drives=await this.gf('/sites/'+site.id+'/drives');
+        if(drives&&drives.value){
+          const docDrive=drives.value.find(d=>d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')||drives.value[0];
+          this._driveId=docDrive.id;
+          console.log('[SP] Drive gefunden:',docDrive.name,'ID:',docDrive.id);
+          return this._driveId;
+        }
+      }
+      console.warn('[SP] Site nicht gefunden');return null;
+    }catch(e){console.error('[SP] getDriveId:',e);return null}
+  },
+  async gf(ep,opts){if(!accessToken)return null;const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+accessToken,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok)throw new Error('Graph '+resp.status);return resp.json()},
+  async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){console.warn('SP read:',e);return null}},
+  async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){console.warn('SP write:',e);return false}},
+  async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
+  async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
+  async loadEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';const data=await this.readFile(fn);if(data&&Array.isArray(data.entries)){const local=getEntries(),ids=new Set(local.map(e=>e.id)),merged=[...local];data.entries.forEach(e=>{if(!ids.has(e.id))merged.push(e)});localStorage.setItem(lk('entries'),JSON.stringify(merged));refreshView();return true}return false},
+  async saveEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getEntries()})},
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('Sync: '+e.message,'error')}}
+};
+function setSyncStatus(s){const el=$('syncStatus');if(s==='online'){el.className='sync-status online';el.textContent='SharePoint'}else if(s==='syncing'){el.className='sync-status syncing';el.textContent='Sync...'}else if(s==='offline'){el.className='sync-status offline';el.textContent='Offline'}else{el.className='sync-status';el.textContent='Lokal'}$('spStatusText').textContent=s==='online'?'Verbunden mit SharePoint':s==='syncing'?'Synchronisiere...':'Lokaler Modus (Demo)'}
+let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch{setSyncStatus('offline')}},3000)}
+
+// OAUTH
+function loginWithMicrosoft(){
+const scope=encodeURIComponent('User.Read Files.ReadWrite.All Sites.ReadWrite.All');
+const redir=encodeURIComponent(window.location.origin+window.location.pathname);
+console.log('[Auth] Redirect:',window.location.origin+window.location.pathname);
+window.location.href='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+redir+'&scope='+scope+'&response_mode=fragment&nonce='+Math.random().toString(36).slice(2)+'&prompt=select_account'}
+
+function handleOAuthCallback(){
+const h=window.location.hash;
+console.log('[Auth] Hash:',!!h);
+if(!h||!h.includes('access_token')){
+  if(h&&h.includes('error')){const p=new URLSearchParams(h.slice(1));console.error('[Auth] Error:',p.get('error_description'));toast('Login-Fehler: '+(decodeURIComponent(p.get('error_description')||p.get('error')||'')).split('.')[0],'error')}
+  return false;
+}
+const p=new URLSearchParams(h.slice(1));accessToken=p.get('access_token');
+if(!accessToken)return false;
+console.log('[Auth] Token erhalten, l\u00e4nge:',accessToken.length);
+history.replaceState(null,'',window.location.pathname);
+fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+accessToken}})
+.then(r=>{console.log('[Auth] Graph /me:',r.status);if(!r.ok)throw new Error('Graph '+r.status);return r.json()})
+.then(profile=>{
+  console.log('[Auth] Profil:',JSON.stringify({mail:profile.mail,upn:profile.userPrincipalName,name:profile.displayName}));
+  const email=(profile.mail||profile.userPrincipalName||'').toLowerCase();
+  const emp=EMPLOYEES.find(e=>e.email&&e.email.toLowerCase()===email);
+  if(emp){user={...emp};localStorage.setItem(C.LS+'session',JSON.stringify(user));localStorage.setItem(C.LS+'token',accessToken);console.log('[Auth] Angemeldet als:',emp.name);showApp();SP.fullSync()}
+  else{console.warn('[Auth] Email nicht gefunden:',email);toast('Email nicht registriert: '+email,'error');$('login-screen').style.display='flex'}
+}).catch(e=>{console.error('[Auth]:',e);toast('Login fehlgeschlagen: '+e.message,'error');$('login-screen').style.display='flex'});
+return true}
+
+// AUTH
+function initLogin(){
+// PIN-protected demo mode
+const demoDiv=$('demoUsers');
+if(demoDiv){
+  EMPLOYEES.forEach(emp=>{
+    const b=document.createElement('button');b.className='demo-user-btn';
+    b.innerHTML='<span class="uid">'+emp.id+'</span>'+emp.name+(emp.admin?' \ud83d\udc51':'')+(emp.approver&&!emp.admin?' \u2705':'');
+    b.onclick=()=>loginAs(emp);demoDiv.appendChild(b);
+  });
+}
+// PIN input handling
+const DEMO_PIN='47635';
+function setupPinInputs(){
+  for(let i=1;i<=5;i++){
+    const inp=$('pin'+i);
+    if(!inp)continue;
+    inp.addEventListener('input',function(){
+      if(this.value.length===1&&i<5)$('pin'+(i+1)).focus();
+      checkPin();
+    });
+    inp.addEventListener('keydown',function(e){
+      if(e.key==='Backspace'&&!this.value&&i>1)$('pin'+(i-1)).focus();
+    });
+  }
+}
+function checkPin(){
+  let pin='';
+  for(let i=1;i<=5;i++){const v=$('pin'+i);if(v)pin+=v.value}
+  const dv=$('demoUsers');
+  if(pin===DEMO_PIN){if(dv)dv.classList.add('show')}
+  else{if(dv)dv.classList.remove('show')}
+}
+setupPinInputs();
+$('msLoginBtn').onclick=loginWithMicrosoft;
+const urlHash=window.location.hash;
+console.log('[Auth] Page loaded. Hash:',urlHash?'yes':'none');
+if(urlHash&&urlHash.includes('access_token')){handleOAuthCallback();return}
+if(urlHash&&urlHash.includes('error')){const ep=new URLSearchParams(urlHash.slice(1));const errMsg=decodeURIComponent(ep.get('error_description')||ep.get('error')||'');toast('Microsoft Fehler: '+errMsg.split('.')[0],'error');
+const dbg=$('authDebug');if(dbg){dbg.style.display='block';dbg.innerHTML='<strong>OAuth Debug:</strong><br>Fehler: '+errMsg+'<br><br>Bitte pr\u00fcfen:<br>1. Azure: Authentication > SPA Platform<br>2. Implicit grant: Access+ID tokens<br>3. Redirect URI: '+window.location.origin+window.location.pathname}}
+const st=localStorage.getItem(C.LS+'token');if(st)accessToken=st;
+const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);showApp();if(accessToken)SP.fullSync()}catch{}}
+const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
+function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
+function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';updateTimerDate();refreshView();checkRecovery();calOff=0;updateCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences()}
+
+// TABS
+$('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
+function refreshView(){renderToday();renderWeek();updateCalendar()}
+
+// AUTOCOMPLETE
+function setupAC(iid,lid){const inp=$(iid),list=$(lid);let hl=-1;inp.addEventListener('input',()=>{const v=inp.value.toLowerCase().trim();list.innerHTML='';hl=-1;if(!v){list.classList.remove('show');return}const m=getActiveProjects().filter(p=>p.id.includes(v)||p.name.toLowerCase().includes(v)).slice(0,15);if(!m.length){list.classList.remove('show');return}m.forEach(p=>{const d=document.createElement('div');d.className='autocomplete-item';d.innerHTML='<span class="pn">'+p.id+'</span>'+p.name;d.onclick=()=>{inp.value=projLabel(p);list.classList.remove('show')};list.appendChild(d)});list.classList.add('show')});inp.addEventListener('keydown',e=>{const items=list.querySelectorAll('.autocomplete-item');if(!items.length)return;if(e.key==='ArrowDown'){e.preventDefault();hl=Math.min(hl+1,items.length-1);items.forEach((it,i)=>it.classList.toggle('hl',i===hl))}else if(e.key==='ArrowUp'){e.preventDefault();hl=Math.max(hl-1,0);items.forEach((it,i)=>it.classList.toggle('hl',i===hl))}else if(e.key==='Enter'){e.preventDefault();if(hl>=0){const v=inp.value.toLowerCase().trim(),fm=getActiveProjects().filter(p=>p.id.includes(v)||p.name.toLowerCase().includes(v));if(fm[hl])inp.value=projLabel(fm[hl])}list.classList.remove('show')}else if(e.key==='Escape')list.classList.remove('show')});document.addEventListener('click',e=>{if(!e.target.closest('.autocomplete-wrapper'))list.classList.remove('show')})}
+
+// TIMER
+function updateTimerDate(){const n=new Date(),hol=getHolidays(n.getFullYear())[todayKey()];let s=DAYS_L[n.getDay()]+', '+n.getDate()+'. '+MO[n.getMonth()]+' '+n.getFullYear();if(hol)s+=' \u00b7 '+hol;$('timerDate').textContent=s}
+$('btnStart').onclick=function(){const proj=$('timerProject').value.trim(),ks=$('timerKS').value;if(!proj){toast('Bitte Projekt w\u00e4hlen','warning');return}if(!ks){toast('Bitte Kostenstelle w\u00e4hlen','warning');return}if(timer.paused){timer.totalPaused+=Date.now()-timer.pauseAt;timer.paused=false;timer.pauseAt=null}else{timer.start=Date.now();timer.totalPaused=0;timer.paused=false;timer.segments=[]}timer.on=true;timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=ks+' \u00b7 '+proj};
+$('btnPause').onclick=function(){if(!timer.on||timer.paused)return;timer.paused=true;timer.pauseAt=Date.now();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI()};
+$('btnStop').onclick=function(){if(!timer.on)return;clearInterval(timerIv);if(timer.paused)timer.totalPaused+=Date.now()-timer.pauseAt;
+  if(timer.segments&&timer.segments.length>0){
+    // Has multiple segments - show split dialog
+    showSplitDialog(timer.start,Date.now());
+  }else{
+    // Single project - show normal pause dialog
+    const sd=new Date(timer.start),ed=new Date();pendingEntry={date:dateKey(sd),startTime:String(sd.getHours()).padStart(2,'0')+':'+String(sd.getMinutes()).padStart(2,'0'),endTime:String(ed.getHours()).padStart(2,'0')+':'+String(ed.getMinutes()).padStart(2,'0'),project:timer.project,kostenstelle:timer.ks,bemerkung:timer.note||''};showPauseDialog(pendingEntry);
+  }};
+function tickTimer(){if(!timer.on)return;let el=timer.paused?(timer.pauseAt-timer.start-timer.totalPaused):(Date.now()-timer.start-timer.totalPaused);const s=Math.floor(el/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;$('timerDisplay').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
+function updateTimerUI(){const st=$('btnStart'),pa=$('btnPause'),sp=$('btnStop'),di=$('timerDisplay'),sw=$('btnSwitch');if(timer.on&&!timer.paused){st.style.display='none';pa.style.display='flex';sp.style.display='flex';di.className='timer-time running';if(sw)sw.style.display='inline-flex'}else if(timer.paused){st.style.display='flex';pa.style.display='none';sp.style.display='flex';di.className='timer-time paused';if(sw)sw.style.display='inline-flex'}else{st.style.display='flex';pa.style.display='none';sp.style.display='none';di.className='timer-time';if(sw)sw.style.display='none'}}
+function resetTimer(){timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};localStorage.removeItem(lk('timer'));$('timerDisplay').textContent='00:00:00';$('timerDisplay').className='timer-time';$('timerProjDisp').textContent='';$('timerIndicator').classList.remove('on');updateTimerUI()}
+
+// PAUSE DIALOG
+function showPauseDialog(e){const sMin=timeToMin(e.startTime),eMin=timeToMin(e.endTime),brutto=eMin-sMin,day=new Date(e.date).getDay(),isFri=day===5,cl=sMin<780&&eMin>720;let h='<div class="pause-summary" style="margin-bottom:16px"><div class="pause-row"><span>Arbeitszeit:</span><span style="font-family:var(--font-mono)">'+e.startTime+' \u2013 '+e.endTime+'</span></div><div class="pause-row"><span>Brutto:</span><span style="font-family:var(--font-mono)">'+fmtMin(brutto)+'</span></div></div><div style="font-weight:600;margin-bottom:8px;font-size:.9rem">Pausen-Abz\u00fcge:</div><div class="pause-opt sel" onclick="toggleZn(this)"><input type="checkbox" id="pZn" checked><label for="pZn">Zn\u00fcni-Pause</label><span class="pt">15 Min</span></div>';if(cl||brutto>360){h+='<div class="pause-opt '+(isFri?'':'sel')+'" onclick="selLunch(this)"><input type="radio" name="lunch" value="60" '+(isFri?'':'checked')+'><label>Normale Mittagspause</label><span class="pt">1h</span></div><div class="pause-opt" onclick="selLunch(this)"><input type="radio" name="lunch" value="30"><label>Kurzer Mittag</label><span class="pt">30 Min</span></div><div class="pause-opt '+(isFri?'sel':'')+'" onclick="selLunch(this)"><input type="radio" name="lunch" value="0" '+(isFri?'checked':'')+'><label>Durchgearbeitet</label><span class="pt">0 Min</span></div>'}h+='<div class="pause-summary" id="nettoDisp"></div>';$('pauseBody').innerHTML=h;$('pauseModal').classList.add('show');calcNetto(brutto)}
+function toggleZn(el){const c=el.querySelector('input');c.checked=!c.checked;el.classList.toggle('sel',c.checked);recalcN()}
+function selLunch(el){document.querySelectorAll('#pauseBody .pause-opt').forEach(o=>{if(o.querySelector('input[name=lunch]'))o.classList.remove('sel')});el.classList.add('sel');el.querySelector('input').checked=true;recalcN()}
+function recalcN(){calcNetto(timeToMin(pendingEntry.endTime)-timeToMin(pendingEntry.startTime))}
+function calcNetto(brutto){let p=0;const z=$('pZn');if(z&&z.checked)p+=15;const l=document.querySelector('input[name=lunch]:checked');if(l)p+=parseInt(l.value);const d=$('nettoDisp');if(d)d.innerHTML='<div class="pause-row"><span>Pausen total:</span><span style="font-family:var(--font-mono)">'+fmtMin(p)+'</span></div><div class="pause-row total"><span>NETTO:</span><span>'+fmtMin(brutto-p)+'</span></div>'}
+$('pauseCancel').onclick=function(){$('pauseModal').classList.remove('show')};
+$('pauseConfirm').onclick=function(){let p=0;const z=$('pZn');if(z&&z.checked)p+=15;const l=document.querySelector('input[name=lunch]:checked');if(l)p+=parseInt(l.value);const e=pendingEntry;addEntry({date:e.date,startTime:e.startTime,endTime:e.endTime,pauseMin:p,durationMin:timeToMin(e.endTime)-timeToMin(e.startTime)-p,project:e.project,kostenstelle:e.kostenstelle,bemerkung:e.bemerkung});resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null};
+
+// RECOVERY
+function checkRecovery(){const s=localStorage.getItem(lk('timer'));if(!s)return;try{const st=JSON.parse(s);if(!st.on||!st.start)return;const el=Date.now()-st.start-(st.totalPaused||0),h=Math.floor(el/1000/3600),m=Math.floor((el/1000%3600)/60);$('recoveryBody').innerHTML='<p style="margin-bottom:12px">Ein Timer war noch aktiv:</p><div class="pause-summary"><div class="pause-row"><span>Projekt:</span><span>'+(st.project||'\u2014')+'</span></div><div class="pause-row"><span>Kostenstelle:</span><span>'+(st.ks||'\u2014')+'</span></div><div class="pause-row"><span>Verstrichene Zeit:</span><span style="font-family:var(--font-mono);color:var(--primary)">'+h+'h '+m+'min</span></div></div>';$('recoveryModal').classList.add('show')}catch{localStorage.removeItem(lk('timer'))}}
+$('recoveryRestore').onclick=function(){const s=localStorage.getItem(lk('timer'));if(!s)return;timer=JSON.parse(s);$('timerProject').value=timer.project||'';$('timerKS').value=timer.ks||'';$('timerNote').value=timer.note||'';updateTimerUI();timerIv=setInterval(tickTimer,1000);tickTimer();$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;$('recoveryModal').classList.remove('show');toast('Timer wiederhergestellt','success');updateSegmentDisplay()};
+$('recoveryDiscard').onclick=function(){localStorage.removeItem(lk('timer'));$('recoveryModal').classList.remove('show')};
+
+// MANUAL
+$('manSaveBtn').onclick=function(){const dt=$('manDate').value,st=$('manStart').value,en=$('manEnd').value,pr=$('manProject').value.trim(),ks=$('manKS').value,nt=$('manNote').value.trim();if(!dt||!st||!en){toast('Datum und Zeiten ausf\u00fcllen','warning');return}if(!pr){toast('Projekt w\u00e4hlen','warning');return}if(!ks){toast('Kostenstelle w\u00e4hlen','warning');return}const sM=timeToMin(st),eM=timeToMin(en);if(eM<=sM){toast('Endzeit nach Startzeit','warning');return}const brutto=eM-sM,day=new Date(dt).getDay(),isFri=day===5;let p=15;if(brutto>360&&!isFri)p+=60;addEntry({date:dt,startTime:st,endTime:en,pauseMin:p,durationMin:brutto-p,project:pr,kostenstelle:ks,bemerkung:nt});$('manProject').value='';$('manKS').value='';$('manNote').value=''};
+
+// EDIT/DELETE
+function openEdit(id){const e=getEntries().find(x=>x.id===id);if(!e)return;editId=id;const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option '+(k===e.kostenstelle?'selected':'')+'>'+k+'</option>').join('');$('editBody').innerHTML='<div class="form-row"><div class="form-group"><label class="form-label">Startzeit</label><input type="time" class="form-input" id="edStart" value="'+e.startTime+'"></div><div class="form-group"><label class="form-label">Endzeit</label><input type="time" class="form-input" id="edEnd" value="'+e.endTime+'"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="edProject" value="'+e.project+'" autocomplete="off"><div class="autocomplete-list" id="edProjectAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="edKS"><option value="">\u2014</option>'+ksOpts+'</select></div><div class="form-group"><label class="form-label">Pause (Min)</label><input type="number" class="form-input" id="edPause" value="'+(e.pauseMin||0)+'" min="0" max="120"></div><div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="edNote" value="'+(e.bemerkung||'')+'"></div>';setupAC('edProject','edProjectAC');$('editModal').classList.add('show')}
+$('editCancel').onclick=function(){$('editModal').classList.remove('show');editId=null};
+$('editSave').onclick=function(){if(!editId)return;const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,p=parseInt($('edPause').value)||0,nt=$('edNote').value.trim();if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}updateEntry(editId,{startTime:st,endTime:en,project:pr,kostenstelle:ks,pauseMin:p,durationMin:timeToMin(en)-timeToMin(st)-p,bemerkung:nt});toast('Aktualisiert','success');$('editModal').classList.remove('show');editId=null};
+$('editDelete').onclick=function(){if(!editId)return;if(confirm('Eintrag wirklich l\u00f6schen?')){removeEntry(editId);toast('Gel\u00f6scht','info');$('editModal').classList.remove('show');editId=null}};
+
+// RENDER
+function renderEC(e){const dur=e.durationMin||0,ksC=KS_COLORS[e.kostenstelle]||'#666';return '<div class="entry-card" style="border-left-color:'+ksC+'"><div class="entry-info"><div class="entry-time">'+e.startTime+' \u2013 '+e.endTime+' ('+fmtH(dur)+')</div><div class="entry-meta">'+e.kostenstelle+' \u00b7 '+e.project+(e.bemerkung?' \u00b7 '+e.bemerkung:'')+'</div></div><div class="entry-right"><div class="entry-duration">'+fmtH(dur)+'</div><button class="entry-action" onclick="openEdit(\''+e.id+'\')">\u270f\ufe0f</button></div></div>'}
+function renderKSBars(cid,entries,total){const el=$(cid);if(!total){el.innerHTML='<p style="color:var(--text-muted);font-size:.85rem">Keine Daten</p>';return}const ks={};entries.forEach(e=>{ks[e.kostenstelle]=(ks[e.kostenstelle]||0)+(e.durationMin||0)});el.innerHTML=Object.entries(ks).sort((a,b)=>b[1]-a[1]).map(([k,m])=>'<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+(m/total*100).toFixed(0)+'%;background:'+(KS_COLORS[k]||'#666')+'"></div></div><div class="stat-bar-value">'+fmtH(m)+'</div></div>').join('')}
+function renderToday(){const entries=getEntries().filter(e=>e.date===todayKey()),total=entries.reduce((s,e)=>s+(e.durationMin||0),0),n=new Date();$('todayTitle').textContent=DAYS_L[n.getDay()]+', '+fmtDate(n);$('todayTotal').textContent=fmtH(total);renderKSBars('todayBars',entries,total);$('todayEntries').innerHTML=entries.length?entries.map(renderEC).join(''):'<div class="empty-state"><div class="empty-icon">\ud83d\udcdd</div><p>Noch keine Eintr\u00e4ge heute</p></div>'}
+function renderWeek(){const wd=getWeekDates(),entries=getEntries();let wt=0;const ksW={};const bars=wd.map(d=>{const dk=dateKey(d),de=entries.filter(e=>e.date===dk),dm=de.reduce((s,e)=>s+(e.durationMin||0),0);wt+=dm;de.forEach(e=>{ksW[e.kostenstelle]=(ksW[e.kostenstelle]||0)+(e.durationMin||0)});const ksD={};de.forEach(e=>{ksD[e.kostenstelle]=(ksD[e.kostenstelle]||0)+(e.durationMin||0)});const segs=Object.entries(ksD).map(([k,m])=>'<div class="week-seg" style="width:'+(m/600*100).toFixed(1)+'%;background:'+(KS_COLORS[k]||'#666')+'"></div>').join('');const isT=dk===todayKey();return '<div class="week-row" style="'+(isT?'background:var(--primary-dim);border-radius:6px;padding:8px':'')+'"><div class="week-day">'+DAYS_S[d.getDay()]+'</div><div class="week-bar">'+segs+'</div><div class="week-hrs">'+fmtH(dm)+'</div></div>'}).join('');$('weekTotal').textContent=fmtH(wt);$('weekDayBars').innerHTML=bars;const wEl=$('weekKSBars');if(!wt){wEl.innerHTML='<p style="color:var(--text-muted);font-size:.85rem">Keine Daten</p>';return}wEl.innerHTML=Object.entries(ksW).sort((a,b)=>b[1]-a[1]).map(([k,m])=>'<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+(m/wt*100).toFixed(0)+'%;background:'+(KS_COLORS[k]||'#666')+'"></div></div><div class="stat-bar-value">'+fmtH(m)+'</div></div>').join('')}
+
+// CALENDAR
+$('calPrev').onclick=function(){if(calOff>-13){calOff--;updateCalendar()}};$('calNext').onclick=function(){if(calOff<0){calOff++;updateCalendar()}};
+function updateCalendar(){const d=new Date();d.setDate(d.getDate()+calOff);const dk=dateKey(d),hol=getHolidays(d.getFullYear())[dk];$('calDate').textContent=DAYS_L[d.getDay()]+', '+fmtDate(d)+(hol?' \ud83c\udf89':'');$('calNext').disabled=calOff>=0;$('calPrev').disabled=calOff<=-13;const entries=getEntries().filter(e=>e.date===dk),total=entries.reduce((s,e)=>s+(e.durationMin||0),0);$('calTotal').textContent=fmtH(total);renderKSBars('calKS',entries,total);const pr={};entries.forEach(e=>{pr[e.project]=(pr[e.project]||0)+(e.durationMin||0)});$('calProj').innerHTML=Object.keys(pr).length?Object.entries(pr).sort((a,b)=>b[1]-a[1]).map(([p,m])=>'<div class="stat-bar-item"><div class="stat-bar-label" style="width:auto;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p+'">'+p+'</div><div class="stat-bar-value" style="margin-left:auto">'+fmtH(m)+'</div></div>').join(''):'<p style="color:var(--text-muted);font-size:.85rem">Keine Daten</p>';$('calEntriesTitle').textContent=entries.length+' Eintr\u00e4ge';$('calEntries').innerHTML=entries.length?entries.map(renderEC).join(''):'<div class="empty-state"><div class="empty-icon">\ud83d\udcc5</div><p>Keine Eintr\u00e4ge</p></div>'}
+
+// ADMIN
+function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>').join('')}
+$('projSearch').oninput=function(){renderProjectList(this.value)};
+function toggleProjActive(id){const p=projects.find(x=>x.id===id);if(!p)return;p.aktiv=!p.aktiv;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList($('projSearch').value);toast('Projekt '+id+' '+(p.aktiv?'aktiviert':'deaktiviert'),'info');if(accessToken)SP.saveProjects()}
+$('addProjBtn').onclick=function(){const maxId=Math.max(...projects.map(p=>parseInt(p.id)||0));$('newProjId').value=String(maxId+1);$('newProjName').value='';$('addProjModal').classList.add('show')};
+$('addProjCancel').onclick=function(){$('addProjModal').classList.remove('show')};
+$('addProjSave').onclick=function(){const id=$('newProjId').value.trim(),name=$('newProjName').value.trim();if(!id||!name){toast('ID und Name erforderlich','warning');return}if(projects.find(p=>p.id===id)){toast('Nr. existiert bereits','warning');return}projects.unshift({id:id,name:name,aktiv:true});localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList();$('addProjModal').classList.remove('show');toast('Projekt '+id+' hinzugef\u00fcgt','success');if(accessToken)SP.saveProjects()};
+$('importProjFile').onchange=function(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(ev){try{const data=JSON.parse(ev.target.result);if(data.projekte&&Array.isArray(data.projekte)){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList();toast(projects.length+' Projekte importiert','success');if(accessToken)SP.saveProjects()}else toast('Ung\u00fcltiges Format','error')}catch{toast('JSON-Fehler','error')}};reader.readAsText(file)};
+$('loadSPProj').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}await SP.loadProjects()};
+$('exportProjBtn').onclick=function(){const blob=new Blob([JSON.stringify({lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='projekte.json';a.click();toast('projekte.json exportiert','success')};
+$('syncNowBtn').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}await SP.fullSync()};
+$('forceSPUpload').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{await SP.saveEntries();await SP.saveProjects();setSyncStatus('online');toast('Alles hochgeladen','success')}catch(e){setSyncStatus('offline');toast('Fehler: '+e.message,'error')}};
+
+// EXPORT
+$('expWeek').onclick=function(){exportCSV('week')};$('expMonth').onclick=function(){exportCSV('month')};$('expAll').onclick=function(){exportCSV('all')};
+function exportCSV(range){let entries=getEntries();const now=new Date();if(range==='week'){const wd=getWeekDates(),keys=wd.map(d=>dateKey(d));entries=entries.filter(e=>keys.includes(e.date))}else if(range==='month'){const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');entries=entries.filter(e=>e.date.startsWith(ym))}if(!entries.length){toast('Keine Daten','warning');return}entries.sort((a,b)=>a.date.localeCompare(b.date)||a.startTime.localeCompare(b.startTime));let csv='\uFEFF'+'Mitarbeiter;Datum;Start;Ende;Pause (Min);Dauer (h);Kostenstelle;Projekt;Bemerkung\n';entries.forEach(e=>{csv+=user.name+';'+fmtDate(e.date)+';'+e.startTime+';'+e.endTime+';'+(e.pauseMin||0)+';'+((e.durationMin||0)/60).toFixed(2)+';'+e.kostenstelle+';'+e.project+';'+(e.bemerkung||'')+'\n'});const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Zeiterfassung_'+user.name.replace(/\s/g,'_')+'_'+range+'.csv';a.click();toast('Export erstellt','success')}
+
+// AUTO-STOP
+window.addEventListener('beforeunload',e=>{if(timer.on){e.preventDefault();e.returnValue=''}});
+setInterval(()=>{if(!timer.on)return;const now=new Date(),h=now.getHours(),day=now.getDay(),isFri=day===5;if(isFri&&h>=15){clearInterval(timerIv);pendingEntry={date:dateKey(new Date(timer.start)),startTime:String(new Date(timer.start).getHours()).padStart(2,'0')+':'+String(new Date(timer.start).getMinutes()).padStart(2,'0'),endTime:'14:00',project:timer.project,kostenstelle:timer.ks,bemerkung:timer.note||''};showPauseDialog(pendingEntry);toast('Timer um 14:00 gestoppt (Fr)','warning')}else if(!isFri&&day>=1&&day<=4&&h>=18){clearInterval(timerIv);pendingEntry={date:dateKey(new Date(timer.start)),startTime:String(new Date(timer.start).getHours()).padStart(2,'0')+':'+String(new Date(timer.start).getMinutes()).padStart(2,'0'),endTime:'17:00',project:timer.project,kostenstelle:timer.ks,bemerkung:timer.note||''};showPauseDialog(pendingEntry);toast('Timer um 17:00 gestoppt','warning')}},60000);
+
+// PUSH NOTIFICATIONS
+const NOTIF_DEFAULTS={morning:'06:55',morningOn:true,lunch:'12:00',lunchOn:true,eveningMoDo:'16:45',eveningOn:true,eveningFr:'13:45',fridayOn:true,overflowH:10,overflowOn:true};
+function getNotifSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'notif_settings'))||{...NOTIF_DEFAULTS}}catch{return{...NOTIF_DEFAULTS}}}
+function saveNotifSettings(s){localStorage.setItem(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s)}
+function loadNotifUI(){
+  const s=getNotifSettings();
+  if($('notifMorning'))$('notifMorning').value=s.morning||'06:55';
+  if($('notifMorningOn'))$('notifMorningOn').value=s.morningOn!==false?'1':'0';
+  if($('notifLunch'))$('notifLunch').value=s.lunch||'12:00';
+  if($('notifLunchOn'))$('notifLunchOn').value=s.lunchOn!==false?'1':'0';
+  if($('notifEveningMoDo'))$('notifEveningMoDo').value=s.eveningMoDo||'16:45';
+  if($('notifEveningOn'))$('notifEveningOn').value=s.eveningOn!==false?'1':'0';
+  if($('notifEveningFr'))$('notifEveningFr').value=s.eveningFr||'13:45';
+  if($('notifFridayOn'))$('notifFridayOn').value=s.fridayOn!==false?'1':'0';
+  if($('notifOverflow'))$('notifOverflow').value=s.overflowH||10;
+  if($('notifOverflowOn'))$('notifOverflowOn').value=s.overflowOn!==false?'1':'0';
+  updateNotifStatus();
+}
+function updateNotifStatus(){const el=$('notifStatus');if(!el)return;if(!('Notification' in window)){el.textContent='Browser unterst\u00fctzt keine Benachrichtigungen';return}if(Notification.permission==='granted')el.textContent='Aktiviert';else if(Notification.permission==='denied')el.textContent='Blockiert - bitte in Browser-Einstellungen erlauben';else el.textContent='Noch nicht aktiviert'}
+function showNotif(title,body,tag){if(Notification.permission!=='granted')return;try{const n=new Notification(title,{body:body,tag:tag||'hm-'+Date.now(),requireInteraction:false});n.onclick=function(){window.focus();n.close()};setTimeout(()=>n.close(),15000)}catch(e){console.warn('Notif:',e)}}
+$('notifEnableBtn').onclick=async function(){if(!('Notification' in window)){toast('Browser unterst\u00fctzt keine Benachrichtigungen','error');return}const perm=await Notification.requestPermission();if(perm==='granted'){toast('Benachrichtigungen aktiviert','success');updateNotifStatus();showNotif('Hubler Zeiterfassung','Benachrichtigungen sind jetzt aktiv!')}else{toast('Berechtigung abgelehnt','warning');updateNotifStatus()}};
+$('notifTestBtn').onclick=function(){if(Notification.permission!=='granted'){toast('Bitte zuerst aktivieren','warning');return}showNotif('Test-Benachrichtigung','Push-Notifications funktionieren!')};
+$('notifSaveBtn').onclick=function(){const s={morning:$('notifMorning').value,morningOn:$('notifMorningOn').value==='1',lunch:$('notifLunch').value,lunchOn:$('notifLunchOn').value==='1',eveningMoDo:$('notifEveningMoDo').value,eveningOn:$('notifEveningOn').value==='1',eveningFr:$('notifEveningFr').value,fridayOn:$('notifFridayOn').value==='1',overflowH:parseInt($('notifOverflow').value)||10,overflowOn:$('notifOverflowOn').value==='1'};saveNotifSettings(s);toast('Einstellungen gespeichert','success')};
+
+let notifFiredToday={};
+function checkNotifications(){
+  if(!user||Notification.permission!=='granted')return;
+  const s=getNotifSettings();const now=new Date();const day=now.getDay();
+  const hhmm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const todayStr=todayKey();const isFri=day===5;const isWeekday=day>=1&&day<=5;
+  if(!isWeekday)return;
+  if(notifFiredToday._date!==todayStr)notifFiredToday={_date:todayStr};
+  if(s.morningOn&&hhmm===s.morning&&!notifFiredToday.morning&&!timer.on){showNotif('Guten Morgen!','Zeit den Timer zu starten - einen produktiven Tag!','morning');notifFiredToday.morning=true}
+  if(s.lunchOn&&hhmm===s.lunch&&!notifFiredToday.lunch&&timer.on){showNotif('Mittagspause!','Guten Appetit! Vergiss nicht eine Pause einzulegen.','lunch');notifFiredToday.lunch=true}
+  if(isFri&&s.fridayOn&&hhmm===s.eveningFr&&!notifFiredToday.friday){showNotif('Sch\u00f6nes Wochenende!','Bitte Timer stoppen und pr\u00fcfen ob alle Stunden dieser Woche erfasst sind. Erholsames Wochenende!','friday');notifFiredToday.friday=true}
+  if(!isFri&&s.eveningOn&&hhmm===s.eveningMoDo&&!notifFiredToday.evening&&timer.on){showNotif('Feierabend!','Vergiss nicht den Timer zu stoppen und deine Stunden zu pr\u00fcfen.','evening');notifFiredToday.evening=true}
+  if(s.overflowOn&&timer.on&&!timer.paused&&!notifFiredToday.overflow){const elapsed=(Date.now()-timer.start-timer.totalPaused)/3600000;if(elapsed>=s.overflowH){showNotif('Timer l\u00e4uft seit '+Math.floor(elapsed)+'h!','Mehr als '+s.overflowH+'h. Bitte pr\u00fcfen ob der Timer noch laufen soll.','overflow');notifFiredToday.overflow=true}}
+}
+setInterval(checkNotifications,30000);
+async function loadNotifSettingsFromSP(){if(!accessToken)return;try{const data=await SP.readFile('notif_settings.json');if(data&&data.morning){localStorage.setItem(C.LS+'notif_settings',JSON.stringify(data));if(user&&user.admin)loadNotifUI()}}catch{}}
+
+
+// PROJECT SWITCH (during running timer)
+function switchProject(){
+  if(!timer.on)return;
+  const proj=$('timerProject').value.trim(),ks=$('timerKS').value;
+  if(!proj){toast('Bitte neues Projekt w\u00e4hlen','warning');return}
+  if(!ks){toast('Bitte Kostenstelle w\u00e4hlen','warning');return}
+  // Save current segment
+  const now=Date.now();
+  const segStart=timer.segments.length>0?timer.segments[timer.segments.length-1].end:timer.start;
+  timer.segments.push({start:segStart,end:now,project:timer.project,ks:timer.ks,note:timer.note});
+  // Switch to new project
+  timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();
+  localStorage.setItem(lk('timer'),JSON.stringify(timer));
+  $('timerProjDisp').textContent=ks+' \u00b7 '+proj;
+  toast('Projekt gewechselt \u2013 Segment gespeichert','success');
+  updateSegmentDisplay();
+}
+
+function updateSegmentDisplay(){
+  let el=$('segmentInfo');
+  if(!el){el=document.createElement('div');el.id='segmentInfo';el.style.cssText='margin-top:12px;font-size:.8rem;color:var(--text-dim)';const tc=document.querySelector('#tab-timer .timer-controls');if(tc)tc.parentNode.insertBefore(el,tc.nextSibling)}
+  if(!timer.segments||!timer.segments.length){el.innerHTML='';return}
+  const segs=timer.segments.map((s,i)=>{const dur=Math.round((s.end-s.start)/60000);return '<div style="display:flex;justify-content:space-between;padding:4px 8px;background:var(--bg-surface);border-radius:4px;margin-bottom:4px;border-left:3px solid '+(KS_COLORS[s.ks]||'#666')+'"><span>'+s.ks+' \u00b7 '+s.project.substring(0,40)+'</span><span style="font-family:var(--font-mono)">'+fmtH(dur)+'</span></div>'}).join('');
+  el.innerHTML='<div style="font-weight:600;margin-bottom:6px;font-size:.75rem;text-transform:uppercase;color:var(--text-muted)">Bisherige Segmente ('+timer.segments.length+')</div>'+segs;
+}
+
+// SPLIT DIALOG (when stopping timer with segments)
+function showSplitDialog(totalStart,totalEnd){
+  // Build segments list including current running segment
+  const allSegs=[...timer.segments];
+  const lastSegStart=allSegs.length>0?allSegs[allSegs.length-1].end:timer.start;
+  allSegs.push({start:lastSegStart,end:Date.now(),project:timer.project,ks:timer.ks,note:timer.note});
+
+  const startDate=new Date(totalStart);
+  const endDate=new Date(totalEnd);
+  const date=dateKey(startDate);
+  const startTime=String(startDate.getHours()).padStart(2,'0')+':'+String(startDate.getMinutes()).padStart(2,'0');
+  const endTime=String(endDate.getHours()).padStart(2,'0')+':'+String(endDate.getMinutes()).padStart(2,'0');
+  const totalMin=Math.round((totalEnd-totalStart-timer.totalPaused)/60000);
+
+  let h='<div class="pause-summary" style="margin-bottom:16px"><div class="pause-row"><span>Gesamtzeit:</span><span style="font-family:var(--font-mono)">'+startTime+' \u2013 '+endTime+' ('+fmtH(totalMin)+')</span></div><div class="pause-row"><span>Segmente:</span><span style="font-family:var(--font-mono)">'+allSegs.length+'</span></div></div>';
+  h+='<div style="font-weight:600;margin-bottom:8px">Zeitaufteilung:</div>';
+  h+='<div id="splitSegments">';
+  allSegs.forEach((seg,i)=>{
+    const segDur=Math.round((seg.end-seg.start)/60000);
+    const segStartT=new Date(seg.start);
+    const segEndT=new Date(seg.end);
+    const sTime=String(segStartT.getHours()).padStart(2,'0')+':'+String(segStartT.getMinutes()).padStart(2,'0');
+    const eTime=String(segEndT.getHours()).padStart(2,'0')+':'+String(segEndT.getMinutes()).padStart(2,'0');
+    const ksColor=KS_COLORS[seg.ks]||'#666';
+    h+='<div class="entry-card" style="border-left-color:'+ksColor+';margin-bottom:8px"><div class="entry-info"><div class="entry-time">'+sTime+' \u2013 '+eTime+' ('+fmtH(segDur)+')</div><div class="entry-meta">'+seg.ks+' \u00b7 '+seg.project+'</div></div><div class="entry-right"><div class="entry-duration" style="color:var(--accent)">'+fmtH(segDur)+'</div></div></div>';
+  });
+  h+='</div>';
+  h+='<div style="margin-top:12px"><button class="btn btn-secondary btn-sm" onclick="addSplitRow()" style="width:100%">+ Weiteres Segment hinzuf\u00fcgen</button></div>';
+  h+='<div id="extraSplitRows"></div>';
+
+  // Store segments for later
+  window._splitSegs=allSegs;
+  window._splitDate=date;
+  window._splitTotalMin=totalMin;
+
+  $('splitBody').innerHTML=h;
+  $('splitModal').classList.add('show');
+}
+
+function addSplitRow(){
+  const container=$('extraSplitRows');
+  const idx=container.children.length;
+  const active=getActiveProjects();
+  const d=document.createElement('div');
+  d.className='card';d.style.cssText='padding:12px;margin-top:8px';
+  d.innerHTML='<div class="form-row"><div class="form-group"><label class="form-label">Start</label><input type="time" class="form-input split-start-'+idx+'"></div><div class="form-group"><label class="form-label">Ende</label><input type="time" class="form-input split-end-'+idx+'"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input split-proj-'+idx+'" placeholder="Suchen..." autocomplete="off"><div class="autocomplete-list" id="splitAC'+idx+'"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select split-ks-'+idx+'"><option value="">--</option><option>B\u00fcro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div><button class="btn btn-danger btn-sm" onclick="this.parentNode.remove()" style="width:100%">Entfernen</button>';
+  container.appendChild(d);
+  setupAC('split-proj-'+idx,'splitAC'+idx);
+}
+
+function saveSplitEntries(){
+  const segs=window._splitSegs||[];
+  const date=window._splitDate;
+  if(!segs.length){$('splitModal').classList.remove('show');return}
+
+  // Save each segment as entry
+  // First ask for pause distribution
+  const totalMin=window._splitTotalMin;
+  const day=new Date(date).getDay();
+  const isFri=day===5;
+  // Simple: apply pause to first segment (znueni) and lunch to longest segment
+  let znueni=15;
+  let lunch=0;
+  if(totalMin>360&&!isFri)lunch=60;
+
+  segs.forEach((seg,i)=>{
+    const segDur=Math.round((seg.end-seg.start)/60000);
+    const segStart=new Date(seg.start);
+    const segEnd=new Date(seg.end);
+    const sTime=String(segStart.getHours()).padStart(2,'0')+':'+String(segStart.getMinutes()).padStart(2,'0');
+    const eTime=String(segEnd.getHours()).padStart(2,'0')+':'+String(segEnd.getMinutes()).padStart(2,'0');
+    let pauseMin=0;
+    if(i===0)pauseMin+=znueni;// Znueni on first segment
+    // Apply lunch to the segment that crosses 12:00
+    const crossesLunch=segStart.getHours()<12&&segEnd.getHours()>=12;
+    if(crossesLunch&&lunch>0){pauseMin+=lunch;lunch=0}
+    addEntry({date:date,startTime:sTime,endTime:eTime,pauseMin:pauseMin,durationMin:segDur-pauseMin,project:seg.project,kostenstelle:seg.ks,bemerkung:seg.note||''});
+  });
+
+  // Also save any extra manual split rows
+  const container=$('extraSplitRows');
+  if(container){
+    for(let i=0;i<container.children.length;i++){
+      const row=container.children[i];
+      const st=row.querySelector('[class*=split-start]');
+      const en=row.querySelector('[class*=split-end]');
+      const pr=row.querySelector('[class*=split-proj]');
+      const ks=row.querySelector('[class*=split-ks]');
+      if(st&&en&&pr&&ks&&st.value&&en.value&&pr.value&&ks.value){
+        const sM=timeToMin(st.value),eM=timeToMin(en.value);
+        if(eM>sM){addEntry({date:date,startTime:st.value,endTime:en.value,pauseMin:0,durationMin:eM-sM,project:pr.value,kostenstelle:ks.value,bemerkung:''})}
+      }
+    }
+  }
+
+  resetTimer();
+  $('splitModal').classList.remove('show');
+  window._splitSegs=null;
+}
+
+
+
+// EMPLOYEE SETTINGS (Admin only)
+const EMP_DEFAULTS={pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,year:new Date().getFullYear()};
+function getEmpSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'emp_settings'))||{}}catch{return{}}}
+function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s)}
+function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
+function setEmpSetting(empId,data){const all=getEmpSettings();all[empId]={...EMP_DEFAULTS,...(all[empId]||{}),...data};saveEmpSettings(all)}
+
+const DAY_LABELS={1:'Mo',2:'Di',3:'Mi',4:'Do',5:'Fr'};
+
+function renderEmpSettings(){
+  const el=$('empSettingsList');if(!el)return;
+  const settings=getEmpSettings();
+  el.innerHTML=EMPLOYEES.map(emp=>{
+    const s=settings[emp.id]||{...EMP_DEFAULTS};
+    const tageStr=(s.arbeitsTage||[1,2,3,4,5]).map(d=>DAY_LABELS[d]||d).join(', ');
+    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
+    return '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>'+emp.name+'</strong><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+'</span></div><div style="display:flex;gap:12px;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)"><span>'+s.pensum+'%</span><span>'+s.weekHours+'h/Wo</span><span>'+tageStr+'</span><span>'+ferienAnspruch+' Ferientage</span>'+(s.ferienUebertrag?'<span style="color:var(--success)">+'+s.ferienUebertrag+' FU</span>':'')+''+(s.ueberstundenUebertrag?'<span style="color:var(--accent)">+'+s.ueberstundenUebertrag+'h \u00dc</span>':'')+'</div><button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="openEmpEdit(\''+emp.id+'\')">Bearbeiten</button></div>'
+  }).join('');
+}
+
+function openEmpEdit(empId){
+  const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return;
+  const s=getEmpSetting(empId);
+  const tage=s.arbeitsTage||[1,2,3,4,5];
+  window._editEmpId=empId;
+  $('empEditTitle').textContent=emp.name+' ('+emp.id+')';
+  $('empPensum').value=s.pensum||100;
+  $('empWeekH').value=s.weekHours||42.5;
+  $('empFerien').value=s.ferienTage||25;
+  $('empFerienUe').value=s.ferienUebertrag||0;
+  $('empUeStd').value=s.ueberstundenUebertrag||0;
+  $('empYear').value=s.year||new Date().getFullYear();
+  // Set checkboxes
+  [1,2,3,4,5].forEach(d=>{const cb=$('empTag'+d);if(cb)cb.checked=tage.includes(d)});
+  // Auto calc
+  calcEmpPreview();
+  $('empEditModal').classList.add('show');
+}
+
+function calcEmpPreview(){
+  const pensum=parseInt($('empPensum').value)||100;
+  const ferien=parseInt($('empFerien').value)||25;
+  const weekH=parseFloat($('empWeekH').value)||42.5;
+  const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
+  const ferienAnspruch=Math.round(ferien*(pensum/100)*10)/10;
+  const tagesH=tage.length>0?Math.round(weekH/tage.length*100)/100:0;
+  const prev=$('empPreview');
+  if(prev)prev.innerHTML='<div class="pause-summary"><div class="pause-row"><span>Pensum:</span><span>'+pensum+'%</span></div><div class="pause-row"><span>Arbeitstage:</span><span>'+tage.map(d=>DAY_LABELS[d]).join(', ')+'</span></div><div class="pause-row"><span>Soll/Tag:</span><span style="font-family:var(--font-mono)">'+tagesH+'h</span></div><div class="pause-row"><span>Soll/Woche:</span><span style="font-family:var(--font-mono)">'+weekH+'h</span></div><div class="pause-row total"><span>Ferienanspruch:</span><span>'+ferienAnspruch+' Tage</span></div></div>';
+}
+
+function saveEmpEdit(){
+  const empId=window._editEmpId;if(!empId)return;
+  const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
+  if(!tage.length){toast('Mindestens 1 Arbeitstag','warning');return}
+  setEmpSetting(empId,{
+    pensum:parseInt($('empPensum').value)||100,
+    weekHours:parseFloat($('empWeekH').value)||42.5,
+    ferienTage:parseInt($('empFerien').value)||25,
+    arbeitsTage:tage,
+    ferienUebertrag:parseFloat($('empFerienUe').value)||0,
+    ueberstundenUebertrag:parseFloat($('empUeStd').value)||0,
+    year:parseInt($('empYear').value)||new Date().getFullYear()
+  });
+  $('empEditModal').classList.remove('show');
+  toast('Einstellungen gespeichert','success');
+  renderEmpSettings();
+  renderAbsences();
+}
+
+async function loadEmpSettingsFromSP(){
+  if(!accessToken)return;
+  try{
+    const data=await SP.readFile('emp_settings.json');
+    if(data&&typeof data==='object'){
+      localStorage.setItem(C.LS+'emp_settings',JSON.stringify(data));
+      if(user&&user.admin)renderEmpSettings();
+    }
+  }catch(e){console.warn('EmpSettings load:',e)}
+}
+
+// ABSENCE MANAGEMENT
+const ABS_TYPES={'Ferien':'\U0001f3d6\ufe0f','Krankheit':'\U0001f912','Unfall':'\U0001f915','Milit\u00e4r/Zivildienst':'\U0001f396\ufe0f','Mutterschaft/Vaterschaft':'\U0001f476','Umzug':'\U0001f4e6','Unbezahlt':'\U0001f6ab','Sonstiges':'\U0001f4cb'};
+const ABS_COLORS={'Ferien':'#22c55e','Krankheit':'#ef4444','Unfall':'#f97316','Milit\u00e4r/Zivildienst':'#8b5cf6','Mutterschaft/Vaterschaft':'#ec4899','Umzug':'#06b6d4','Unbezahlt':'#6b7280','Sonstiges':'#a3a3a3'};
+
+function getAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'absences')||'[]')}catch{return[]}}
+function saveAbsences(a){localStorage.setItem(C.LS+'absences',JSON.stringify(a));queueAbsSync()}
+function getAllAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'global_absences')||'[]')}catch{return[]}}
+function saveAllAbsences(a){localStorage.setItem(C.LS+'global_absences',JSON.stringify(a))}
+
+let absSyncTm=null;
+function queueAbsSync(){if(!accessToken)return;clearTimeout(absSyncTm);absSyncTm=setTimeout(async()=>{
+  try{await SP.writeFile('Abwesenheiten/'+user.id+'.json',{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),absences:getAbsences()})}catch(e){console.warn('Abs sync:',e)}
+},2000)}
+
+function countWorkdays(from,to,empId){
+  const empS=empId?getEmpSetting(empId):(user?getEmpSetting(user.id):{...EMP_DEFAULTS});
+  const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
+  let count=0;const d=new Date(from);const end=new Date(to);
+  while(d<=end){const day=d.getDay();if(arbeitsTage.includes(day)){const dk=dateKey(d);const hol=getHolidays(d.getFullYear());if(!hol[dk])count++}d.setDate(d.getDate()+1)}
+  return count}
+
+$('absSaveBtn').onclick=function(){
+  const type=$('absType').value,from=$('absFrom').value,to=$('absTo').value,dur=$('absDuration').value,note=$('absNote').value.trim();
+  if(!type){toast('Bitte Typ w\u00e4hlen','warning');return}
+  if(!from||!to){toast('Zeitraum ausf\u00fcllen','warning');return}
+  if(new Date(to)<new Date(from)){toast('Bis-Datum muss nach Von-Datum liegen','warning');return}
+  const workdays=countWorkdays(from,to);
+  const days=dur==='full'?workdays:workdays*0.5;
+  const needsApproval=type==='Ferien'||type==='Unbezahlt'||type==='Sonstiges'||type==='Umzug';
+  const autoApproved=type==='Krankheit'||type==='Unfall'||type==='Milit\u00e4r/Zivildienst'||type==='Mutterschaft/Vaterschaft';
+  const abs={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:type,from:from,to:to,duration:dur,days:days,note:note,status:autoApproved?'approved':'pending',employeeId:user.id,employeeName:user.name,created:new Date().toISOString(),approvedBy:autoApproved?'Auto':null,approvedAt:autoApproved?new Date().toISOString():null};
+  const all=getAbsences();all.push(abs);saveAbsences(all);
+  // Also add to global list for approvers
+  const glob=getAllAbsences();glob.push(abs);saveAllAbsences(glob);
+  if(accessToken){SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:glob})}
+  $('absType').value='';$('absNote').value='';
+  toast(needsApproval?'Antrag eingereicht - wartet auf Freigabe':'Abwesenheit gespeichert','success');
+  renderAbsences();
+};
+
+function renderAbsences(){
+  const abs=getAbsences().sort((a,b)=>b.from.localeCompare(a.from));
+  const year=new Date().getFullYear();
+  $('absYear').textContent=year;
+
+  // Stats
+  const yearAbs=abs.filter(a=>a.from.startsWith(String(year)));
+  const ferienDays=yearAbs.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((s,a)=>s+a.days,0);
+  const krankDays=yearAbs.filter(a=>a.type==='Krankheit').reduce((s,a)=>s+a.days,0);
+  const pendingDays=yearAbs.filter(a=>a.status==='pending').reduce((s,a)=>s+a.days,0);
+  // Get employee settings for proper calculation
+  const empS=user?getEmpSetting(user.id):{...EMP_DEFAULTS};
+  const ferienAnspruch=Math.round(empS.ferienTage*(empS.pensum/100)*10)/10;
+  const ferienTotal=ferienAnspruch+(empS.ferienUebertrag||0);
+  const ferienRest=Math.round((ferienTotal-ferienDays)*10)/10;
+  $('absStats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--success);font-weight:700">'+ferienDays+' / '+ferienTotal+'</div><div style="font-size:.72rem;color:var(--text-dim)">Ferien bezogen / Anspruch</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+';font-weight:700">'+ferienRest+'</div><div style="font-size:.72rem;color:var(--text-dim)">Resttage</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--danger);font-weight:700">'+krankDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Krankheit/Unfall</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--warning);font-weight:700">'+pendingDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Pendent</div></div></div>'+(empS.ueberstundenUebertrag?'<div style="margin-top:8px;font-size:.8rem;color:var(--text-dim)">\u00dcberstunden Vortrag: <strong style="color:var(--accent)">'+empS.ueberstundenUebertrag+'h</strong></div>':'');
+
+  // List
+  if(!abs.length){$('absList').innerHTML='<div class="empty-state"><div class="empty-icon">\U0001f3d6\ufe0f</div><p>Keine Abwesenheiten erfasst</p></div>';return}
+  $('absList').innerHTML=abs.map(a=>{
+    const icon=ABS_TYPES[a.type]||'\U0001f4cb';
+    const color=ABS_COLORS[a.type]||'#666';
+    const statusClass=a.status==='approved'?'approved':a.status==='rejected'?'rejected':'pending';
+    const statusText=a.status==='approved'?'Genehmigt':a.status==='rejected'?'Abgelehnt':'Pendent';
+    const durText=a.duration==='morning'?'(VM)':a.duration==='afternoon'?'(NM)':'';
+    return '<div class="abs-card" style="border-left-color:'+color+'"><div class="entry-info"><div class="entry-time"><span class="abs-type-icon">'+icon+'</span>'+a.type+' '+durText+'</div><div class="entry-meta">'+fmtDate(a.from)+(a.from!==a.to?' \u2013 '+fmtDate(a.to):'')+' \u00b7 '+a.days+' Tag'+(a.days!==1?'e':'')+(a.note?' \u00b7 '+a.note:'')+'</div></div><div class="entry-right"><span class="abs-badge '+statusClass+'">'+statusText+'</span>'+((a.status==='pending'||(user&&(user.admin||user.approver)))?'<button class="entry-action" onclick="deleteAbsence(\''+a.id+'\')" title="L\u00f6schen">\U0001f5d1</button>':'')+'</div></div>'
+  }).join('');
+
+  // Approval section (for approvers: Dominic + Roman)
+  const card=$('absApprovalCard');
+  if(user&&(user.admin||user.approver)){card.style.display='block';
+    const allAbs=getAllAbsences();
+    const pending=allAbs.filter(a=>a.status==='pending'&&a.employeeId!==user.id);
+    if(pending.length>0){
+      card.style.display='block';
+      $('absPendingList').innerHTML=pending.map(a=>{
+        const icon=ABS_TYPES[a.type]||'\U0001f4cb';const color=ABS_COLORS[a.type]||'#666';
+        return '<div class="abs-card" style="border-left-color:'+color+'"><div class="entry-info"><div class="entry-time"><span class="abs-type-icon">'+icon+'</span><strong>'+a.employeeName+'</strong> \u2013 '+a.type+'</div><div class="entry-meta">'+fmtDate(a.from)+(a.from!==a.to?' \u2013 '+fmtDate(a.to):'')+' \u00b7 '+a.days+' Tag'+(a.days!==1?'e':'')+(a.note?' \u00b7 '+a.note:'')+'</div></div><div class="entry-right" style="gap:4px"><button class="abs-approve-btn approve" onclick="approveAbsence(\''+a.id+'\',true)">\u2705</button><button class="abs-approve-btn reject" onclick="approveAbsence(\''+a.id+'\',false)">\u274c</button></div></div>'
+      }).join('');
+    }else{card.style.display='block';$('absPendingList').innerHTML='<p style="color:var(--text-dim);font-size:.85rem">Keine offenen Antr\u00e4ge</p>'}
+  }else{card.style.display='none'}
+
+  // Admin: all employees overview
+  if(user&&user.admin){renderAdminAbsences()}
+}
+
+function deleteAbsence(id){
+  if(!confirm('Antrag wirklich l\u00f6schen?'))return;
+  const abs=getAbsences().filter(a=>a.id!==id);saveAbsences(abs);
+  const glob=getAllAbsences().filter(a=>a.id!==id);saveAllAbsences(glob);
+  if(accessToken)SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:glob});
+  toast('Gel\u00f6scht','info');renderAbsences();
+}
+
+function approveAbsence(id,approved){
+  const glob=getAllAbsences();
+  const a=glob.find(x=>x.id===id);
+  if(!a)return;
+  a.status=approved?'approved':'rejected';
+  a.approvedBy=user.name;
+  a.approvedAt=new Date().toISOString();
+  saveAllAbsences(glob);
+  // Also update in employee's local list if it's us
+  if(a.employeeId===user.id){const own=getAbsences();const o=own.find(x=>x.id===id);if(o){o.status=a.status;o.approvedBy=a.approvedBy;o.approvedAt=a.approvedAt;saveAbsences(own)}}
+  if(accessToken)SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:glob});
+  toast(approved?'Genehmigt \u2713':'Abgelehnt',approved?'success':'warning');
+  renderAbsences();
+}
+
+function renderAdminAbsences(){
+  const glob=getAllAbsences();
+  if(!glob.length){$('adminAbsList').innerHTML='<p style="color:var(--text-dim);font-size:.85rem">Keine Abwesenheiten</p>';return}
+  const byEmp={};glob.forEach(a=>{if(!byEmp[a.employeeName])byEmp[a.employeeName]=[];byEmp[a.employeeName].push(a)});
+  $('adminAbsList').innerHTML=Object.entries(byEmp).map(([name,abs])=>{
+    const approved=abs.filter(a=>a.status==='approved');
+    const pending=abs.filter(a=>a.status==='pending');
+    const ferienDays=approved.filter(a=>a.type==='Ferien').reduce((s,a)=>s+a.days,0);
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between"><strong>'+name+'</strong><span style="font-family:var(--font-mono);font-size:.85rem">'+ferienDays+' Ferientage'+(pending.length?' \u00b7 <span style="color:var(--warning)">'+pending.length+' pendent</span>':'')+'</span></div></div>'
+  }).join('');
+}
+
+// Absence CSV export
+if($('exportAbsBtn'))$('exportAbsBtn').onclick=function(){
+  const glob=getAllAbsences();if(!glob.length){toast('Keine Daten','warning');return}
+  let csv='\uFEFF'+'Mitarbeiter;Typ;Von;Bis;Tage;Dauer;Status;Genehmigt von;Bemerkung\n';
+  glob.sort((a,b)=>a.from.localeCompare(b.from)).forEach(a=>{
+    csv+=a.employeeName+';'+a.type+';'+fmtDate(a.from)+';'+fmtDate(a.to)+';'+a.days+';'+(a.duration==='full'?'Ganzer Tag':a.duration==='morning'?'VM':'NM')+';'+(a.status==='approved'?'Genehmigt':a.status==='rejected'?'Abgelehnt':'Pendent')+';'+(a.approvedBy||'')+';'+(a.note||'')+'\n'
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const el=document.createElement('a');el.href=URL.createObjectURL(blob);el.download='Abwesenheiten_'+new Date().getFullYear()+'.csv';el.click();toast('Export erstellt','success');
+};
+
+// Load absences from SharePoint
+async function loadAbsencesFromSP(){
+  if(!accessToken)return;
+  try{
+    // Load own absences
+    const own=await SP.readFile('Abwesenheiten/'+user.id+'.json');
+    if(own&&own.absences){const local=getAbsences();const ids=new Set(local.map(a=>a.id));const merged=[...local];own.absences.forEach(a=>{if(!ids.has(a.id))merged.push(a)});saveAbsences(merged)}
+    // Load all absences (for approvers)
+    const all=await SP.readFile('Abwesenheiten/alle.json');
+    if(all&&all.absences){saveAllAbsences(all.absences)}
+    renderAbsences();
+  }catch(e){console.warn('Abs load:',e)}
+}
+
+
+// ═══ MITARBEITER-REPORT (for admin/approver) ═══
+function canViewReports(){return user&&(user.admin||user.approver)}
+
+function renderReportTab(){
+  const el=$('reportContent');if(!el||!canViewReports())return;
+  const empSettings=getEmpSettings();
+  el.innerHTML='<div class="form-row" style="margin-bottom:16px"><div class="form-group"><label class="form-label">Mitarbeiter</label><select class="form-select" id="reportEmp"><option value="">— Alle —</option>'+EMPLOYEES.map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('')+'</select></div><div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="reportPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Aktuelles Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="custom">Benutzerdefiniert</option></select></div></div><div id="reportCustomRange" style="display:none" class="form-row"><div class="form-group"><label class="form-label">Von</label><input type="date" class="form-input" id="reportFrom"></div><div class="form-group"><label class="form-label">Bis</label><input type="date" class="form-input" id="reportTo"></div></div><div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="generateReport()">📊 Report anzeigen</button><button class="btn btn-secondary btn-sm" onclick="exportReportCSV()">📤 CSV Export</button><button class="btn btn-secondary btn-sm" onclick="exportReportHTML()">🖨 Druckversion</button></div><div id="reportOutput"></div>';
+  $('reportPeriod').onchange=function(){$('reportCustomRange').style.display=this.value==='custom'?'grid':'none'};
+}
+
+function getReportDateRange(){
+  const period=$('reportPeriod').value;
+  const now=new Date();const y=now.getFullYear();const m=now.getMonth();
+  let from,to;
+  if(period==='month'){from=new Date(y,m,1);to=new Date(y,m+1,0)}
+  else if(period==='quarter'){const q=Math.floor(m/3)*3;from=new Date(y,q,1);to=new Date(y,q+3,0)}
+  else if(period==='year'){from=new Date(y,0,1);to=new Date(y,11,31)}
+  else{from=new Date($('reportFrom').value||dateKey(new Date(y,0,1)));to=new Date($('reportTo').value||dateKey(now))}
+  return{from:dateKey(from),to:dateKey(to),fromD:from,toD:to}
+}
+
+function generateReport(){
+  const selEmp=$('reportEmp').value;
+  const range=getReportDateRange();
+  const emps=selEmp?EMPLOYEES.filter(e=>e.id===selEmp):EMPLOYEES;
+  const allAbs=getAllAbsences();
+  const empSettings=getEmpSettings();
+  const allEntries=[];
+  // Collect all entries from localStorage (global key) and SP
+  // For each employee, try to load their data
+  let html='';
+  emps.forEach(emp=>{
+    const s=empSettings[emp.id]||{pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
+    const entries=getEntriesForEmployee(emp.id,range.from,range.to);
+    const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from>=range.from&&a.to<=range.to);
+    const totalMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0);
+    const totalH=Math.round(totalMin/6)/10;
+    // Work days in range
+    const workDays=countWorkdays(range.from,range.to,emp.id);
+    const sollH=workDays*(s.weekHours/(s.arbeitsTage||[1,2,3,4,5]).length);
+    const diffH=Math.round((totalH-sollH)*10)/10;
+    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
+    const ferienTotal=ferienAnspruch+(s.ferienUebertrag||0);
+    const ferienBezogen=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
+    const ferienRest=Math.round((ferienTotal-ferienBezogen)*10)/10;
+    const krankTage=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')&&a.status!=='rejected').reduce((sum,a)=>sum+a.days,0);
+    // KS breakdown
+    const ksBrk={};entries.forEach(e=>{ksBrk[e.kostenstelle]=(ksBrk[e.kostenstelle]||0)+(e.durationMin||0)});
+    // Project breakdown
+    const projBrk={};entries.forEach(e=>{projBrk[e.project]=(projBrk[e.project]||0)+(e.durationMin||0)});
+    // Monthly breakdown
+    const monthBrk={};entries.forEach(e=>{const ym=e.date.substring(0,7);monthBrk[ym]=(monthBrk[ym]||0)+(e.durationMin||0)});
+    // Absence summary
+    const absBrk={};absences.filter(a=>a.status!=='rejected').forEach(a=>{absBrk[a.type]=(absBrk[a.type]||0)+a.days});
+
+    html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' · '+s.pensum+'% · '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' – '+fmtDate(range.to)+'</div></div>';
+    // Stats grid
+    html+='<div class="stat-grid" style="margin-bottom:16px"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Ist-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--text-dim)">'+Math.round(sollH*10)/10+'h</div><div class="stat-label">Soll-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:'+(diffH>=0?'var(--success)':'var(--danger)')+'">'+((diffH>=0?'+':'')+diffH)+'h</div><div class="stat-label">Saldo</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+(s.ueberstundenUebertrag||0)+'h</div><div class="stat-label">\u00dcberstunden VJ</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+ferienBezogen+'/'+ferienTotal+'</div><div class="stat-label">Ferien</div></div><div class="stat-box"><div class="stat-num" style="color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+'">'+ferienRest+'</div><div class="stat-label">Ferien Rest</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTage+'</div><div class="stat-label">Krankheit</div></div><div class="stat-box"><div class="stat-num">'+entries.length+'</div><div class="stat-label">Eintr\u00e4ge</div></div></div>';
+    // KS breakdown
+    if(Object.keys(ksBrk).length){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Kostenstellen</div>';Object.entries(ksBrk).sort((a,b)=>b[1]-a[1]).forEach(([k,m])=>{const pct=totalMin>0?Math.round(m/totalMin*100):0;html+='<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+({"B\u00fcro":"#3b82f6","Zuschnitt":"#8b5cf6","BAZ":"#06b6d4","Werkstatt":"#22c55e","Montage":"#FF6B35"}[k]||"#666")+'"></div></div><div class="stat-bar-value">'+(Math.round(m/6)/10)+'h</div></div>'});html+='</div>'}
+    // Top projects
+    const topProj=Object.entries(projBrk).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    if(topProj.length){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Top Projekte</div>';topProj.forEach(([p,m])=>{html+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.82rem;border-bottom:1px solid var(--border)"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%">'+p+'</span><span style="font-family:var(--font-mono);color:var(--accent)">'+(Math.round(m/6)/10)+'h</span></div>'});html+='</div>'}
+    // Monthly breakdown
+    const months=Object.entries(monthBrk).sort();
+    if(months.length>1){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Monats\u00fcbersicht</div>';months.forEach(([ym,m])=>{const [yr,mo]=ym.split('-');html+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.82rem;border-bottom:1px solid var(--border)"><span>'+MO[parseInt(mo)-1]+' '+yr+'</span><span style="font-family:var(--font-mono)">'+(Math.round(m/6)/10)+'h</span></div>'});html+='</div>'}
+    // Absence summary
+    if(Object.keys(absBrk).length){html+='<div><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Abwesenheiten</div>';Object.entries(absBrk).forEach(([t,d])=>{html+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.82rem;border-bottom:1px solid var(--border)"><span>'+t+'</span><span style="font-family:var(--font-mono)">'+d+' Tage</span></div>'});html+='</div>'}
+    html+='</div>';
+  });
+  $('reportOutput').innerHTML=html||'<div class="empty-state"><div class="empty-icon">📊</div><p>Keine Daten im gew\u00e4hlten Zeitraum</p></div>';
+}
+
+function getEntriesForEmployee(empId,from,to){
+  // Try to load from global entries store or localStorage
+  const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return[];
+  const key=C.LS+empId+'_entries';
+  try{
+    const data=JSON.parse(localStorage.getItem(key)||'[]');
+    return data.filter(e=>e.date>=from&&e.date<=to);
+  }catch{return[]}
+}
+
+function exportReportCSV(){
+  const selEmp=$('reportEmp').value;
+  const range=getReportDateRange();
+  const emps=selEmp?EMPLOYEES.filter(e=>e.id===selEmp):EMPLOYEES;
+  const allAbs=getAllAbsences();
+  const empSettings=getEmpSettings();
+  let csv='\uFEFF'+'Mitarbeiter;MA-Nr;Pensum;Soll-h/Wo;Ist-Stunden;Soll-Stunden;Saldo;Ferien Anspruch;Ferien bezogen;Ferien Rest;Ferien VJ;\u00dcberstunden VJ;Krankheit Tage;Eintr\u00e4ge\n';
+  emps.forEach(emp=>{
+    const s=empSettings[emp.id]||{pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
+    const entries=getEntriesForEmployee(emp.id,range.from,range.to);
+    const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from>=range.from&&a.to<=range.to);
+    const totalMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0);
+    const totalH=Math.round(totalMin/6)/10;
+    const workDays=countWorkdays(range.from,range.to,emp.id);
+    const sollH=Math.round(workDays*(s.weekHours/(s.arbeitsTage||[1,2,3,4,5]).length)*10)/10;
+    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10+(s.ferienUebertrag||0);
+    const ferienBez=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
+    const krankT=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')).reduce((sum,a)=>sum+a.days,0);
+    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+s.weekHours+';'+totalH+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+(s.ferienUebertrag||0)+';'+(s.ueberstundenUebertrag||0)+';'+krankT+';'+entries.length+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='Mitarbeiter_Report_'+$('reportPeriod').value+'.csv';a.click();
+  toast('CSV exportiert','success');
+}
+
+function exportReportHTML(){
+  const output=$('reportOutput');if(!output||!output.innerHTML){toast('Zuerst Report anzeigen','warning');return}
+  const range=getReportDateRange();
+  const printHTML='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mitarbeiter-Report</title><style>body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#333}h1{font-size:1.3rem;border-bottom:2px solid #FF6B35;padding-bottom:8px}.card{border:1px solid #ddd;border-radius:8px;padding:16px;margin-bottom:16px;page-break-inside:avoid;border-left:3px solid #FF6B35}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.stat-box{background:#f8f9fa;padding:10px;border-radius:6px;text-align:center}.stat-num{font-size:1.2rem;font-weight:700}.stat-label{font-size:.7rem;color:#666}.stat-bar-item{display:flex;align-items:center;gap:8px;margin-bottom:6px}.stat-bar-label{width:80px;font-size:.8rem}.stat-bar-track{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}.stat-bar-fill{height:100%;border-radius:4px}.stat-bar-value{width:50px;text-align:right;font-size:.8rem;font-weight:600}@media print{.card{break-inside:avoid}}</style></head><body><h1>\u23f1 Mitarbeiter-Report &mdash; Hubler Metallbau AG</h1><p style="color:#666;margin-bottom:20px">'+fmtDate(range.from)+' &ndash; '+fmtDate(range.to)+' &bull; Erstellt am '+fmtDate(dateKey(new Date()))+'</p>'+output.innerHTML+'</body></html>';
+  const blob=new Blob([printHTML],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='Mitarbeiter_Report_'+fmtDate(range.from).replace(/\./g,'-')+'_'+fmtDate(range.to).replace(/\./g,'-')+'.html';
+  a.click();toast('Report heruntergeladen - im Browser \u00f6ffnen und drucken','success');
+}
+
+// INIT
+$('logoutBtn').onclick=logout;setupAC('timerProject','timerProjectAC');setupAC('manProject','manProjectAC');initLogin();
+
+</script>
+</body>
+</html>
