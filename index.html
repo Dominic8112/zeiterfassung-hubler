@@ -133,6 +133,7 @@
     <button class="nav-tab" data-tab="absence">🏖 Abwesenheit</button>
     <button class="nav-tab" data-tab="report" style="display:none">📊 Report</button>
     <button class="nav-tab" data-tab="export">💾 Export</button>
+    <button class="nav-tab" data-tab="dashboard" style="display:none">📊 Dashboard</button>
     <button class="nav-tab" data-tab="maedit" style="display:none">👥 MA-Edit</button>
     <button class="nav-tab" data-tab="admin" style="display:none">⚙️ Admin</button>
   </nav>
@@ -198,6 +199,23 @@
     </div>
   </div>
 
+  <!-- DASHBOARD -->
+  <div class="tab-content" id="tab-dashboard">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Firmen-Dashboard</h2>
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="dashPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="custom">Benutzerdefiniert</option></select></div>
+        <div class="form-group"><label class="form-label">Projekte</label><input type="text" class="form-input" id="dashProjFilter" placeholder="🔍 Filtern..."></div>
+      </div>
+      <div id="dashCustomRange" style="display:none" class="form-row"><div class="form-group"><label class="form-label">Von</label><input type="date" class="form-input" id="dashFrom"></div><div class="form-group"><label class="form-label">Bis</label><input type="date" class="form-input" id="dashTo"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="loadDashboard()">📊 Laden</button><button class="btn btn-secondary btn-sm" onclick="exportDashboardHTML()">🖨 Report Export</button><button class="btn btn-secondary btn-sm" onclick="exportDashboardCSV()">📤 CSV Export</button></div>
+    </div>
+    <div id="dashKPIs"></div>
+    <div id="dashKS" class="card" style="display:none"><div class="card-title">Kostenstellen-Verteilung</div><div id="dashKSContent"></div></div>
+    <div id="dashProjects" class="card" style="display:none"><div class="card-title" id="dashProjTitle">Projekt-Übersicht</div><div id="dashProjectsList"></div></div>
+    <div id="dashAbsence" class="card" style="display:none"><div class="card-title">Abwesenheiten & Ferien-Stand</div><div id="dashAbsContent"></div></div>
+  </div>
+
   <!-- MA-EDIT (Admin only) -->
   <div class="tab-content" id="tab-maedit">
     <h2 style="font-size:1.1rem;margin-bottom:16px">👥 Mitarbeiter-Einträge editieren</h2>
@@ -212,6 +230,8 @@
         <button class="btn btn-secondary btn-sm" onclick="maeAddAbsence()">+ Abwesenheit</button>
         <button class="btn btn-secondary btn-sm" onclick="maeShowImport()">📥 CSV Import</button>
         <button class="btn btn-secondary btn-sm" onclick="maeDownloadTemplate()">📄 CSV Vorlage</button>
+        <button class="btn btn-secondary btn-sm" onclick="maeShowAbsImport()">📥 Abwesenheiten CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="maeDownloadAbsTemplate()">📄 Abw. Vorlage</button>
       </div>
     </div>
     <div id="maeImportArea" style="display:none" class="card">
@@ -219,6 +239,12 @@
       <input type="file" id="maeCSVFile" accept=".csv,.txt" style="margin-bottom:8px" onchange="maeParseCSV()">
       <div id="maeImportPreview"></div>
       <button class="btn btn-primary btn-sm" id="maeImportBtn" style="display:none" onclick="maeDoImport()">✅ Importieren</button>
+    </div>
+    <div id="maeAbsImportArea" style="display:none" class="card">
+      <div class="card-title">📥 Abwesenheiten CSV Import</div>
+      <input type="file" id="maeAbsCSVFile" accept=".csv,.txt" style="margin-bottom:8px" onchange="maeParseAbsCSV()">
+      <div id="maeAbsImportPreview"></div>
+      <button class="btn btn-primary btn-sm" id="maeAbsImportBtn" style="display:none" onclick="maeDoAbsImport()">✅ Importieren</button>
     </div>
     <div id="maeEntries" class="card" style="display:none">
       <div class="card-title" id="maeEntriesTitle">Zeiteinträge</div>
@@ -298,6 +324,30 @@
     <!-- EMPLOYEE SETTINGS -->
     <div class="card"><div class="card-title">👥 Mitarbeiter-Einstellungen</div><div class="sp-info"><p style="color:var(--text-dim)">Pensum, Arbeitstage, Ferienanspruch und Vorjahres-Guthaben pro Mitarbeiter.</p></div><div id="empSettingsList"></div></div>
 
+    <!-- BETRIEBSFERIEN -->
+    <div class="card"><div class="card-title">🏢 Betriebsferien & Brückentage</div>
+
+    <!-- EMPLOYEE MANAGEMENT -->
+    </div><div class="card"><div class="card-title">👥 Mitarbeiter verwalten</div>
+      <div id="empManageList"></div>
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-weight:600;font-size:.85rem;margin-bottom:8px">Neuer Mitarbeiter</div>
+        <div class="form-row"><div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="newEmpName" placeholder="Vorname Nachname"></div><div class="form-group"><label class="form-label">E-Mail</label><input type="email" class="form-input" id="newEmpEmail" placeholder="name@firma.ch oder privat"></div></div>
+        <div class="form-row"><div class="form-group"><label class="form-label">Rolle</label><select class="form-select" id="newEmpRole"><option value="employee">Mitarbeiter</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div><div class="form-group"><label class="form-label">MA-Nr</label><input type="text" class="form-input" id="newEmpId" placeholder="Auto (HM-009)"></div></div>
+        <button class="btn btn-primary btn-sm" onclick="addNewEmployee()">+ Mitarbeiter hinzufügen</button>
+      </div>
+    </div>
+
+    <div class="card"><div class="card-title">🏢 Betriebsferien & Brückentage</div>
+      <p style="font-size:.78rem;color:var(--text-dim);margin-bottom:12px">Tage an denen die Firma geschlossen ist. Werden allen MA als Ferientag angerechnet – ausser sie arbeiten an dem Tag.</p>
+      <div id="bfList"></div>
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <div class="form-row"><div class="form-group"><label class="form-label">Typ</label><select class="form-select" id="bfType"><option value="Betriebsferien">🏢 Betriebsferien</option><option value="Brückentag">🌉 Brückentag</option></select></div><div class="form-group"><label class="form-label">Bezeichnung</label><input type="text" class="form-input" id="bfLabel" placeholder="z.B. Weihnachtsferien"></div></div>
+        <div class="form-row"><div class="form-group"><label class="form-label">Von</label><input type="date" class="form-input" id="bfFrom"></div><div class="form-group"><label class="form-label">Bis</label><input type="date" class="form-input" id="bfTo"></div></div>
+        <button class="btn btn-primary btn-sm" onclick="addBetriebsferien()">+ Hinzufügen</button>
+      </div>
+    </div>
+
     <!-- ABSENCE OVERVIEW (all employees) -->
     <div class="card"><div class="card-title">🏖 Abwesenheiten aller Mitarbeiter</div><div id="adminAbsList"></div><button class="btn btn-secondary btn-sm" id="exportAbsBtn" style="margin-top:12px">📤 CSV Export</button></div>
 
@@ -331,7 +381,7 @@
 <div class="modal-overlay" id="empEditModal"><div class="modal"><div class="modal-title">✏️ <span id="empEditTitle"></span></div>
   <div class="form-group"><label class="form-label">Jahr</label><input type="number" class="form-input" id="empYear" value="2026" min="2024" max="2030"></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="42.5" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
-  <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="25" min="10" max="40" oninput="calcEmpPreview()"></div>
+  <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="23" min="10" max="40" oninput="calcEmpPreview()"></div>
   <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div></div>
   <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">🚬 Raucherpause</div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem"><input type="checkbox" id="empRaucher" onchange="calcEmpPreview()"> Raucher (−15 Min/Tag automatisch abziehen)</label>
@@ -554,7 +604,11 @@ const PROJECTS_DATA=[
 // SharePoint Integration + 197 Bexio Projects + Push Notifications
 
 const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
-const EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:null,admin:false}];
+const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:null,admin:false}];
+function loadEmployees(){try{const d=JSON.parse(localStorage.getItem(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
+function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list})}
+let EMPLOYEES=loadEmployees();
+function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
 const KS_COLORS={"Büro":'#3b82f6',Zuschnitt:'#8b5cf6',BAZ:'#06b6d4',Werkstatt:'#22c55e',Montage:'#FF6B35'};
 const DAYS_S=['So','Mo','Di','Mi','Do','Fr','Sa'],DAYS_L=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],MO=['Januar','Februar','M\u00e4rz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 let user=null,accessToken=null,projects=[...PROJECTS_DATA];
@@ -607,7 +661,7 @@ const SP={
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';const data=await this.readFile(fn);if(data&&Array.isArray(data.entries)){const local=getEntries(),ids=new Set(local.map(e=>e.id)),merged=[...local];data.entries.forEach(e=>{if(!ids.has(e.id))merged.push(e)});localStorage.setItem(lk('entries'),JSON.stringify(merged));refreshView();return true}return false},
   async saveEntries(){const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getEntries()})},
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('Sync: '+e.message,'error')}}
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadEmployeesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('Sync: '+e.message,'error')}}
 };
 function setSyncStatus(s){const el=$('syncStatus');if(s==='online'){el.className='sync-status online';el.textContent='SharePoint'}else if(s==='syncing'){el.className='sync-status syncing';el.textContent='Sync...'}else if(s==='offline'){el.className='sync-status offline';el.textContent='Offline'}else{el.className='sync-status';el.textContent='Lokal'}$('spStatusText').textContent=s==='online'?'Verbunden mit SharePoint':s==='syncing'?'Synchronisiere...':'Lokaler Modus (Demo)'}
 let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch{setSyncStatus('offline')}},3000)}
@@ -617,7 +671,8 @@ function loginWithMicrosoft(){
 const scope=encodeURIComponent('User.Read Files.ReadWrite.All Sites.ReadWrite.All');
 const redir=encodeURIComponent(window.location.origin+window.location.pathname);
 console.log('[Auth] Redirect:',window.location.origin+window.location.pathname);
-window.location.href='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+redir+'&scope='+scope+'&response_mode=fragment&nonce='+Math.random().toString(36).slice(2)+'&prompt=select_account'}
+// Use 'common' endpoint for multi-tenant + personal accounts
+window.location.href='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+redir+'&scope='+scope+'&response_mode=fragment&nonce='+Math.random().toString(36).slice(2)+'&prompt=select_account'}
 
 function handleOAuthCallback(){
 const h=window.location.hash;
@@ -635,9 +690,12 @@ fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+
 .then(profile=>{
   console.log('[Auth] Profil:',JSON.stringify({mail:profile.mail,upn:profile.userPrincipalName,name:profile.displayName}));
   const email=(profile.mail||profile.userPrincipalName||'').toLowerCase();
-  const emp=EMPLOYEES.find(e=>e.email&&e.email.toLowerCase()===email);
+  // Match by email (supports both company and personal MS accounts)
+  let emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase()===email);
+  // Fallback: match by display name
+  if(!emp)emp=getActiveEmployees().find(e=>e.name.toLowerCase()===profile.displayName.toLowerCase());
   if(emp){user={...emp};localStorage.setItem(C.LS+'session',JSON.stringify(user));localStorage.setItem(C.LS+'token',accessToken);console.log('[Auth] Angemeldet als:',emp.name);showApp();SP.fullSync()}
-  else{console.warn('[Auth] Email nicht gefunden:',email);toast('Email nicht registriert: '+email,'error');$('login-screen').style.display='flex'}
+  else{console.warn('[Auth] Email nicht gefunden:',email);toast('Email nicht registriert: '+email+'. Bitte Admin kontaktieren.','error');$('login-screen').style.display='flex'}
 }).catch(e=>{console.error('[Auth]:',e);toast('Login fehlgeschlagen: '+e.message,'error');$('login-screen').style.display='flex'});
 return true}
 
@@ -686,7 +744,7 @@ const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(s
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences()}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences()}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -800,6 +858,7 @@ function buildMonthCell(dk,dayNum,otherMonth,isWeekend,entries,absences,holidays
   const totalMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
   const holName=holidays[dk];
   const abs=absences.find(a=>a.from<=dk&&a.to>=dk&&a.status!=='rejected');
+  const bf=isBetriebsferien(dk);
   const hasEntries=dayEntries.length>0;
 
   let cls='month-cell';
@@ -811,12 +870,14 @@ function buildMonthCell(dk,dayNum,otherMonth,isWeekend,entries,absences,holidays
   let inner='<div class="mc-day">'+dayNum+'</div>';
   if(hasEntries)inner+='<div class="mc-hours">'+fmtH(totalMin)+'</div>';
   if(holName)inner+='<div class="mc-badge holiday">Feiertag</div>';
+  else if(bf&&!hasEntries)inner+='<div class="mc-badge" style="background:#6366f1;color:#fff">'+(bf.type==='Betriebsferien'?'\uD83C\uDFE2':'\uD83C\uDF09')+'</div>';
+  else if(bf&&hasEntries)inner+='<div class="mc-badge has-entries">\uD83C\uDFE2\u2713</div>';
   else if(abs){
     const icon=ABS_TYPES[abs.type]||'';
     inner+='<div class="mc-badge absence">'+icon+'</div>';
   }
 
-  return '<div class="'+cls+'" onclick="onCalCellClick(\''+dk+'\')" title="'+dk+(holName?' - '+holName:'')+'">'+inner+'</div>';
+  return '<div class="'+cls+'" onclick="onCalCellClick(\''+dk+'\')" title="'+dk+(holName?' - '+holName:'')+(bf?' - '+bf.label:'')+'">'+inner+'</div>';
 }
 
 function onCalCellClick(dk){
@@ -829,13 +890,68 @@ function showCalDayDetail(dk){
   const detail=$('calDayDetail');if(!detail)return;
   detail.style.display='block';
   const d=new Date(dk);
-  $('calDayTitle').textContent=DAYS_L[d.getDay()]+', '+fmtDate(d);
+  const dow=d.getDay();
+  $('calDayTitle').textContent=DAYS_L[dow]+', '+fmtDate(d);
   const entries=getEntries().filter(e=>e.date===dk);
   const total=entries.reduce((s,e)=>s+(e.durationMin||0),0);
   $('calDayTotal').textContent=fmtH(total);
   renderKSBars('calDayKS',entries,total);
+
+  let html='';
+
+  // Holiday check
+  const hol=getHolidays(d.getFullYear())[dk];
+  if(hol)html+='<div style="background:rgba(239,68,68,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">\uD83C\uDF89 <strong>Feiertag:</strong> '+hol+'</div>';
+
+  // Betriebsferien check
+  const bf=isBetriebsferien(dk);
+  if(bf)html+='<div style="background:rgba(99,102,241,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">\uD83C\uDFE2 <strong>'+bf.type+':</strong> '+bf.label+(entries.length?' \u2013 Du hast gearbeitet (kein Ferienabzug)':'')+'</div>';
+
+  // Absences
+  const myAbs=getAbsences().filter(a=>a.employeeId===user.id&&a.from<=dk&&a.to>=dk&&a.status!=='rejected');
+  myAbs.forEach(a=>{
+    const icon=ABS_TYPES[a.type]||'\uD83D\uDCCB';
+    const statusTxt=a.status==='approved'?'Genehmigt':a.status==='rejected'?'Abgelehnt':'Pendent';
+    html+='<div style="background:rgba(251,191,36,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">'+icon+' <strong>'+a.type+'</strong> \u2013 '+statusTxt+(a.note?' \u00b7 '+a.note:'')+'</div>';
+  });
+
+  // Soll/Ist for this day
+  if(user){
+    const empS=getEmpSetting(user.id);
+    const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
+    if(arbeitsTage.includes(dow)&&!hol){
+      const raucherMin=empS.raucher&&entries.length?15:0;
+      const istMin=total-raucherMin;
+      const effS=getEffectiveSettings(user.id,dk);
+      const sollMin=Math.round((effS.weekHours/(arbeitsTage.length))*60);
+      const saldoMin=istMin-sollMin;
+      html+='<div style="display:flex;gap:12px;padding:8px 0;font-size:.82rem;border-bottom:1px solid var(--border);margin-bottom:8px">';
+      html+='<span>Soll: <strong>'+fmtH(sollMin)+'</strong></span>';
+      html+='<span>Ist: <strong>'+fmtH(istMin)+'</strong></span>';
+      html+='<span style="color:'+(saldoMin>=0?'var(--success)':'var(--danger)')+'">Saldo: <strong>'+(saldoMin>=0?'+':'')+fmtH(saldoMin)+'</strong></span>';
+      if(empS.raucher&&entries.length)html+='<span style="color:var(--warning)">\uD83D\uDEAC -15min</span>';
+      if(effS._tempActive)html+='<span style="color:var(--danger)">(reduziert '+effS.pensum+'%)</span>';
+      html+='</div>';
+    }
+  }
+
+  // Entries
   $('calDayEntriesTitle').textContent=entries.length+' Eintr\u00e4ge';
-  $('calDayEntries').innerHTML=entries.length?entries.map(renderEC).join(''):'<div class="empty-state"><div class="empty-icon">\ud83d\udcc5</div><p>Keine Eintr\u00e4ge</p></div>';
+  if(entries.length){
+    // Pause summary
+    let hasZnueni=false,hasMittag=false,mittagDetail='';
+    entries.forEach(e=>{
+      if(e.pauseZnueni||e.znueniPause)hasZnueni=true;
+      if(e.pauseMittag&&e.pauseMittag!=='none'){hasMittag=true;mittagDetail=e.pauseMittag==='60min'?'1h':e.pauseMittag==='30min'?'30min':'durchgearb.';}
+      if(e.mittagsPause&&e.mittagsPause!=='none'){hasMittag=true;mittagDetail=e.mittagsPause==='60min'?'1h':e.mittagsPause==='30min'?'30min':'durchgearb.';}
+    });
+    html+='<div style="font-size:.8rem;color:var(--text-dim);padding:4px 0;margin-bottom:8px">\u2615 Zn\u00fcni: '+(hasZnueni?'\u2713':'\u2717')+' \u00b7 \uD83C\uDF7D Mittag: '+(hasMittag?mittagDetail:'\u2717')+'</div>';
+    html+=entries.map(renderEC).join('');
+  }else{
+    html+='<div class="empty-state"><div class="empty-icon">\uD83D\uDCC5</div><p>Keine Eintr\u00e4ge</p></div>';
+  }
+
+  $('calDayEntries').innerHTML=html;
 }
 
 // ADMIN
@@ -1030,7 +1146,7 @@ function saveSplitEntries(){
 
 
 // EMPLOYEE SETTINGS (Admin only)
-const EMP_DEFAULTS={pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear()};
+const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear()};
 function getEmpSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'emp_settings'))||{}}catch{return{}}}
 function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s)}
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
@@ -1195,12 +1311,12 @@ function countUniqueDates(entries){
 // Calculate Soll-hours considering temp pensum periods
 function calcSollHours(empId,from,to,s,workDays){
   const tp=s.tempPensum||[];
-  if(!tp.length){
-    return workDays*(s.weekHours/(s.arbeitsTage||[1,2,3,4,5]).length);
-  }
-  // Calculate day by day
+  const bf=getBetriebsferien();
+  const entries=getEntriesForEmployee(empId,from,to);
+  const entryDates=new Set(entries.map(e=>e.date));
+  // Always calculate day by day to handle BF correctly
   const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
-  const normalH=s.weekHours/arbeitsTage.length;
+  const normalH=(s.weekHours||42.5)/arbeitsTage.length;
   let total=0;
   const d=new Date(from);const end=new Date(to);
   while(d<=end){
@@ -1209,12 +1325,17 @@ function calcSollHours(empId,from,to,s,workDays){
     if(arbeitsTage.includes(day)){
       const hol=getHolidays(d.getFullYear());
       if(!hol[dk]){
-        // Check temp pensum
-        const active=tp.find(t=>dk>=t.von&&dk<=t.bis);
-        if(active){
-          total+=normalH*(active.pensum/(s.pensum||100));
+        // Check Betriebsferien: if BF and no entry, Soll=0 (Ferientag)
+        const bfDay=bf.find(b=>dk>=b.from&&dk<=b.to);
+        if(bfDay&&!entryDates.has(dk)){
+          // BF day without work - no Soll
         }else{
-          total+=normalH;
+          const active=tp.find(t=>dk>=t.von&&dk<=t.bis);
+          if(active){
+            total+=normalH*(active.pensum/(s.pensum||100));
+          }else{
+            total+=normalH;
+          }
         }
       }
     }
@@ -1256,8 +1377,9 @@ function renderAbsences(){
   const empS=user?getEmpSetting(user.id):{...EMP_DEFAULTS};
   const ferienAnspruch=Math.round(empS.ferienTage*(empS.pensum/100)*10)/10;
   const ferienTotal=ferienAnspruch+(empS.ferienUebertrag||0);
-  const ferienRest=Math.round((ferienTotal-ferienDays)*10)/10;
-  $('absStats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--success);font-weight:700">'+ferienDays+' / '+ferienTotal+'</div><div style="font-size:.72rem;color:var(--text-dim)">Ferien bezogen / Anspruch</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+';font-weight:700">'+ferienRest+'</div><div style="font-size:.72rem;color:var(--text-dim)">Resttage</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--danger);font-weight:700">'+krankDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Krankheit/Unfall</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--warning);font-weight:700">'+pendingDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Pendent</div></div></div>'+(empS.ueberstundenUebertrag?'<div style="margin-top:8px;font-size:.8rem;color:var(--text-dim)">\u00dcberstunden Vortrag: <strong style="color:var(--accent)">'+empS.ueberstundenUebertrag+'h</strong></div>':'');
+  const bfDaysOwn=user?countBetriebsferienDays(user.id,year+'-01-01',year+'-12-31'):0;
+  const ferienRest=Math.round((ferienTotal-ferienDays-bfDaysOwn)*10)/10;
+  $('absStats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--success);font-weight:700">'+ferienDays+' / '+ferienTotal+'</div><div style="font-size:.72rem;color:var(--text-dim)">Ferien bezogen / Anspruch</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+';font-weight:700">'+ferienRest+'</div><div style="font-size:.72rem;color:var(--text-dim)">Resttage</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--danger);font-weight:700">'+krankDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Krankheit/Unfall</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--warning);font-weight:700">'+pendingDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Pendent</div></div></div>'+(bfDaysOwn>0?'<div style="margin-top:8px;font-size:.8rem;color:#6366f1">\uD83C\uDFE2 Betriebsferien: <strong>'+bfDaysOwn+' Tage</strong> (vom Anspruch abgezogen)</div>':'')+(empS.ueberstundenUebertrag?'<div style="margin-top:8px;font-size:.8rem;color:var(--text-dim)">\u00dcberstunden Vortrag: <strong style="color:var(--accent)">'+empS.ueberstundenUebertrag+'h</strong></div>':'');
 
   // List
   if(!abs.length){$('absList').innerHTML='<div class="empty-state"><div class="empty-icon">🏖\ufe0f</div><p>Keine Abwesenheiten erfasst</p></div>';return}
@@ -1399,7 +1521,7 @@ function generateReport(){
   // For each employee, try to load their data
   let html='';
   emps.forEach(emp=>{
-    const s=empSettings[emp.id]||{pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
+    const s=empSettings[emp.id]||{pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
     const entries=getEntriesForEmployee(emp.id,range.from,range.to);
     const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from>=range.from&&a.to<=range.to);
     // Raucher: count work days with entries and subtract 15min each
@@ -1413,7 +1535,8 @@ function generateReport(){
     const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
     const ferienTotal=ferienAnspruch+(s.ferienUebertrag||0);
     const ferienBezogen=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
-    const ferienRest=Math.round((ferienTotal-ferienBezogen)*10)/10;
+    const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
+    const ferienRest=Math.round((ferienTotal-ferienBezogen-bfDays)*10)/10;
     const krankTage=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')&&a.status!=='rejected').reduce((sum,a)=>sum+a.days,0);
     // KS breakdown
     const ksBrk={};entries.forEach(e=>{ksBrk[e.kostenstelle]=(ksBrk[e.kostenstelle]||0)+(e.durationMin||0)});
@@ -1429,7 +1552,7 @@ function generateReport(){
     if(tpInRange.length>0){html+='<div style="margin-bottom:12px">';tpInRange.forEach(t=>{html+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--danger);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:.8rem">\u26A0\uFE0F <strong>Pensum-Reduktion: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 '+t.grund:'')+'</div>'});const normalSollH=workDays*((s.weekHours||42.5)/(s.arbeitsTage||[1,2,3,4,5]).length);html+='<div style="font-size:.78rem;color:var(--text-dim);padding:2px 0">Soll ohne Reduktion: <strong>'+Math.round(normalSollH*10)/10+'h</strong></div></div>';}
     if(s.raucher){html+='<div style="font-size:.78rem;color:var(--warning);margin-bottom:8px">\uD83D\uDEAC Raucherabzug: '+Math.round(raucherMin/60*10)/10+'h ('+countUniqueDates(entries)+' Tage \u00d7 15 Min)</div>';}
     // Stats grid
-    html+='<div class="stat-grid" style="margin-bottom:16px"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Ist-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--text-dim)">'+Math.round(sollH*10)/10+'h</div><div class="stat-label">Soll-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:'+(diffH>=0?'var(--success)':'var(--danger)')+'">'+((diffH>=0?'+':'')+diffH)+'h</div><div class="stat-label">Saldo</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+(s.ueberstundenUebertrag||0)+'h</div><div class="stat-label">\u00dcberstunden VJ</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+ferienBezogen+'/'+ferienTotal+'</div><div class="stat-label">Ferien</div></div><div class="stat-box"><div class="stat-num" style="color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+'">'+ferienRest+'</div><div class="stat-label">Ferien Rest</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTage+'</div><div class="stat-label">Krankheit</div></div><div class="stat-box"><div class="stat-num">'+entries.length+'</div><div class="stat-label">Eintr\u00e4ge</div></div></div>';
+    html+='<div class="stat-grid" style="margin-bottom:16px"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Ist-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--text-dim)">'+Math.round(sollH*10)/10+'h</div><div class="stat-label">Soll-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:'+(diffH>=0?'var(--success)':'var(--danger)')+'">'+((diffH>=0?'+':'')+diffH)+'h</div><div class="stat-label">Saldo</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+(s.ueberstundenUebertrag||0)+'h</div><div class="stat-label">\u00dcberstunden VJ</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+ferienBezogen+'/'+ferienTotal+'</div><div class="stat-label">Ferien</div></div><div class="stat-box"><div class="stat-num" style="color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+'">'+ferienRest+'</div><div class="stat-label">Ferien Rest</div></div>'+(bfDays>0?'<div class="stat-box"><div class="stat-num" style="color:#6366f1">'+bfDays+'</div><div class="stat-label">\uD83C\uDFE2 Betriebsferien</div></div>':'')+'<div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTage+'</div><div class="stat-label">Krankheit</div></div><div class="stat-box"><div class="stat-num">'+entries.length+'</div><div class="stat-label">Eintr\u00e4ge</div></div></div>';
     // KS breakdown
     if(Object.keys(ksBrk).length){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Kostenstellen</div>';Object.entries(ksBrk).sort((a,b)=>b[1]-a[1]).forEach(([k,m])=>{const pct=totalMin>0?Math.round(m/totalMin*100):0;html+='<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+({"B\u00fcro":"#3b82f6","Zuschnitt":"#8b5cf6","BAZ":"#06b6d4","Werkstatt":"#22c55e","Montage":"#FF6B35"}[k]||"#666")+'"></div></div><div class="stat-bar-value">'+(Math.round(m/6)/10)+'h</div></div>'});html+='</div>'}
     // Top projects
@@ -1463,7 +1586,7 @@ function exportReportCSV(){
   const empSettings=getEmpSettings();
   let csv='\uFEFF'+'Mitarbeiter;MA-Nr;Pensum;Raucher;Soll-h/Wo;Ist-Stunden;Raucherabzug;Soll-Stunden;Saldo;Ferien Anspruch;Ferien bezogen;Ferien Rest;Ferien VJ;\u00dcberstunden VJ;Krankheit Tage;Eintr\u00e4ge\n';
   emps.forEach(emp=>{
-    const s=empSettings[emp.id]||{pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
+    const s=empSettings[emp.id]||{pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
     const entries=getEntriesForEmployee(emp.id,range.from,range.to);
     const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from>=range.from&&a.to<=range.to);
     const raucherMin=s.raucher?countUniqueDates(entries)*15:0;
@@ -1483,117 +1606,9 @@ function exportReportCSV(){
 
 
 // ==================== WOCHENREPORT ====================
-function generateWeeklyReport(empId, weekStart) {
-  if(!weekStart) {
-    // Current week: Monday
-    const now = new Date();
-    weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - ((now.getDay()+6)%7));
-  }
-  weekStart.setHours(0,0,0,0);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23,59,59,999);
 
-  const empName = empId ? EMPLOYEES.find(e=>e.id===empId)?.name : null;
-  const entries = []; // Entries loaded separately by showWeeklyReports
 
-  // Group by day
-  const days = {};
-  for(let i=0;i<7;i++){
-    const d=new Date(weekStart);
-    d.setDate(weekStart.getDate()+i);
-    const key=d.toISOString().split('T')[0];
-    const dayName=['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
-    days[key]={date:key, dayName, entries:[], totalHours:0, warnings:[]};
-  }
 
-  const empSettings = getEmpSetting(empId);
-  const sollPerDay = empSettings ? ((empSettings.sollStunden||42.5) / (empSettings.arbeitsTage||[1,2,3,4,5]).length) : 8.5;
-
-  return {empId, empName, weekStart, weekEnd, days, empSettings, sollPerDay};
-}
-
-function renderWeeklyReportHTML(report) {
-  const fmtD = d => {
-    const dt = new Date(d);
-    return dt.toLocaleDateString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
-  };
-  const fmtH = h => h.toFixed(2).replace('.',',') + 'h';
-
-  let totalWeekHours = 0;
-  let totalWarnings = 0;
-  let html = '';
-
-  // Summary header
-  const weekLabel = fmtD(report.weekStart) + ' \u2013 ' + fmtD(report.weekEnd);
-
-  html += '<div class="weekly-report">';
-  html += '<div class="report-header"><h3>\uD83D\uDCCB Wochenreport: ' + (report.empName||'') + '</h3>';
-  html += '<div class="report-period">' + weekLabel + '</div></div>';
-
-  // Day by day
-  Object.values(report.days).forEach(day => {
-    const d = new Date(day.date);
-    const dow = d.getDay();
-    if(dow === 0 || dow === 6) return; // Skip weekends
-
-    totalWeekHours += day.totalHours;
-    totalWarnings += day.warnings.filter(w=>w.type==='warn').length;
-
-    const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][dow] + ' ' + d.toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit'});
-
-    html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + '">';
-    html += '<div class="report-day-header">';
-    html += '<span class="report-day-name">' + dayLabel + '</span>';
-    html += '<span class="report-day-hours">' + fmtH(day.totalHours) + '</span>';
-    html += '</div>';
-
-    // Entries
-    if(day.entries.length > 0) {
-      day.entries.sort((a,b)=>(a.start||'').localeCompare(b.start||'')).forEach(e => {
-        const proj = e.project || e.projectName || '-';
-        const ks = e.costCenter || '-';
-        const zeit = (e.start||'?') + '\u2013' + (e.end||'?');
-        let pauseInfo = '';
-        if(e.pauseZnueni) pauseInfo += 'Zn\u00fcni \u2713 ';
-        if(e.pauseMittag && e.pauseMittag !== 'none') pauseInfo += 'Mittag: ' + (e.pauseMittag==='60min'?'1h':e.pauseMittag==='30min'?'30min':'durchgearbeitet') + ' ';
-        if(e.breakMinutes) pauseInfo += '(Pause: ' + e.breakMinutes + 'min)';
-        if(!pauseInfo) pauseInfo = '<span class="text-dim">Keine Pauseninfo</span>';
-
-        html += '<div class="report-entry">';
-        html += '<div class="report-entry-time">' + zeit + '</div>';
-        html += '<div class="report-entry-detail">' + proj + ' <span class="text-dim">\u00b7 ' + ks + '</span></div>';
-        html += '<div class="report-entry-pause">\u2615 ' + pauseInfo + '</div>';
-        if(e.note) html += '<div class="report-entry-note">\uD83D\uDCDD ' + e.note + '</div>';
-        html += '</div>';
-      });
-    } else {
-      html += '<div class="report-entry empty">Keine Eintr\u00e4ge</div>';
-    }
-
-    // Warnings
-    day.warnings.forEach(w => {
-      html += '<div class="report-warning ' + w.type + '">' + (w.type==='warn'?'\u26A0\uFE0F':'\u2139\uFE0F') + ' ' + w.msg + '</div>';
-    });
-
-    html += '</div>';
-  });
-
-  // Summary footer
-  const sollWeek = report.empSettings ? report.empSettings.sollStunden : 42.5;
-  const saldo = totalWeekHours - sollWeek;
-  const saldoClass = saldo >= 0 ? 'positive' : 'negative';
-
-  html += '<div class="report-summary">';
-  html += '<div class="report-sum-row"><span>Total Woche:</span><strong>' + fmtH(totalWeekHours) + '</strong></div>';
-  html += '<div class="report-sum-row"><span>Soll-Stunden:</span><span>' + fmtH(sollWeek) + '</span></div>';
-  html += '<div class="report-sum-row ' + saldoClass + '"><span>Saldo:</span><strong>' + (saldo>=0?'+':'') + fmtH(saldo) + '</strong></div>';
-  if(totalWarnings > 0) html += '<div class="report-sum-row warn"><span>\u26A0\uFE0F Warnungen:</span><strong>' + totalWarnings + '</strong></div>';
-  html += '</div></div>';
-
-  return html;
-}
 
 function showWeeklyReports() {
   if(!user || (!user.admin && !user.approver)) return;
@@ -1628,7 +1643,7 @@ function showWeeklyReports() {
   let html = '';
   emps.forEach(emp => {
     const entries = getEntriesForEmployee(emp.id, fromStr, toStr);
-    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:42.5, weekHours:42.5, arbeitsTage:[1,2,3,4,5]};
+    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:41, weekHours:42.5, arbeitsTage:[1,2,3,4,5]};
     const workDays = empSettings.arbeitsTage || [1,2,3,4,5];
     const isRaucher = !!empSettings.raucher;
     // Calculate Soll considering temp pensum
@@ -1659,9 +1674,18 @@ function showWeeklyReports() {
 
     // Analyze warnings
     Object.values(days).forEach(day => {
+      const bf=isBetriebsferien(day.date);
       if(day.entries.length === 0) {
-        if(workDays.includes(day.dow)) day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
+        if(bf){
+          day.warnings.push({type:'info', msg:'\uD83C\uDFE2 '+bf.label+' ('+bf.type+') \u2013 Ferientag'});
+          day._isBF=true;
+        } else if(workDays.includes(day.dow)){
+          day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
+        }
         return;
+      }
+      if(bf){
+        day.warnings.push({type:'info', msg:'\u2139\uFE0F '+bf.label+' \u2013 MA hat gearbeitet (kein Ferienabzug)'});
       }
       let hasZnueni = false, hasMittag = false;
       day.entries.forEach(e => {
@@ -1751,51 +1775,7 @@ function showWeeklyReports() {
 
 
 
-function exportWeeklyReportPrint() {
-  const content = $('weeklyReportResult')?.innerHTML;
-  if(!content) return;
 
-  const weekInput = $('weeklyReportWeek');
-  const weekLabel = weekInput?.value || 'aktuell';
-
-  const printHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wochenreport ' + weekLabel + '</title><style>' +
-    'body{font-family:Arial,sans-serif;padding:20px;color:#333}' +
-    '.weekly-report{margin-bottom:30px;page-break-after:always}' +
-    '.report-header{border-bottom:3px solid #FF6B35;padding-bottom:10px;margin-bottom:15px}' +
-    '.report-header h3{margin:0;color:#FF6B35;font-size:18px}' +
-    '.report-period{color:#666;font-size:13px}' +
-    '.report-day{border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:10px}' +
-    '.report-day.has-warning{border-left:4px solid #f59e0b}' +
-    '.report-day-header{display:flex;justify-content:space-between;font-weight:bold;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #eee}' +
-    '.report-entry{padding:4px 0 4px 12px;border-left:2px solid #e0e4ea;margin:4px 0;font-size:13px}' +
-    '.report-entry.empty{color:#999;font-style:italic}' +
-    '.report-entry-time{font-weight:600;color:#004E89}' +
-    '.report-entry-pause{color:#666;font-size:12px}' +
-    '.report-entry-note{color:#888;font-size:12px;font-style:italic}' +
-    '.report-warning{padding:4px 8px;border-radius:4px;font-size:12px;margin-top:4px}' +
-    '.report-warning.warn{background:#fef3c7;color:#92400e}' +
-    '.report-warning.info{background:#e0f2fe;color:#0369a1}' +
-    '.report-summary{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-top:10px}' +
-    '.report-sum-row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px}' +
-    '.report-sum-row.positive strong{color:#22c55e}' +
-    '.report-sum-row.negative strong{color:#ef4444}' +
-    '.report-sum-row.warn{color:#f59e0b}' +
-    '.text-dim{color:#999}' +
-    '@media print{.weekly-report{page-break-after:always}}' +
-    '</style></head><body>' +
-    '<h1 style="color:#004E89">Wochenreport Hubler Metallbau AG</h1>' +
-    '<p style="color:#666">Kalenderwoche ' + weekLabel + '</p>' +
-    content +
-    '</body></html>';
-
-  const blob = new Blob([printHtml], {type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Wochenreport_' + weekLabel + '.html';
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function exportReportHTML(){
   const output=$('reportOutput');if(!output||!output.innerHTML){toast('Zuerst Report anzeigen','warning');return}
@@ -1815,7 +1795,7 @@ let _maeEmpId=null,_maeMonth=null,_maeEntries=[],_maeEditId=null,_maeAbsEditId=n
 
 function initMAEdit(){
   const sel=$('maeEmp');if(!sel)return;
-  sel.innerHTML='<option value="">— Mitarbeiter wählen —</option>'+EMPLOYEES.map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('');
+  sel.innerHTML='<option value="">— Mitarbeiter wählen —</option>'+getActiveEmployees().map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('');
   const mi=$('maeMonth');if(mi&&!mi.value){const now=new Date();mi.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')}
   // Autocomplete for edit modal
   setupAC('maeEditProject','maeEditProjectAC');
@@ -2114,6 +2094,367 @@ function maeDoImport(){
     _maeImportData=[];
     maeLoad();
   }catch(e){toast('Import-Fehler: '+e.message,'error')}
+}
+
+// ==================== BETRIEBSFERIEN & BRÜCKENTAGE ====================
+function getBetriebsferien(){try{return JSON.parse(localStorage.getItem(C.LS+'betriebsferien')||'[]')}catch{return[]}}
+function saveBetriebsferien(bf){localStorage.setItem(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf})}
+
+function renderBetriebsferien(){
+  const el=$('bfList');if(!el)return;
+  const bf=getBetriebsferien();
+  if(!bf.length){el.innerHTML='<div style="font-size:.82rem;color:var(--text-dim);padding:8px 0">Keine Betriebsferien definiert</div>';return}
+  const today=todayKey();
+  let html='<table class="mae-table"><thead><tr><th>Bezeichnung</th><th>Typ</th><th>Zeitraum</th><th>Tage</th><th>Aktion</th></tr></thead><tbody>';
+  bf.sort((a,b)=>a.from.localeCompare(b.from)).forEach(b=>{
+    const days=countWorkdays(b.from,b.to);
+    const past=b.to<today;
+    const icon=b.type==='Betriebsferien'?'\uD83C\uDFE2':'\uD83C\uDF09';
+    html+='<tr style="'+(past?'opacity:.5':'')+'"><td>'+icon+' '+b.label+'</td><td>'+b.type+'</td><td>'+fmtDate(b.from)+(b.from!==b.to?' \u2013 '+fmtDate(b.to):'')+'</td><td>'+days+'</td><td class="mae-actions"><button onclick="deleteBetriebsferien(\''+b.id+'\')" title="L\u00f6schen">\uD83D\uDDD1</button></td></tr>';
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+function addBetriebsferien(){
+  const type=$('bfType').value;
+  const label=$('bfLabel').value.trim();
+  const from=$('bfFrom').value;
+  const to=$('bfTo').value;
+  if(!label){toast('Bezeichnung eingeben','warning');return}
+  if(!from||!to){toast('Zeitraum ausfüllen','warning');return}
+  if(new Date(to)<new Date(from)){toast('Bis nach Von','warning');return}
+  const bf=getBetriebsferien();
+  bf.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type,label,from,to,createdBy:user.name,createdAt:new Date().toISOString()});
+  saveBetriebsferien(bf);
+  $('bfLabel').value='';$('bfFrom').value='';$('bfTo').value='';
+  renderBetriebsferien();
+  toast('Betriebsferien hinzugefügt','success');
+}
+
+function deleteBetriebsferien(id){
+  if(!confirm('Wirklich löschen?'))return;
+  let bf=getBetriebsferien();
+  bf=bf.filter(b=>b.id!==id);
+  saveBetriebsferien(bf);
+  renderBetriebsferien();
+  toast('Gelöscht','success');
+}
+
+// Check if a date is Betriebsferien
+function isBetriebsferien(dateStr){
+  const bf=getBetriebsferien();
+  return bf.find(b=>dateStr>=b.from&&dateStr<=b.to)||null;
+}
+
+// Count Betriebsferien-days consumed (where MA did NOT work)
+function countBetriebsferienDays(empId,from,to){
+  const bf=getBetriebsferien();
+  const entries=getEntriesForEmployee(empId,from,to);
+  const entryDates=new Set(entries.map(e=>e.date));
+  const empS=getEmpSetting(empId);
+  const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
+  let count=0;
+  bf.forEach(b=>{
+    const bFrom=b.from<from?from:b.from;
+    const bTo=b.to>to?to:b.to;
+    const d=new Date(bFrom);const end=new Date(bTo);
+    while(d<=end){
+      const dk=dateKey(d);
+      const dow=d.getDay();
+      if(arbeitsTage.includes(dow)&&!entryDates.has(dk)){count++}
+      d.setDate(d.getDate()+1);
+    }
+  });
+  return count;
+}
+
+// Load from SharePoint
+async function loadBetriebsferienFromSP(){
+  if(!accessToken)return;
+  try{
+    const data=await SP.readFile('betriebsferien.json');
+    if(data&&data.betriebsferien){
+      localStorage.setItem(C.LS+'betriebsferien',JSON.stringify(data.betriebsferien));
+      renderBetriebsferien();
+    }
+  }catch(e){console.warn('BF load:',e)}
+}
+
+// ==================== MITARBEITER VERWALTEN ====================
+function renderEmpManagement(){
+  const el=$('empManageList');if(!el)return;
+  let html='<table class="mae-table"><thead><tr><th>MA-Nr</th><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktion</th></tr></thead><tbody>';
+  EMPLOYEES.forEach(e=>{
+    const role=e.admin?'Admin':e.approver?'Approver':'Mitarbeiter';
+    const archived=e.archived;
+    html+='<tr style="'+(archived?'opacity:.5':'')+'"><td>'+e.id+'</td><td>'+e.name+'</td><td style="font-size:.75rem">'+(e.email||'-')+'</td><td>'+role+'</td><td>'+(archived?'\uD83D\uDD12 Archiviert'+(e.archivedDate?' ('+fmtDate(e.archivedDate)+')':''):'\u2705 Aktiv')+'</td><td class="mae-actions">'+(archived?'<button onclick="reactivateEmployee(\''+e.id+'\')" title="Reaktivieren">\u267B\uFE0F</button>':'<button onclick="archiveEmployee(\''+e.id+'\')" title="Archivieren">\uD83D\uDD12</button>')+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+function addNewEmployee(){
+  const name=$('newEmpName').value.trim();
+  const email=$('newEmpEmail').value.trim();
+  const role=$('newEmpRole').value;
+  let id=$('newEmpId').value.trim();
+  if(!name){toast('Name eingeben','warning');return}
+  if(!id){
+    const maxNum=EMPLOYEES.reduce((m,e)=>{const n=parseInt(e.id.replace('HM-',''));return n>m?n:m},0);
+    id='HM-'+String(maxNum+1).padStart(3,'0');
+  }
+  if(EMPLOYEES.find(e=>e.id===id)){toast('MA-Nr existiert bereits','error');return}
+  EMPLOYEES.push({id,name,email:email||null,admin:role==='admin',approver:role==='approver'||role==='admin',archived:false});
+  saveEmployees(EMPLOYEES);
+  $('newEmpName').value='';$('newEmpEmail').value='';$('newEmpId').value='';
+  renderEmpManagement();renderEmpSettings();
+  toast(name+' hinzugefügt ('+id+')','success');
+}
+
+function archiveEmployee(id){
+  const emp=EMPLOYEES.find(e=>e.id===id);if(!emp)return;
+  if(emp.id===user.id){toast('Eigenen Account nicht archivieren!','error');return}
+  if(!confirm(emp.name+' archivieren? Daten bleiben erhalten.'))return;
+  emp.archived=true;emp.archivedDate=todayKey();
+  saveEmployees(EMPLOYEES);
+  renderEmpManagement();renderEmpSettings();
+  toast(emp.name+' archiviert','success');
+}
+
+function reactivateEmployee(id){
+  const emp=EMPLOYEES.find(e=>e.id===id);if(!emp)return;
+  emp.archived=false;delete emp.archivedDate;
+  saveEmployees(EMPLOYEES);
+  renderEmpManagement();renderEmpSettings();
+  toast(emp.name+' reaktiviert','success');
+}
+
+async function loadEmployeesFromSP(){
+  if(!accessToken)return;
+  try{
+    const data=await SP.readFile('employees.json');
+    if(data&&data.employees&&data.employees.length){
+      EMPLOYEES=data.employees;
+      localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
+      if(user&&user.admin)renderEmpManagement();
+    }
+  }catch(e){console.warn('Emp load:',e)}
+}
+
+// ==================== ABWESENHEITEN CSV IMPORT ====================
+let _maeAbsImportData=[];
+
+function maeShowAbsImport(){
+  if(!_maeEmpId){toast('Zuerst Mitarbeiter laden','warning');return}
+  $('maeAbsImportArea').style.display='block';
+  $('maeAbsCSVFile').value='';
+  $('maeAbsImportPreview').innerHTML='<p style="color:var(--text-dim);font-size:.82rem">CSV-Datei auswählen (Format: Von;Bis;Typ;Dauer;Status;Bemerkung)</p>';
+  $('maeAbsImportBtn').style.display='none';
+}
+
+function maeDownloadAbsTemplate(){
+  const bom='\uFEFF';
+  const header='Von;Bis;Typ;Dauer;Status;Bemerkung\n';
+  const ex1='01.03.2025;05.03.2025;Ferien;Ganztag;Genehmigt;Skiferien\n';
+  const ex2='10.04.2025;10.04.2025;Krankheit;Ganztag;Genehmigt;\n';
+  const ex3='15.05.2025;15.05.2025;Ferien;Vormittag;Genehmigt;Halber Tag\n';
+  const ex4='20.06.2025;20.06.2025;Unfall;Ganztag;Genehmigt;Handverletzung\n';
+  const blob=new Blob([bom+header+ex1+ex2+ex3+ex4],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Abwesenheiten_Import_Vorlage.csv';a.click();
+  toast('Vorlage heruntergeladen','success');
+}
+
+function maeParseAbsCSV(){
+  const file=$('maeAbsCSVFile').files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const lines=ev.target.result.split('\n').filter(l=>l.trim());
+    if(lines.length<2){$('maeAbsImportPreview').innerHTML='<p style="color:var(--danger)">CSV leer</p>';return}
+    const validTypes=['Ferien','Krankheit','Unfall','Milit\u00e4r/Zivildienst','Mutterschaft/Vaterschaft','Umzug','Unbezahlt','Sonstiges'];
+    const data=[];
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(';').map(c=>c.trim());
+      if(cols.length<3)continue;
+      const raw={von:cols[0],bis:cols[1]||cols[0],typ:cols[2],dauer:cols[3]||'Ganztag',status:cols[4]||'Genehmigt',bemerkung:cols[5]||''};
+      // Parse dates
+      let fromStr='',toStr='';
+      if(raw.von.includes('.')){const p=raw.von.split('.');if(p.length===3)fromStr=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0')}else fromStr=raw.von;
+      if(raw.bis.includes('.')){const p=raw.bis.split('.');if(p.length===3)toStr=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0')}else toStr=raw.bis;
+      const errors=[];
+      if(!fromStr||isNaN(new Date(fromStr).getTime()))errors.push('Von ung\u00fcltig');
+      if(!toStr||isNaN(new Date(toStr).getTime()))errors.push('Bis ung\u00fcltig');
+      if(!validTypes.includes(raw.typ))errors.push('Typ ung\u00fcltig ('+raw.typ+')');
+      const dur=raw.dauer.toLowerCase()==='vormittag'?'morning':raw.dauer.toLowerCase()==='nachmittag'?'afternoon':'full';
+      const status=raw.status.toLowerCase()==='genehmigt'?'approved':raw.status.toLowerCase()==='abgelehnt'?'rejected':'pending';
+      const workdays=(!errors.length)?countWorkdays(fromStr,toStr,_maeEmpId):0;
+      const days=dur==='full'?workdays:workdays*0.5;
+      data.push({raw,fromStr,toStr,typ:raw.typ,dur,status,days,bemerkung:raw.bemerkung,errors,line:i});
+    }
+    _maeAbsImportData=data;
+    let html='<div style="margin:8px 0;font-size:.82rem"><strong>'+data.length+'</strong> Abwesenheiten, <span style="color:var(--danger)">'+data.filter(d=>d.errors.length).length+' Fehler</span></div>';
+    html+='<table class="mae-table"><thead><tr><th>#</th><th>Von</th><th>Bis</th><th>Typ</th><th>Dauer</th><th>Tage</th><th>Status</th><th>Pr\u00fcfung</th></tr></thead><tbody>';
+    data.forEach((d,i)=>{
+      const cls=d.errors.length?'error':'ok';
+      html+='<tr class="mae-import-row '+cls+'"><td>'+(i+1)+'</td><td>'+d.raw.von+'</td><td>'+d.raw.bis+'</td><td>'+d.typ+'</td><td>'+d.raw.dauer+'</td><td>'+d.days+'</td><td>'+d.raw.status+'</td><td style="font-size:.75rem">'+(d.errors.length?'\u274C '+d.errors.join(', '):'\u2705')+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    $('maeAbsImportPreview').innerHTML=html;
+    const valid=data.filter(d=>!d.errors.length);
+    $('maeAbsImportBtn').style.display=valid.length?'inline-flex':'none';
+    $('maeAbsImportBtn').textContent='\u2705 '+valid.length+' Abwesenheiten importieren';
+  };
+  reader.readAsText(file);
+}
+
+function maeDoAbsImport(){
+  if(!_maeEmpId||!_maeAbsImportData.length)return;
+  const valid=_maeAbsImportData.filter(d=>!d.errors.length);
+  if(!valid.length){toast('Keine g\u00fcltigen Eintr\u00e4ge','warning');return}
+  const emp=EMPLOYEES.find(e=>e.id===_maeEmpId);
+  const allAbs=getAllAbsences();
+  valid.forEach(d=>{
+    allAbs.push({
+      id:Date.now().toString(36)+Math.random().toString(36).slice(2,6)+d.line,
+      employeeId:_maeEmpId,employeeName:emp?emp.name:'',
+      type:d.typ,from:d.fromStr,to:d.toStr,duration:d.dur,status:d.status,
+      days:d.days,note:d.bemerkung,
+      created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString()
+    });
+  });
+  saveAllAbsences(allAbs);
+  toast(valid.length+' Abwesenheiten importiert!','success');
+  $('maeAbsImportArea').style.display='none';
+  _maeAbsImportData=[];
+  maeLoad();
+}
+
+// ==================== DASHBOARD ====================
+let _dashData=null;
+
+function getDashRange(){
+  const p=$('dashPeriod').value;
+  const now=new Date();const y=now.getFullYear();const m=now.getMonth();
+  if(p==='month')return{from:dateKey(new Date(y,m,1)),to:dateKey(new Date(y,m+1,0))};
+  if(p==='quarter'){const q=Math.floor(m/3)*3;return{from:dateKey(new Date(y,q,1)),to:dateKey(new Date(y,q+3,0))};}
+  if(p==='year')return{from:y+'-01-01',to:y+'-12-31'};
+  return{from:$('dashFrom').value||y+'-01-01',to:$('dashTo').value||dateKey(now)};
+}
+
+function loadDashboard(){
+  const range=getDashRange();
+  const filter=($('dashProjFilter').value||'').toLowerCase();
+  const emps=getActiveEmployees();
+  const allAbs=getAllAbsences();
+  const empSettings=getEmpSettings();
+
+  // Collect all data
+  let totalMin=0,totalEntries=0,krankTotal=0,unfallTotal=0;
+  const ksBrk={},projBrk={},empData=[];
+
+  emps.forEach(emp=>{
+    const s=empSettings[emp.id]||{...EMP_DEFAULTS};
+    const entries=getEntriesForEmployee(emp.id,range.from,range.to);
+    const raucherMin=s.raucher?countUniqueDates(entries)*15:0;
+    const empMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0)-raucherMin;
+    const workDays=countWorkdays(range.from,range.to,emp.id);
+    const sollH=calcSollHours(emp.id,range.from,range.to,s,workDays);
+    const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from<=range.to&&a.to>=range.from&&a.status!=='rejected');
+    const ferienDays=absences.filter(a=>a.type==='Ferien').reduce((s,a)=>s+a.days,0);
+    const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
+    const krankDays=absences.filter(a=>a.type==='Krankheit').reduce((s,a)=>s+a.days,0);
+    const unfallDays=absences.filter(a=>a.type==='Unfall').reduce((s,a)=>s+a.days,0);
+    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10+(s.ferienUebertrag||0);
+
+    totalMin+=empMin;totalEntries+=entries.length;
+    krankTotal+=krankDays;unfallTotal+=unfallDays;
+
+    entries.forEach(e=>{
+      const ks=e.kostenstelle||e.costCenter||'Unbekannt';
+      ksBrk[ks]=(ksBrk[ks]||0)+(e.durationMin||0);
+      const proj=e.project||'Unbekannt';
+      if(!projBrk[proj])projBrk[proj]={min:0,entries:0,emps:new Set(),ks:{}};
+      projBrk[proj].min+=(e.durationMin||0);
+      projBrk[proj].entries++;
+      projBrk[proj].emps.add(emp.name);
+      projBrk[proj].ks[ks]=(projBrk[proj].ks[ks]||0)+(e.durationMin||0);
+    });
+
+    empData.push({emp,entries:entries.length,istH:Math.round(empMin/6)/10,sollH:Math.round(sollH*10)/10,ferienAnspruch,ferienBez:ferienDays+bfDays,ferienRest:Math.round((ferienAnspruch-ferienDays-bfDays)*10)/10,krankDays,unfallDays,bfDays});
+  });
+
+  _dashData={range,totalMin,totalEntries,krankTotal,unfallTotal,ksBrk,projBrk,empData,filter};
+
+  // KPIs
+  const totalH=Math.round(totalMin/6)/10;
+  const avgH=emps.length?Math.round(totalH/emps.length*10)/10:0;
+  $('dashKPIs').innerHTML='<div class="stat-grid" style="margin:12px 0"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Total Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+avgH+'h</div><div class="stat-label">\u00d8 pro MA</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTotal+'</div><div class="stat-label">Krankheitstage</div></div><div class="stat-box"><div class="stat-num" style="color:var(--warning)">'+unfallTotal+'</div><div class="stat-label">Unfalltage</div></div><div class="stat-box"><div class="stat-num">'+totalEntries+'</div><div class="stat-label">Eintr\u00e4ge</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+emps.length+'</div><div class="stat-label">Mitarbeiter</div></div></div>';
+
+  // KS
+  $('dashKS').style.display='block';
+  const ksTotal=Object.values(ksBrk).reduce((s,v)=>s+v,0);
+  $('dashKSContent').innerHTML=Object.entries(ksBrk).sort((a,b)=>b[1]-a[1]).map(([k,m])=>{
+    const pct=ksTotal?Math.round(m/ksTotal*100):0;
+    return '<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+(KS_COLORS[k]||'#666')+'"></div></div><div class="stat-bar-value">'+(Math.round(m/6)/10)+'h ('+pct+'%)</div></div>';
+  }).join('');
+
+  // Projects
+  $('dashProjects').style.display='block';
+  let projArr=Object.entries(projBrk).sort((a,b)=>b[1].min-a[1].min);
+  if(filter)projArr=projArr.filter(([p])=>p.toLowerCase().includes(filter));
+  $('dashProjTitle').textContent='Projekt-\u00dcbersicht ('+projArr.length+' Projekte)';
+  $('dashProjectsList').innerHTML=projArr.slice(0,50).map(([p,d])=>{
+    const h=Math.round(d.min/6)/10;
+    const ksHtml=Object.entries(d.ks).sort((a,b)=>b[1]-a[1]).map(([k,m])=>'<span style="font-size:.72rem;color:var(--text-dim)">'+k+': '+(Math.round(m/6)/10)+'h</span>').join(' \u00b7 ');
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%" title="'+p+'">'+p+'</span><span style="font-family:var(--font-mono);font-weight:600;color:var(--accent)">'+h+'h</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'+ksHtml+' \u00b7 <span style="font-size:.72rem;color:var(--text-dim)">'+d.emps.size+' MA \u00b7 '+d.entries+' Eintr.</span></div></div>';
+  }).join('')+(projArr.length>50?'<p style="color:var(--text-dim);font-size:.8rem;padding:8px 0">...und '+(projArr.length-50)+' weitere</p>':'');
+
+  // Absence overview
+  $('dashAbsence').style.display='block';
+  let absHtml='<table class="mae-table"><thead><tr><th>Mitarbeiter</th><th>Ferien Anspruch</th><th>Bezogen</th><th>BF</th><th>Rest</th><th>Krankheit</th><th>Unfall</th></tr></thead><tbody>';
+  empData.forEach(d=>{
+    absHtml+='<tr><td>'+d.emp.name+'</td><td>'+d.ferienAnspruch+'</td><td>'+d.ferienBez+'</td><td>'+d.bfDays+'</td><td style="color:'+(d.ferienRest>=0?'var(--success)':'var(--danger)')+';font-weight:600">'+d.ferienRest+'</td><td style="color:var(--danger)">'+d.krankDays+'</td><td>'+d.unfallDays+'</td></tr>';
+  });
+  absHtml+='</tbody></table>';
+  $('dashAbsContent').innerHTML=absHtml;
+
+  // Period change handler
+  $('dashPeriod').onchange=function(){$('dashCustomRange').style.display=this.value==='custom'?'grid':'none'};
+}
+
+function exportDashboardCSV(){
+  if(!_dashData){toast('Zuerst Dashboard laden','warning');return}
+  const d=_dashData;const filter=($('dashProjFilter').value||'').toLowerCase();
+  let csv='\uFEFF';
+
+  // Project data
+  csv+='Projekt;Stunden;Eintr\u00e4ge;Mitarbeiter';
+  const ksList=Object.keys(d.ksBrk);ksList.forEach(k=>csv+=';'+k);
+  csv+='\n';
+  let projArr=Object.entries(d.projBrk).sort((a,b)=>b[1].min-a[1].min);
+  if(filter)projArr=projArr.filter(([p])=>p.toLowerCase().includes(filter));
+  projArr.forEach(([p,pd])=>{
+    csv+=p+';'+Math.round(pd.min/6)/10+';'+pd.entries+';'+pd.emps.size;
+    ksList.forEach(k=>csv+=';'+(pd.ks[k]?Math.round(pd.ks[k]/6)/10:0));
+    csv+='\n';
+  });
+  csv+='\n\nMitarbeiter;Ist-h;Soll-h;Saldo;Ferien Anspruch;Ferien Bezogen;Ferien Rest;Krankheit;Unfall\n';
+  d.empData.forEach(e=>{
+    csv+=e.emp.name+';'+e.istH+';'+e.sollH+';'+Math.round((e.istH-e.sollH)*10)/10+';'+e.ferienAnspruch+';'+e.ferienBez+';'+e.ferienRest+';'+e.krankDays+';'+e.unfallDays+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Dashboard_'+d.range.from+'_'+d.range.to+'.csv';a.click();
+  toast('CSV exportiert','success');
+}
+
+function exportDashboardHTML(){
+  if(!_dashData){toast('Zuerst Dashboard laden','warning');return}
+  const content=$('tab-dashboard');if(!content)return;
+  const r=_dashData.range;
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dashboard Report</title><style>body{font-family:Arial,sans-serif;max-width:1000px;margin:0 auto;padding:20px;color:#333}h1{font-size:1.3rem;border-bottom:2px solid #FF6B35;padding-bottom:8px}.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.stat-box{background:#f8f9fa;padding:12px;border-radius:6px;text-align:center}.stat-num{font-size:1.2rem;font-weight:700}.stat-label{font-size:.7rem;color:#666}.stat-bar-item{display:flex;align-items:center;gap:8px;margin-bottom:6px}.stat-bar-label{width:80px;font-size:.8rem}.stat-bar-track{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}.stat-bar-fill{height:100%;border-radius:4px}.stat-bar-value{width:100px;text-align:right;font-size:.8rem}table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:8px}th{text-align:left;padding:6px;border-bottom:2px solid #ddd;font-size:.72rem;text-transform:uppercase;color:#666}td{padding:6px;border-bottom:1px solid #eee}.card{border:1px solid #ddd;border-radius:8px;padding:16px;margin-bottom:16px}.card-title{font-weight:700;margin-bottom:12px}@media print{.card{break-inside:avoid}}</style></head><body><h1>\u23F1 Dashboard Report \u2013 Hubler Metallbau AG</h1><p style="color:#666">'+fmtDate(r.from)+' \u2013 '+fmtDate(r.to)+' \u2022 Erstellt: '+fmtDate(dateKey(new Date()))+'</p>'+$('dashKPIs').innerHTML+'<div class="card"><div class="card-title">Kostenstellen</div>'+$('dashKSContent').innerHTML+'</div><div class="card"><div class="card-title">'+$('dashProjTitle').textContent+'</div>'+$('dashProjectsList').innerHTML+'</div><div class="card"><div class="card-title">Abwesenheiten</div>'+$('dashAbsContent').innerHTML+'</div></body></html>';
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Dashboard_Report_'+r.from+'_'+r.to+'.html';a.click();
+  toast('Report heruntergeladen','success');
 }
 
 </script>
