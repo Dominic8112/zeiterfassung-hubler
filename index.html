@@ -290,13 +290,13 @@
     <div class="modal-actions"><button class="btn btn-secondary" onclick="$('maeAbsEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="maeSaveAbsEdit()">💾 Speichern</button></div>
   </div></div>
 
-  <!-- Employee Edit Modal -->
-  <div class="modal-overlay" id="empEditModal"><div class="modal"><div class="modal-title">✏️ Mitarbeiter bearbeiten</div>
-    <div class="form-group"><label class="form-label">MA-Nr</label><input type="text" class="form-input" id="empEditId" disabled></div>
-    <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="empEditName"></div>
-    <div class="form-group"><label class="form-label">E-Mail</label><input type="email" class="form-input" id="empEditEmail" placeholder="name@firma.ch oder privat"></div>
-    <div class="form-group"><label class="form-label">Rolle</label><select class="form-select" id="empEditRole"><option value="employee">Mitarbeiter</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div>
-    <div class="modal-actions"><button class="btn btn-secondary" onclick="$('empEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveEmpEditModal()">💾 Speichern</button></div>
+  <!-- Employee Manage Modal -->
+  <div class="modal-overlay" id="empManageModal"><div class="modal"><div class="modal-title">✏️ Mitarbeiter bearbeiten</div>
+    <div class="form-group"><label class="form-label">MA-Nr</label><input type="text" class="form-input" id="empMgId" disabled></div>
+    <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="empMgName"></div>
+    <div class="form-group"><label class="form-label">E-Mail</label><input type="email" class="form-input" id="empMgEmail" placeholder="name@firma.ch oder privat"></div>
+    <div class="form-group"><label class="form-label">Rolle</label><select class="form-select" id="empMgRole"><option value="employee">Mitarbeiter</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="$('empManageModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveEmpManageModal()">💾 Speichern</button></div>
   </div></div>
 
   <!-- ABSENCE -->
@@ -402,7 +402,7 @@
 <div class="modal-overlay" id="splitModal"><div class="modal" style="max-width:600px"><div class="modal-title">✂️ Zeit aufteilen</div><div id="splitBody"></div><div class="modal-actions"><button class="btn btn-secondary" onclick="$('splitModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveSplitEntries()">✓ Alle speichern</button></div></div></div>
 <div class="modal-overlay" id="empEditModal"><div class="modal"><div class="modal-title">✏️ <span id="empEditTitle"></span></div>
   <div class="form-group"><label class="form-label">Jahr</label><input type="number" class="form-input" id="empYear" value="2026" min="2024" max="2030"></div>
-  <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="42.5" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="41" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
   <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="23" min="10" max="40" oninput="calcEmpPreview()"></div>
   <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div></div>
   <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">🚬 Raucherpause</div>
@@ -2549,29 +2549,29 @@ function exportDashboardHTML(){
 }
 
 // ==================== EMPLOYEE EDIT MODAL ====================
-let _empEditId=null;
+let _empManageId=null;
 function openEmpEditModal(id){
   const emp=EMPLOYEES.find(e=>e.id===id);if(!emp)return;
-  _empEditId=id;
-  $('empEditId').value=emp.id;
-  $('empEditName').value=emp.name;
-  $('empEditEmail').value=emp.email||'';
-  $('empEditRole').value=emp.admin?'admin':emp.approver?'approver':'employee';
-  $('empEditModal').classList.add('show');
+  _empManageId=id;
+  $('empMgId').value=emp.id;
+  $('empMgName').value=emp.name;
+  $('empMgEmail').value=emp.email||'';
+  $('empMgRole').value=emp.admin?'admin':emp.approver?'approver':'employee';
+  $('empManageModal').classList.add('show');
 }
 
-function saveEmpEditModal(){
-  const emp=EMPLOYEES.find(e=>e.id===_empEditId);if(!emp)return;
-  const name=$('empEditName').value.trim();
-  const email=$('empEditEmail').value.trim();
-  const role=$('empEditRole').value;
+function saveEmpManageModal(){
+  const emp=EMPLOYEES.find(e=>e.id===_empManageId);if(!emp)return;
+  const name=$('empMgName').value.trim();
+  const email=$('empMgEmail').value.trim();
+  const role=$('empMgRole').value;
   if(!name){toast('Name eingeben','warning');return}
   emp.name=name;
   emp.email=email||null;
   emp.admin=role==='admin';
   emp.approver=role==='approver'||role==='admin';
   saveEmployees(EMPLOYEES);
-  $('empEditModal').classList.remove('show');
+  $('empManageModal').classList.remove('show');
   renderEmpManagement();renderEmpSettings();
   toast(name+' aktualisiert','success');
 }
