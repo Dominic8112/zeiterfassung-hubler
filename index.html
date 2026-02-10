@@ -935,7 +935,7 @@ $('absSaveBtn').onclick=function(){
 };
 
 function renderAbsences(){
-  const abs=getAbsences().sort((a,b)=>b.from.localeCompare(a.from));
+  const abs=getAbsences().filter(a=>a.employeeId===user.id).sort((a,b)=>b.from.localeCompare(a.from));
   const year=new Date().getFullYear();
   $('absYear').textContent=year;
 
@@ -966,7 +966,7 @@ function renderAbsences(){
   const card=$('absApprovalCard');
   if(user&&(user.admin||user.approver)){card.style.display='block';
     const allAbs=getAllAbsences();
-    const pending=allAbs.filter(a=>a.status==='pending'&&a.employeeId!==user.id);
+    const pending=allAbs.filter(a=>a.status==='pending');
     if(pending.length>0){
       card.style.display='block';
       $('absPendingList').innerHTML=pending.map(a=>{
@@ -1290,11 +1290,9 @@ function showWeeklyReports() {
     const parts = weekInput.value.split('-W');
     const year = parseInt(parts[0]);
     const week = parseInt(parts[1]);
-    // ISO week: Monday of week 1 is the week containing Jan 4
     const jan4 = new Date(year, 0, 4);
-    const d = new Date(jan4);
-    d.setDate(jan4.getDate() - ((jan4.getDay()+6)%7) + (week-1)*7);
-    weekStart = d;
+    weekStart = new Date(jan4);
+    weekStart.setDate(jan4.getDate() - ((jan4.getDay()+6)%7) + (week-1)*7);
   } else {
     const now = new Date();
     weekStart = new Date(now);
@@ -1306,111 +1304,111 @@ function showWeeklyReports() {
   const container = $('weeklyReportResult');
   if(!container) return;
 
-  container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim)">Lade Daten...</div>';
-
   const emps = empFilter === 'all' ? EMPLOYEES : EMPLOYEES.filter(e=>e.id===empFilter);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate()+6);
   const fromStr = weekStart.toISOString().split('T')[0];
   const toStr = weekEnd.toISOString().split('T')[0];
 
-  // Load from SharePoint for each employee
-  let allReports = [];
-  let loaded = 0;
-  const total = emps.length;
-
-  if(total === 0) { container.innerHTML = '<div class="empty-state">Keine Mitarbeiter</div>'; return; }
-
+  // Use same approach as working generateReport: getEntriesForEmployee (localStorage)
+  let html = '';
   emps.forEach(emp => {
-    loadWeeklyEntries(emp, fromStr, toStr).then(entries => {
-      const report = generateWeeklyReport(emp.id, new Date(weekStart));
-      report.empName = emp.name;
-      report._entries = entries;
-      // Fill days with actual entries
-      entries.forEach(e => {
-        const key = e.date;
-        if(report.days[key]) {
-          report.days[key].entries.push(e);
-          report.days[key].totalHours += (e.hours || (e.durationMin ? e.durationMin/60 : 0));
-        }
+    const entries = getEntriesForEmployee(emp.id, fromStr, toStr);
+    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:42.5, arbeitsTage:[1,2,3,4,5]};
+    const workDays = empSettings.arbeitsTage || [1,2,3,4,5];
+    const sollWeek = empSettings.sollStunden || 42.5;
+
+    // Build days
+    const days = {};
+    for(let i=0;i<7;i++){
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate()+i);
+      const key = d.toISOString().split('T')[0];
+      days[key] = {date:key, dow:d.getDay(), entries:[], totalHours:0, warnings:[]};
+    }
+
+    entries.forEach(e => {
+      if(days[e.date]) {
+        days[e.date].entries.push(e);
+        days[e.date].totalHours += (e.hours || (e.durationMin ? e.durationMin/60 : 0));
+      }
+    });
+
+    // Analyze warnings
+    Object.values(days).forEach(day => {
+      if(day.entries.length === 0) {
+        if(workDays.includes(day.dow)) day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
+        return;
+      }
+      let hasZnueni = false, hasMittag = false;
+      day.entries.forEach(e => {
+        if(e.pauseZnueni || e.znueniPause) hasZnueni = true;
+        if(e.pauseMittag && e.pauseMittag !== 'none' && e.pauseMittag !== 'durchgearbeitet') hasMittag = true;
+        if(e.mittagsPause && e.mittagsPause !== 'none' && e.mittagsPause !== 'durchgearbeitet') hasMittag = true;
       });
-      // Re-analyze warnings
-      analyzeWeeklyWarnings(report);
-      allReports.push(report);
-    }).catch(err => {
-      console.error('Weekly report error for', emp.name, err);
-      const report = generateWeeklyReport(emp.id, new Date(weekStart));
-      report.empName = emp.name;
-      allReports.push(report);
-    }).finally(() => {
-      loaded++;
-      if(loaded === total) {
-        allReports.sort((a,b) => a.empName.localeCompare(b.empName));
-        let html = '';
-        allReports.forEach(r => { html += renderWeeklyReportHTML(r); });
-        container.innerHTML = html || '<div class="empty-state"><p>Keine Daten f\u00fcr diese Woche gefunden</p></div>';
-      }
-    });
-  });
-}
-
-async function loadWeeklyEntries(emp, fromStr, toStr) {
-  // Try SharePoint first
-  if(accessToken) {
-    try {
-      const year = fromStr.substring(0,4);
-      const fn = 'Mitarbeiter/' + emp.name.replace(/\s/g,'_') + '_' + year + '.json';
-      const data = await SP.readFile(fn);
-      if(data) {
-        const entries = Array.isArray(data) ? data : (data.entries || []);
-        return entries.filter(e => e.date >= fromStr && e.date <= toStr);
-      }
-    } catch(e) { console.log('SP load failed for', emp.name, e); }
-  }
-  // Fallback: localStorage
-  try {
-    const key = C.LS + emp.id + '_entries';
-    const data = JSON.parse(localStorage.getItem(key) || '[]');
-    return data.filter(e => e.date >= fromStr && e.date <= toStr);
-  } catch(e) { return []; }
-}
-
-function analyzeWeeklyWarnings(report) {
-  const empSettings = getEmpSetting(report.empId);
-  const workDays = empSettings?.arbeitsTage || [1,2,3,4,5];
-  const sollPerDay = empSettings ? (empSettings.sollStunden || 42.5) / workDays.length : 8.5;
-
-  Object.values(report.days).forEach(day => {
-    day.warnings = [];
-    const d = new Date(day.date);
-    const dow = d.getDay();
-
-    if(day.entries.length === 0) {
-      if(workDays.includes(dow)) {
-        day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
-      }
-      return;
-    }
-
-    let hasZnueni = false;
-    let hasMittag = false;
-    day.entries.forEach(e => {
-      if(e.pauseZnueni || e.znueniPause) hasZnueni = true;
-      if(e.pauseMittag && e.pauseMittag !== 'none' && e.pauseMittag !== 'durchgearbeitet') hasMittag = true;
-      if(e.mittagsPause && e.mittagsPause !== 'none' && e.mittagsPause !== 'durchgearbeitet') hasMittag = true;
+      if(day.totalHours > 6 && !hasMittag) day.warnings.push({type:'warn', msg:'Keine Mittagspause bei >6h Arbeit'});
+      if(!hasZnueni && day.totalHours > 2) day.warnings.push({type:'warn', msg:'Keine Zn\u00fcni-Pause erfasst'});
+      if(day.totalHours > 10) day.warnings.push({type:'warn', msg:'\u00dcber 10h Arbeitszeit'});
     });
 
-    if(day.totalHours > 6 && !hasMittag) {
-      day.warnings.push({type:'warn', msg:'Keine Mittagspause bei >6h Arbeit'});
-    }
-    if(!hasZnueni && day.totalHours > 2) {
-      day.warnings.push({type:'warn', msg:'Keine Zn\u00fcni-Pause erfasst'});
-    }
-    if(day.totalHours > 10) {
-      day.warnings.push({type:'warn', msg:'\u00dcber 10h Arbeitszeit'});
-    }
+    // Render
+    const fmtD = d => new Date(d).toLocaleDateString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+    const fmtH = h => h.toFixed(2).replace('.',',') + 'h';
+    const weekLabel = fmtD(weekStart) + ' \u2013 ' + fmtD(weekEnd);
+    let totalWeekH = 0, totalWarn = 0;
+
+    html += '<div class="weekly-report">';
+    html += '<div class="report-header"><h3>\uD83D\uDCCB ' + emp.name + '</h3><div class="report-period">' + weekLabel + '</div></div>';
+
+    Object.values(days).forEach(day => {
+      if(day.dow === 0 || day.dow === 6) return;
+      totalWeekH += day.totalHours;
+      totalWarn += day.warnings.filter(w=>w.type==='warn').length;
+      const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][day.dow] + ' ' + new Date(day.date).toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit'});
+      html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + '">';
+      html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
+
+      if(day.entries.length > 0) {
+        day.entries.sort((a,b)=>(a.start||'').localeCompare(b.start||'')).forEach(e => {
+          const proj = e.projectName || e.project || '-';
+          const ks = e.costCenter || '-';
+          const zeit = (e.start||'?') + '\u2013' + (e.end||'?');
+          let pause = '';
+          if(e.pauseZnueni || e.znueniPause) pause += 'Zn\u00fcni \u2713 ';
+          if(e.pauseMittag && e.pauseMittag !== 'none') pause += 'Mittag: ' + (e.pauseMittag==='60min'?'1h':e.pauseMittag==='30min'?'30min':'durchgearbeitet') + ' ';
+          if(e.mittagsPause && e.mittagsPause !== 'none') pause += 'Mittag: ' + (e.mittagsPause==='60min'?'1h':e.mittagsPause==='30min'?'30min':'durchgearbeitet') + ' ';
+          if(e.breakMinutes) pause += '(Pause: ' + e.breakMinutes + 'min)';
+          if(!pause) pause = '<span class="text-dim">Keine Pauseninfo</span>';
+          html += '<div class="report-entry"><div class="report-entry-time">' + zeit + '</div>';
+          html += '<div class="report-entry-detail">' + proj + ' <span class="text-dim">\u00b7 ' + ks + '</span></div>';
+          html += '<div class="report-entry-pause">\u2615 ' + pause + '</div>';
+          if(e.note) html += '<div class="report-entry-note">\uD83D\uDCDD ' + e.note + '</div>';
+          html += '</div>';
+        });
+      } else {
+        html += '<div class="report-entry empty">Keine Eintr\u00e4ge</div>';
+      }
+      day.warnings.forEach(w => {
+        html += '<div class="report-warning ' + w.type + '">' + (w.type==='warn'?'\u26A0\uFE0F':'\u2139\uFE0F') + ' ' + w.msg + '</div>';
+      });
+      html += '</div>';
+    });
+
+    const saldo = totalWeekH - sollWeek;
+    html += '<div class="report-summary">';
+    html += '<div class="report-sum-row"><span>Total Woche:</span><strong>' + fmtH(totalWeekH) + '</strong></div>';
+    html += '<div class="report-sum-row"><span>Soll-Stunden:</span><span>' + fmtH(sollWeek) + '</span></div>';
+    html += '<div class="report-sum-row ' + (saldo>=0?'positive':'negative') + '"><span>Saldo:</span><strong>' + (saldo>=0?'+':'') + fmtH(saldo) + '</strong></div>';
+    if(totalWarn > 0) html += '<div class="report-sum-row warn"><span>\u26A0\uFE0F Warnungen:</span><strong>' + totalWarn + '</strong></div>';
+    html += '</div></div>';
   });
+
+  container.innerHTML = html || '<div class="empty-state"><p>Keine Daten f\u00fcr diese Woche</p></div>';
 }
+
+
+
+
 
 function exportWeeklyReportPrint() {
   const content = $('weeklyReportResult')?.innerHTML;
