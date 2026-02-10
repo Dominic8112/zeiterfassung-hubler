@@ -1000,7 +1000,13 @@ function showCalDayDetail(dk){
       const raucherMin=empS.raucher&&entries.length?15:0;
       const istMin=total-raucherMin;
       const effS=getEffectiveSettings(user.id,dk);
-      const sollMin=Math.round((effS.weekHours/(arbeitsTage.length))*60);
+      let sollMin=Math.round((effS.weekHours/(arbeitsTage.length))*60);
+      // Check if absence or BF reduces Soll
+      const bfToday=isBetriebsferien(dk);
+      const absToday=myAbs.find(a=>a.duration==='full'&&a.status==='approved');
+      const absHalf=myAbs.find(a=>(a.duration==='morning'||a.duration==='afternoon')&&a.status==='approved');
+      if((bfToday&&!entries.length)||(absToday&&!entries.length)){sollMin=0}
+      else if(absHalf&&!entries.length){sollMin=Math.round(sollMin*0.5)}
       const saldoMin=istMin-sollMin;
       html+='<div style="display:flex;gap:12px;padding:8px 0;font-size:.82rem;border-bottom:1px solid var(--border);margin-bottom:8px">';
       html+='<span>Soll: <strong>'+fmtH(sollMin)+'</strong></span>';
@@ -1256,7 +1262,7 @@ function openEmpEdit(empId){
   window._editTempPensum=(s.tempPensum||[]).map(t=>({...t}));
   $('empEditTitle').textContent=emp.name+' ('+emp.id+')';
   $('empPensum').value=s.pensum||100;
-  $('empWeekH').value=s.weekHours||42.5;
+  $('empWeekH').value=s.weekHours||41;
   $('empFerien').value=s.ferienTage||25;
   $('empFerienUe').value=s.ferienUebertrag||0;
   $('empUeStd').value=s.ueberstundenUebertrag||0;
@@ -1272,7 +1278,7 @@ function openEmpEdit(empId){
 function calcEmpPreview(){
   const pensum=parseInt($('empPensum').value)||100;
   const ferien=parseInt($('empFerien').value)||25;
-  const weekH=parseFloat($('empWeekH').value)||42.5;
+  const weekH=parseFloat($('empWeekH').value)||41;
   const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
   const raucher=$('empRaucher').checked;
   const ferienAnspruch=Math.round(ferien*(pensum/100)*10)/10;
@@ -1291,7 +1297,7 @@ function saveEmpEdit(){
   const tp=(window._editTempPensum||[]).filter(t=>t.von&&t.bis&&t.pensum);
   setEmpSetting(empId,{
     pensum:parseInt($('empPensum').value)||100,
-    weekHours:parseFloat($('empWeekH').value)||42.5,
+    weekHours:parseFloat($('empWeekH').value)||41,
     ferienTage:parseInt($('empFerien').value)||25,
     arbeitsTage:tage,
     ferienUebertrag:parseFloat($('empFerienUe').value)||0,
@@ -1394,9 +1400,9 @@ function calcSollHours(empId,from,to,s,workDays){
   const bf=getBetriebsferien();
   const entries=getEntriesForEmployee(empId,from,to);
   const entryDates=new Set(entries.map(e=>e.date));
-  // Always calculate day by day to handle BF correctly
+  const allAbs=getAllAbsences().filter(a=>a.employeeId===empId&&a.status==='approved'&&a.from<=to&&a.to>=from);
   const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
-  const normalH=(s.weekHours||42.5)/arbeitsTage.length;
+  const normalH=(s.weekHours||41)/arbeitsTage.length;
   let total=0;
   const d=new Date(from);const end=new Date(to);
   while(d<=end){
@@ -1405,16 +1411,23 @@ function calcSollHours(empId,from,to,s,workDays){
     if(arbeitsTage.includes(day)){
       const hol=getHolidays(d.getFullYear());
       if(!hol[dk]){
-        // Check Betriebsferien: if BF and no entry, Soll=0 (Ferientag)
+        // Check Betriebsferien: if BF and no entry, Soll=0
         const bfDay=bf.find(b=>dk>=b.from&&dk<=b.to);
         if(bfDay&&!entryDates.has(dk)){
           // BF day without work - no Soll
         }else{
-          const active=tp.find(t=>dk>=t.von&&dk<=t.bis);
-          if(active){
-            total+=normalH*(active.pensum/(s.pensum||100));
+          // Check approved full-day absences (Ferien, Krankheit, Unfall etc.)
+          const absDay=allAbs.find(a=>dk>=a.from&&dk<=a.to&&a.duration==='full');
+          if(absDay&&!entryDates.has(dk)){
+            // Approved full-day absence without work - no Soll
           }else{
-            total+=normalH;
+            // Half-day absence: half Soll
+            const absHalf=allAbs.find(a=>dk>=a.from&&dk<=a.to&&(a.duration==='morning'||a.duration==='afternoon'));
+            const active=tp.find(t=>dk>=t.von&&dk<=t.bis);
+            let dayH=normalH;
+            if(active)dayH=normalH*(active.pensum/(s.pensum||100));
+            if(absHalf&&!entryDates.has(dk))dayH=dayH*0.5;
+            total+=dayH;
           }
         }
       }
@@ -1448,15 +1461,16 @@ function renderAbsences(){
   // Stats
   const yearAbs=abs.filter(a=>a.from.startsWith(String(year)));
   const ferienDays=yearAbs.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((s,a)=>s+a.days,0);
-  const krankDays=yearAbs.filter(a=>a.type==='Krankheit').reduce((s,a)=>s+a.days,0);
+  const krankDays=yearAbs.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')&&a.status==='approved').reduce((s,a)=>s+a.days,0);
   const pendingDays=yearAbs.filter(a=>a.status==='pending').reduce((s,a)=>s+a.days,0);
   // Get employee settings for proper calculation
   const empS=user?getEmpSetting(user.id):{...EMP_DEFAULTS};
   const ferienAnspruch=Math.round(empS.ferienTage*(empS.pensum/100)*10)/10;
   const ferienTotal=ferienAnspruch+(empS.ferienUebertrag||0);
   const bfDaysOwn=user?countBetriebsferienDays(user.id,year+'-01-01',year+'-12-31'):0;
-  const ferienRest=Math.round((ferienTotal-ferienDays-bfDaysOwn)*10)/10;
-  $('absStats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--success);font-weight:700">'+ferienDays+' / '+ferienTotal+'</div><div style="font-size:.72rem;color:var(--text-dim)">Ferien bezogen / Anspruch</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+';font-weight:700">'+ferienRest+'</div><div style="font-size:.72rem;color:var(--text-dim)">Resttage</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--danger);font-weight:700">'+krankDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Krankheit/Unfall</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--warning);font-weight:700">'+pendingDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Pendent</div></div></div>'+(bfDaysOwn>0?'<div style="margin-top:8px;font-size:.8rem;color:#6366f1">\uD83C\uDFE2 Betriebsferien: <strong>'+bfDaysOwn+' Tage</strong> (vom Anspruch abgezogen)</div>':'')+(empS.ueberstundenUebertrag?'<div style="margin-top:8px;font-size:.8rem;color:var(--text-dim)">\u00dcberstunden Vortrag: <strong style="color:var(--accent)">'+empS.ueberstundenUebertrag+'h</strong></div>':'');
+  const ferienBezogen=ferienDays+bfDaysOwn;
+  const ferienRest=Math.round((ferienTotal-ferienBezogen)*10)/10;
+  $('absStats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--success);font-weight:700">'+ferienBezogen+' / '+ferienTotal+'</div><div style="font-size:.72rem;color:var(--text-dim)">Ferien bezogen / Anspruch'+(bfDaysOwn?' (inkl. '+bfDaysOwn+' BF)':'')+'</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+';font-weight:700">'+ferienRest+'</div><div style="font-size:.72rem;color:var(--text-dim)">Resttage</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--danger);font-weight:700">'+krankDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Krankheit/Unfall</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--warning);font-weight:700">'+pendingDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Pendent</div></div></div>'+(empS.ueberstundenUebertrag?'<div style="margin-top:8px;font-size:.8rem;color:var(--text-dim)">\u00dcberstunden Vortrag: <strong style="color:var(--accent)">'+empS.ueberstundenUebertrag+'h</strong></div>':'');
 
   // List
   if(!abs.length){$('absList').innerHTML='<div class="empty-state"><div class="empty-icon">🏖\ufe0f</div><p>Keine Abwesenheiten erfasst</p></div>';return}
@@ -1625,7 +1639,7 @@ function generateReport(){
 
     html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+(s.raucher?' <span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDEAC</span>':'')+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' \u00b7 '+s.pensum+'% \u00b7 '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' \u2013 '+fmtDate(range.to)+'</div></div>';
     const tpInRange=(s.tempPensum||[]).filter(t=>t.von<=range.to&&t.bis>=range.from);
-    if(tpInRange.length>0){html+='<div style="margin-bottom:12px">';tpInRange.forEach(t=>{html+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--danger);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:.8rem">\u26A0\uFE0F <strong>Pensum-Reduktion: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 '+t.grund:'')+'</div>'});const normalSollH=workDays*((s.weekHours||42.5)/(s.arbeitsTage||[1,2,3,4,5]).length);html+='<div style="font-size:.78rem;color:var(--text-dim);padding:2px 0">Soll ohne Reduktion: <strong>'+Math.round(normalSollH*10)/10+'h</strong></div></div>';}
+    if(tpInRange.length>0){html+='<div style="margin-bottom:12px">';tpInRange.forEach(t=>{html+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--danger);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:.8rem">\u26A0\uFE0F <strong>Pensum-Reduktion: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 '+t.grund:'')+'</div>'});const normalSollH=workDays*((s.weekHours||41)/(s.arbeitsTage||[1,2,3,4,5]).length);html+='<div style="font-size:.78rem;color:var(--text-dim);padding:2px 0">Soll ohne Reduktion: <strong>'+Math.round(normalSollH*10)/10+'h</strong></div></div>';}
     if(s.raucher){html+='<div style="font-size:.78rem;color:var(--warning);margin-bottom:8px">\uD83D\uDEAC Raucherabzug: '+Math.round(raucherMin/60*10)/10+'h ('+countUniqueDates(entries)+' Tage \u00d7 15 Min)</div>';}
     // Stats grid
     html+='<div class="stat-grid" style="margin-bottom:16px"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Ist-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--text-dim)">'+Math.round(sollH*10)/10+'h</div><div class="stat-label">Soll-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:'+(diffH>=0?'var(--success)':'var(--danger)')+'">'+((diffH>=0?'+':'')+diffH)+'h</div><div class="stat-label">Saldo</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+(s.ueberstundenUebertrag||0)+'h</div><div class="stat-label">\u00dcberstunden VJ</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+ferienBezogen+'/'+ferienTotal+'</div><div class="stat-label">Ferien</div></div><div class="stat-box"><div class="stat-num" style="color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+'">'+ferienRest+'</div><div class="stat-label">Ferien Rest</div></div>'+(bfDays>0?'<div class="stat-box"><div class="stat-num" style="color:#6366f1">'+bfDays+'</div><div class="stat-label">\uD83C\uDFE2 Betriebsferien</div></div>':'')+'<div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTage+'</div><div class="stat-label">Krankheit</div></div><div class="stat-box"><div class="stat-num">'+entries.length+'</div><div class="stat-label">Eintr\u00e4ge</div></div></div>';
@@ -1756,7 +1770,7 @@ function showWeeklyReports() {
   let html = '';
   emps.forEach(emp => {
     const entries = getEntriesForEmployee(emp.id, fromStr, toStr);
-    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:41, weekHours:42.5, arbeitsTage:[1,2,3,4,5]};
+    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:41, weekHours:41, arbeitsTage:[1,2,3,4,5]};
     const workDays = empSettings.arbeitsTage || [1,2,3,4,5];
     const isRaucher = !!empSettings.raucher;
     // Calculate Soll considering temp pensum
@@ -1786,12 +1800,18 @@ function showWeeklyReports() {
     }
 
     // Analyze warnings
+    const allAbs=getAllAbsences().filter(a=>a.employeeId===emp.id&&a.status==='approved');
     Object.values(days).forEach(day => {
       const bf=isBetriebsferien(day.date);
+      const absDay=allAbs.find(a=>day.date>=a.from&&day.date<=a.to);
       if(day.entries.length === 0) {
         if(bf){
           day.warnings.push({type:'info', msg:'\uD83C\uDFE2 '+bf.label+' ('+bf.type+') \u2013 Ferientag'});
           day._isBF=true;
+        } else if(absDay){
+          const icon=ABS_TYPES[absDay.type]||'\uD83D\uDCCB';
+          day.warnings.push({type:'info', msg:icon+' '+absDay.type+(absDay.duration!=='full'?' (halber Tag)':'')+' \u2013 Genehmigt'});
+          day._isAbsence=true;
         } else if(workDays.includes(day.dow)){
           day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
         }
@@ -1799,6 +1819,10 @@ function showWeeklyReports() {
       }
       if(bf){
         day.warnings.push({type:'info', msg:'\u2139\uFE0F '+bf.label+' \u2013 MA hat gearbeitet (kein Ferienabzug)'});
+      }
+      if(absDay){
+        const icon=ABS_TYPES[absDay.type]||'\uD83D\uDCCB';
+        day.warnings.push({type:'info', msg:icon+' '+absDay.type+' \u2013 MA hat trotzdem gearbeitet'});
       }
       let hasZnueni = false, hasMittag = false;
       day.entries.forEach(e => {
@@ -1823,7 +1847,7 @@ function showWeeklyReports() {
     let tpBanner='';
     if(activeTp.length>0){
       activeTp.forEach(t=>{
-        const normalWeekH=empSettings.weekHours||42.5;
+        const normalWeekH=empSettings.weekHours||41;
         tpBanner+='<div style="background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.82rem">';
         tpBanner+='\u26A0\uFE0F <strong>Reduziertes Pensum: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 Grund: '+t.grund:'');
         tpBanner+='<br>Soll diese Woche: <strong>'+fmtH(sollWeek)+'</strong> statt '+fmtH(normalWeekH);
@@ -1875,7 +1899,7 @@ function showWeeklyReports() {
     html += '<div class="report-sum-row"><span>Total Woche:</span><strong>' + fmtH(totalWeekH) + '</strong></div>';
     if(isRaucher) html += '<div class="report-sum-row" style="color:var(--warning)"><span>\uD83D\uDEAC Raucherabzug:</span><span>−' + fmtH(Object.values(days).filter(d=>d.entries.length>0).length*0.25) + '</span></div>';
     html += '<div class="report-sum-row"><span>Soll-Stunden:</span><span>' + fmtH(sollWeek) + '</span></div>';
-    if(activeTp.length>0){const normalWeekH=empSettings.weekHours||42.5;html+='<div class="report-sum-row" style="font-size:.78rem;color:var(--text-dim)"><span>Soll ohne Reduktion:</span><span>'+fmtH(normalWeekH)+'</span></div>';}
+    if(activeTp.length>0){const normalWeekH=empSettings.weekHours||41;html+='<div class="report-sum-row" style="font-size:.78rem;color:var(--text-dim)"><span>Soll ohne Reduktion:</span><span>'+fmtH(normalWeekH)+'</span></div>';}
     html += '<div class="report-sum-row ' + (saldo>=0?'positive':'negative') + '"><span>Saldo:</span><strong>' + (saldo>=0?'+':'') + fmtH(saldo) + '</strong></div>';
     if(totalWarn > 0) html += '<div class="report-sum-row warn"><span>\u26A0\uFE0F Warnungen:</span><strong>' + totalWarn + '</strong></div>';
     html += '</div></div>';
