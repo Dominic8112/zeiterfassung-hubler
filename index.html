@@ -628,7 +628,7 @@ const PROJECTS_DATA=[
 const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
 const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:null,admin:false}];
 function loadEmployees(){try{const d=JSON.parse(localStorage.getItem(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
-function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list})}
+function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(()=>console.log('[SP] employees gespeichert')).catch(e=>console.warn('[SP] employees Fehler:',e))}
 let EMPLOYEES=loadEmployees();
 function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
 // Migrate old dual-absences to single source
@@ -1044,7 +1044,7 @@ setInterval(()=>{if(!timer.on)return;const now=new Date(),h=now.getHours(),day=n
 // PUSH NOTIFICATIONS
 const NOTIF_DEFAULTS={morning:'06:55',morningOn:true,lunch:'12:00',lunchOn:true,eveningMoDo:'16:45',eveningOn:true,eveningFr:'13:45',fridayOn:true,overflowH:10,overflowOn:true};
 function getNotifSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'notif_settings'))||{...NOTIF_DEFAULTS}}catch{return{...NOTIF_DEFAULTS}}}
-function saveNotifSettings(s){localStorage.setItem(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s)}
+function saveNotifSettings(s){localStorage.setItem(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s).then(()=>console.log('[SP] notif_settings gespeichert')).catch(e=>console.warn('[SP] notif_settings Fehler:',e))}
 function loadNotifUI(){
   const s=getNotifSettings();
   if($('notifMorning'))$('notifMorning').value=s.morning||'06:55';
@@ -1214,7 +1214,7 @@ function saveSplitEntries(){
 // EMPLOYEE SETTINGS (Admin only)
 const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear()};
 function getEmpSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'emp_settings'))||{}}catch{return{}}}
-function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s)}
+function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s).then(()=>console.log('[SP] emp_settings gespeichert')).catch(e=>console.warn('[SP] emp_settings Fehler:',e))}
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
 function setEmpSetting(empId,data){const all=getEmpSettings();all[empId]={...EMP_DEFAULTS,...(all[empId]||{}),...data};saveEmpSettings(all)}
 
@@ -1342,8 +1342,12 @@ async function loadEmpSettingsFromSP(){
   if(!accessToken)return;
   try{
     const data=await SP.readFile('emp_settings.json');
-    if(data&&typeof data==='object'){
-      localStorage.setItem(C.LS+'emp_settings',JSON.stringify(data));
+    if(data&&typeof data==='object'&&Object.keys(data).length>0){
+      // SP data takes priority, merge with local (SP overwrites per employee)
+      const local=getEmpSettings();
+      const merged={...local,...data};
+      localStorage.setItem(C.LS+'emp_settings',JSON.stringify(merged));
+      console.log('[SP] emp_settings geladen:',Object.keys(data).length,'MA');
       if(user&&user.admin)renderEmpSettings();
     }
   }catch(e){console.warn('EmpSettings load:',e)}
@@ -2159,7 +2163,7 @@ function maeDoImport(){
 
 // ==================== BETRIEBSFERIEN & BRÜCKENTAGE ====================
 function getBetriebsferien(){try{return JSON.parse(localStorage.getItem(C.LS+'betriebsferien')||'[]')}catch{return[]}}
-function saveBetriebsferien(bf){localStorage.setItem(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf})}
+function saveBetriebsferien(bf){localStorage.setItem(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf}).then(()=>console.log('[SP] betriebsferien gespeichert')).catch(e=>console.warn('[SP] betriebsferien Fehler:',e))}
 
 function renderBetriebsferien(){
   const el=$('bfList');if(!el)return;
@@ -2296,9 +2300,13 @@ async function loadEmployeesFromSP(){
   try{
     const data=await SP.readFile('employees.json');
     if(data&&data.employees&&data.employees.length){
-      EMPLOYEES=data.employees;
+      // SP data takes priority - merge: SP overwrites, keep local-only entries
+      const spIds=new Set(data.employees.map(e=>e.id));
+      const localOnly=EMPLOYEES.filter(e=>!spIds.has(e.id));
+      EMPLOYEES=[...data.employees,...localOnly];
       localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
-      if(user&&user.admin)renderEmpManagement();
+      console.log('[SP] employees geladen:',data.employees.length);
+      if(user&&user.admin){renderEmpManagement();renderEmpSettings()}
     }
   }catch(e){console.warn('Emp load:',e)}
 }
