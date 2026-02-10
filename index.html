@@ -69,6 +69,37 @@
 .report-sum-row.negative strong{color:#ef4444}
 .report-sum-row.warn{color:#f59e0b}
 
+/* Month Calendar Grid */
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.month-grid .mg-header{font-size:.7rem;font-weight:600;text-align:center;padding:6px 2px;color:var(--text-dim)}
+.month-grid .mg-header.weekend{color:var(--text-muted);opacity:.6}
+.month-cell{min-height:52px;padding:4px;border-radius:6px;cursor:pointer;transition:background .15s;font-size:.75rem;position:relative;background:var(--bg-surface);border:1px solid transparent}
+.month-cell:hover{background:var(--bg-hover)}
+.month-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.month-cell.selected{background:var(--accent);color:#fff}
+.month-cell.selected .mc-hours{color:#fff}
+.month-cell.weekend{background:rgba(255,255,255,.03);opacity:.7}
+.month-cell.other-month{opacity:.3}
+.month-cell .mc-day{font-weight:600;font-size:.8rem}
+.month-cell .mc-hours{font-family:var(--font-mono);font-size:.68rem;color:var(--success);margin-top:2px}
+.month-cell .mc-badge{font-size:.6rem;padding:1px 3px;border-radius:3px;display:inline-block;margin-top:1px}
+.month-cell .mc-badge.holiday{background:var(--danger);color:#fff}
+.month-cell .mc-badge.absence{background:var(--warning);color:#000}
+.month-cell .mc-badge.has-entries{background:var(--success);color:#fff}
+
+/* MA-Edit Tab */
+.mae-table{width:100%;font-size:.8rem;border-collapse:collapse}
+.mae-table th{text-align:left;padding:8px 6px;border-bottom:2px solid var(--border);font-weight:600;font-size:.72rem;color:var(--text-dim);text-transform:uppercase}
+.mae-table td{padding:6px;border-bottom:1px solid var(--border);vertical-align:middle}
+.mae-table tr:hover{background:var(--bg-hover)}
+.mae-actions{display:flex;gap:4px}
+.mae-actions button{padding:2px 6px;font-size:.8rem;background:none;border:none;cursor:pointer;border-radius:4px}
+.mae-actions button:hover{background:var(--bg-hover)}
+.mae-import-row{padding:6px 4px;border-bottom:1px solid var(--border);font-size:.78rem}
+.mae-import-row.error{background:rgba(239,68,68,.1)}
+.mae-import-row.warn{background:rgba(251,191,36,.1)}
+.mae-import-row.ok{background:rgba(34,197,94,.05)}
+
 </style>
 </head>
 <body>
@@ -102,6 +133,7 @@
     <button class="nav-tab" data-tab="absence">🏖 Abwesenheit</button>
     <button class="nav-tab" data-tab="report" style="display:none">📊 Report</button>
     <button class="nav-tab" data-tab="export">💾 Export</button>
+    <button class="nav-tab" data-tab="maedit" style="display:none">👥 MA-Edit</button>
     <button class="nav-tab" data-tab="admin" style="display:none">⚙️ Admin</button>
   </nav>
 
@@ -126,6 +158,13 @@
     <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt <span class="req">*</span></label><input type="text" class="form-input" id="manProject" placeholder="Suchen..." autocomplete="off"><div class="autocomplete-list" id="manProjectAC"></div></div>
     <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="manKS"><option value="">— Wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
     <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="manNote" placeholder="Optional..."></div>
+    <div class="card" style="padding:12px;margin-bottom:12px;background:var(--bg-surface)">
+      <div class="form-label" style="margin-bottom:8px">☕ Pausen</div>
+      <div class="form-row">
+        <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem"><input type="checkbox" id="manZnueni" checked> Znüni-Pause (15 Min)</label></div>
+        <div class="form-group"><label class="form-label">Mittagspause</label><select class="form-select" id="manMittag"><option value="60min">1 Stunde</option><option value="30min">30 Minuten</option><option value="none">Durchgearbeitet</option></select></div>
+      </div>
+    </div>
     <button class="btn btn-primary btn-block" id="manSaveBtn">💾 Speichern</button>
   </div>
 
@@ -136,7 +175,81 @@
   <div class="tab-content" id="tab-week"><div class="card"><div class="card-title">Diese Woche</div><div class="stat-total" id="weekTotal">0.0h</div><div id="weekDayBars" style="margin-top:16px"></div></div><div class="card"><div class="card-title">Nach Kostenstelle</div><div id="weekKSBars"></div></div></div>
 
   <!-- CALENDAR -->
-  <div class="tab-content" id="tab-calendar"><div class="calendar-nav"><button class="cal-btn" id="calPrev">‹</button><div class="cal-date" id="calDate"></div><button class="cal-btn" id="calNext">›</button></div><div class="card"><div class="card-title">Kostenstellen</div><div class="stat-total" id="calTotal">0.0h</div><div id="calKS" style="margin-top:12px"></div></div><div class="card"><div class="card-title">Projekte</div><div id="calProj"></div></div><div class="card"><div class="card-title" id="calEntriesTitle">Einträge</div><div id="calEntries"></div></div></div>
+  <div class="tab-content" id="tab-calendar">
+    <div class="calendar-nav">
+      <button class="cal-btn" id="calPrev">‹</button>
+      <div class="cal-date" id="calMonthTitle"></div>
+      <button class="cal-btn" id="calNext">›</button>
+      <button class="btn btn-secondary btn-sm" id="calToday" style="margin-left:8px;font-size:.75rem">Heute</button>
+    </div>
+    <div class="card" style="padding:8px;overflow-x:auto">
+      <div class="month-grid" id="calMonthGrid"></div>
+    </div>
+    <div id="calDayDetail" style="display:none">
+      <div class="card">
+        <div class="card-title" id="calDayTitle">Einträge</div>
+        <div class="stat-total" id="calDayTotal">0.0h</div>
+        <div id="calDayKS" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" id="calDayEntriesTitle">Einträge</div>
+        <div id="calDayEntries"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MA-EDIT (Admin only) -->
+  <div class="tab-content" id="tab-maedit">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">👥 Mitarbeiter-Einträge editieren</h2>
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Mitarbeiter</label><select class="form-select" id="maeEmp"></select></div>
+        <div class="form-group"><label class="form-label">Monat</label><input type="month" class="form-input" id="maeMonth"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="maeLoad()">📋 Laden</button>
+        <button class="btn btn-secondary btn-sm" onclick="maeAddEntry()">+ Eintrag hinzufügen</button>
+        <button class="btn btn-secondary btn-sm" onclick="maeAddAbsence()">+ Abwesenheit</button>
+        <button class="btn btn-secondary btn-sm" onclick="maeShowImport()">📥 CSV Import</button>
+        <button class="btn btn-secondary btn-sm" onclick="maeDownloadTemplate()">📄 CSV Vorlage</button>
+      </div>
+    </div>
+    <div id="maeImportArea" style="display:none" class="card">
+      <div class="card-title">📥 CSV Import</div>
+      <input type="file" id="maeCSVFile" accept=".csv,.txt" style="margin-bottom:8px" onchange="maeParseCSV()">
+      <div id="maeImportPreview"></div>
+      <button class="btn btn-primary btn-sm" id="maeImportBtn" style="display:none" onclick="maeDoImport()">✅ Importieren</button>
+    </div>
+    <div id="maeEntries" class="card" style="display:none">
+      <div class="card-title" id="maeEntriesTitle">Zeiteinträge</div>
+      <div id="maeEntriesList"></div>
+    </div>
+    <div id="maeAbsences" class="card" style="display:none">
+      <div class="card-title">Abwesenheiten</div>
+      <div id="maeAbsencesList"></div>
+    </div>
+  </div>
+
+  <!-- MAE Edit Modal -->
+  <div class="modal-overlay" id="maeEditModal"><div class="modal"><div class="modal-title">✏️ <span id="maeEditTitle">Eintrag bearbeiten</span></div>
+    <div class="form-group"><label class="form-label">Datum</label><input type="date" class="form-input" id="maeEditDate"></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Start</label><input type="time" class="form-input" id="maeEditStart"></div><div class="form-group"><label class="form-label">Ende</label><input type="time" class="form-input" id="maeEditEnd"></div></div>
+    <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="maeEditProject" placeholder="Suchen..." autocomplete="off"><div class="autocomplete-list" id="maeEditProjectAC"></div></div>
+    <div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="maeEditKS"><option value="">— Wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
+    <div class="form-row"><div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem"><input type="checkbox" id="maeEditZnueni" checked> Znüni</label></div><div class="form-group"><label class="form-label">Mittagspause</label><select class="form-select" id="maeEditMittag"><option value="60min">1 Stunde</option><option value="30min">30 Min</option><option value="none">Durchgearbeitet</option></select></div></div>
+    <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="maeEditNote"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="$('maeEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="maeSaveEdit()">💾 Speichern</button></div>
+  </div></div>
+
+  <!-- MAE Absence Edit Modal -->
+  <div class="modal-overlay" id="maeAbsEditModal"><div class="modal"><div class="modal-title">✏️ Abwesenheit bearbeiten</div>
+    <div class="form-group"><label class="form-label">Typ</label><select class="form-select" id="maeAbsType"><option value="Ferien">🏖️ Ferien</option><option value="Krankheit">🤒 Krankheit</option><option value="Unfall">🤕 Unfall</option><option value="Militär/Zivildienst">🎖️ Militär/Zivildienst</option><option value="Mutterschaft/Vaterschaft">👶 Mutterschaft/Vaterschaft</option><option value="Umzug">📦 Umzug</option><option value="Unbezahlt">🚫 Unbezahlt</option><option value="Sonstiges">📋 Sonstiges</option></select></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Von</label><input type="date" class="form-input" id="maeAbsFrom"></div><div class="form-group"><label class="form-label">Bis</label><input type="date" class="form-input" id="maeAbsTo"></div></div>
+    <div class="form-group"><label class="form-label">Dauer</label><select class="form-select" id="maeAbsDuration"><option value="full">Ganzer Tag</option><option value="morning">Vormittag</option><option value="afternoon">Nachmittag</option></select></div>
+    <div class="form-group"><label class="form-label">Status</label><select class="form-select" id="maeAbsStatus"><option value="pending">Pendent</option><option value="approved">Genehmigt</option><option value="rejected">Abgelehnt</option></select></div>
+    <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="maeAbsNote"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="$('maeAbsEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="maeSaveAbsEdit()">💾 Speichern</button></div>
+  </div></div>
 
   <!-- ABSENCE -->
   <div class="tab-content" id="tab-absence">
@@ -220,6 +333,14 @@
   <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="42.5" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
   <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="25" min="10" max="40" oninput="calcEmpPreview()"></div>
   <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div></div>
+  <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">🚬 Raucherpause</div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem"><input type="checkbox" id="empRaucher" onchange="calcEmpPreview()"> Raucher (−15 Min/Tag automatisch abziehen)</label>
+  </div>
+  <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">⏱ Temporäre Pensum-Anpassung</div>
+    <p style="font-size:.78rem;color:var(--text-dim);margin-bottom:10px">z.B. bei Unfall, Wiedereingliederung oder Teilzeit auf Zeit</p>
+    <div id="empTempPensumList"></div>
+    <button class="btn btn-secondary btn-sm" onclick="addTempPensum()" style="margin-top:8px">+ Zeitraum hinzufügen</button>
+  </div>
   <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">📅 Vorjahres-Guthaben</div>
     <div class="form-row"><div class="form-group"><label class="form-label">Ferienübertrag (Tage)</label><input type="number" class="form-input" id="empFerienUe" value="0" min="-10" max="30" step="0.5"></div><div class="form-group"><label class="form-label">Überstunden (h)</label><input type="number" class="form-input" id="empUeStd" value="0" min="-50" max="200" step="0.5"></div></div>
   </div>
@@ -565,11 +686,11 @@ const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(s
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';updateTimerDate();refreshView();checkRecovery();calOff=0;updateCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences()}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences()}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
-function refreshView(){renderToday();renderWeek();updateCalendar()}
+function refreshView(){renderToday();renderWeek();updateMonthCalendar()}
 
 // AUTOCOMPLETE
 function setupAC(iid,lid){const inp=$(iid),list=$(lid);let hl=-1;inp.addEventListener('input',()=>{const v=inp.value.toLowerCase().trim();list.innerHTML='';hl=-1;if(!v){list.classList.remove('show');return}const m=getActiveProjects().filter(p=>p.id.includes(v)||p.name.toLowerCase().includes(v)).slice(0,15);if(!m.length){list.classList.remove('show');return}m.forEach(p=>{const d=document.createElement('div');d.className='autocomplete-item';d.innerHTML='<span class="pn">'+p.id+'</span>'+p.name;d.onclick=()=>{inp.value=projLabel(p);list.classList.remove('show')};list.appendChild(d)});list.classList.add('show')});inp.addEventListener('keydown',e=>{const items=list.querySelectorAll('.autocomplete-item');if(!items.length)return;if(e.key==='ArrowDown'){e.preventDefault();hl=Math.min(hl+1,items.length-1);items.forEach((it,i)=>it.classList.toggle('hl',i===hl))}else if(e.key==='ArrowUp'){e.preventDefault();hl=Math.max(hl-1,0);items.forEach((it,i)=>it.classList.toggle('hl',i===hl))}else if(e.key==='Enter'){e.preventDefault();if(hl>=0){const v=inp.value.toLowerCase().trim(),fm=getActiveProjects().filter(p=>p.id.includes(v)||p.name.toLowerCase().includes(v));if(fm[hl])inp.value=projLabel(fm[hl])}list.classList.remove('show')}else if(e.key==='Escape')list.classList.remove('show')});document.addEventListener('click',e=>{if(!e.target.closest('.autocomplete-wrapper'))list.classList.remove('show')})}
@@ -605,7 +726,7 @@ $('recoveryRestore').onclick=function(){const s=localStorage.getItem(lk('timer')
 $('recoveryDiscard').onclick=function(){localStorage.removeItem(lk('timer'));$('recoveryModal').classList.remove('show')};
 
 // MANUAL
-$('manSaveBtn').onclick=function(){const dt=$('manDate').value,st=$('manStart').value,en=$('manEnd').value,pr=$('manProject').value.trim(),ks=$('manKS').value,nt=$('manNote').value.trim();if(!dt||!st||!en){toast('Datum und Zeiten ausf\u00fcllen','warning');return}if(!pr){toast('Projekt w\u00e4hlen','warning');return}if(!ks){toast('Kostenstelle w\u00e4hlen','warning');return}const sM=timeToMin(st),eM=timeToMin(en);if(eM<=sM){toast('Endzeit nach Startzeit','warning');return}const brutto=eM-sM,day=new Date(dt).getDay(),isFri=day===5;let p=15;if(brutto>360&&!isFri)p+=60;addEntry({date:dt,startTime:st,endTime:en,pauseMin:p,durationMin:brutto-p,project:pr,kostenstelle:ks,bemerkung:nt});$('manProject').value='';$('manKS').value='';$('manNote').value=''};
+$('manSaveBtn').onclick=function(){const dt=$('manDate').value,st=$('manStart').value,en=$('manEnd').value,pr=$('manProject').value.trim(),ks=$('manKS').value,nt=$('manNote').value.trim();if(!dt||!st||!en){toast('Datum und Zeiten ausf\u00fcllen','warning');return}if(!pr){toast('Projekt w\u00e4hlen','warning');return}if(!ks){toast('Kostenstelle w\u00e4hlen','warning');return}const sM=timeToMin(st),eM=timeToMin(en);if(eM<=sM){toast('Endzeit nach Startzeit','warning');return}const brutto=eM-sM;const hasZnueni=$('manZnueni').checked;const mittagVal=$('manMittag').value;let p=0;if(hasZnueni)p+=15;if(mittagVal==='60min')p+=60;else if(mittagVal==='30min')p+=30;addEntry({date:dt,start:st,end:en,startTime:st,endTime:en,pauseMin:p,durationMin:brutto-p,hours:(brutto-p)/60,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,bemerkung:nt,note:nt,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:mittagVal,mittagsPause:mittagVal,breakMinutes:p});$('manProject').value='';$('manKS').value='';$('manNote').value='';$('manZnueni').checked=true;$('manMittag').value='60min'};
 
 // EDIT/DELETE
 function openEdit(id){const e=getEntries().find(x=>x.id===id);if(!e)return;editId=id;const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option '+(k===e.kostenstelle?'selected':'')+'>'+k+'</option>').join('');$('editBody').innerHTML='<div class="form-row"><div class="form-group"><label class="form-label">Startzeit</label><input type="time" class="form-input" id="edStart" value="'+e.startTime+'"></div><div class="form-group"><label class="form-label">Endzeit</label><input type="time" class="form-input" id="edEnd" value="'+e.endTime+'"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="edProject" value="'+e.project+'" autocomplete="off"><div class="autocomplete-list" id="edProjectAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="edKS"><option value="">\u2014</option>'+ksOpts+'</select></div><div class="form-group"><label class="form-label">Pause (Min)</label><input type="number" class="form-input" id="edPause" value="'+(e.pauseMin||0)+'" min="0" max="120"></div><div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="edNote" value="'+(e.bemerkung||'')+'"></div>';setupAC('edProject','edProjectAC');$('editModal').classList.add('show')}
@@ -620,8 +741,102 @@ function renderToday(){const entries=getEntries().filter(e=>e.date===todayKey())
 function renderWeek(){const wd=getWeekDates(),entries=getEntries();let wt=0;const ksW={};const bars=wd.map(d=>{const dk=dateKey(d),de=entries.filter(e=>e.date===dk),dm=de.reduce((s,e)=>s+(e.durationMin||0),0);wt+=dm;de.forEach(e=>{ksW[e.kostenstelle]=(ksW[e.kostenstelle]||0)+(e.durationMin||0)});const ksD={};de.forEach(e=>{ksD[e.kostenstelle]=(ksD[e.kostenstelle]||0)+(e.durationMin||0)});const segs=Object.entries(ksD).map(([k,m])=>'<div class="week-seg" style="width:'+(m/600*100).toFixed(1)+'%;background:'+(KS_COLORS[k]||'#666')+'"></div>').join('');const isT=dk===todayKey();return '<div class="week-row" style="'+(isT?'background:var(--primary-dim);border-radius:6px;padding:8px':'')+'"><div class="week-day">'+DAYS_S[d.getDay()]+'</div><div class="week-bar">'+segs+'</div><div class="week-hrs">'+fmtH(dm)+'</div></div>'}).join('');$('weekTotal').textContent=fmtH(wt);$('weekDayBars').innerHTML=bars;const wEl=$('weekKSBars');if(!wt){wEl.innerHTML='<p style="color:var(--text-muted);font-size:.85rem">Keine Daten</p>';return}wEl.innerHTML=Object.entries(ksW).sort((a,b)=>b[1]-a[1]).map(([k,m])=>'<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+(m/wt*100).toFixed(0)+'%;background:'+(KS_COLORS[k]||'#666')+'"></div></div><div class="stat-bar-value">'+fmtH(m)+'</div></div>').join('')}
 
 // CALENDAR
-$('calPrev').onclick=function(){if(calOff>-13){calOff--;updateCalendar()}};$('calNext').onclick=function(){if(calOff<0){calOff++;updateCalendar()}};
-function updateCalendar(){const d=new Date();d.setDate(d.getDate()+calOff);const dk=dateKey(d),hol=getHolidays(d.getFullYear())[dk];$('calDate').textContent=DAYS_L[d.getDay()]+', '+fmtDate(d)+(hol?' \ud83c\udf89':'');$('calNext').disabled=calOff>=0;$('calPrev').disabled=calOff<=-13;const entries=getEntries().filter(e=>e.date===dk),total=entries.reduce((s,e)=>s+(e.durationMin||0),0);$('calTotal').textContent=fmtH(total);renderKSBars('calKS',entries,total);const pr={};entries.forEach(e=>{pr[e.project]=(pr[e.project]||0)+(e.durationMin||0)});$('calProj').innerHTML=Object.keys(pr).length?Object.entries(pr).sort((a,b)=>b[1]-a[1]).map(([p,m])=>'<div class="stat-bar-item"><div class="stat-bar-label" style="width:auto;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p+'">'+p+'</div><div class="stat-bar-value" style="margin-left:auto">'+fmtH(m)+'</div></div>').join(''):'<p style="color:var(--text-muted);font-size:.85rem">Keine Daten</p>';$('calEntriesTitle').textContent=entries.length+' Eintr\u00e4ge';$('calEntries').innerHTML=entries.length?entries.map(renderEC).join(''):'<div class="empty-state"><div class="empty-icon">\ud83d\udcc5</div><p>Keine Eintr\u00e4ge</p></div>'}
+// ========== MONTH CALENDAR ==========
+let calMonth=new Date().getMonth(),calYear=new Date().getFullYear(),calSelDate=null;
+$('calPrev').onclick=function(){calMonth--;if(calMonth<0){calMonth=11;calYear--}updateMonthCalendar()};
+$('calNext').onclick=function(){calMonth++;if(calMonth>11){calMonth=0;calYear++}updateMonthCalendar()};
+$('calToday').onclick=function(){calMonth=new Date().getMonth();calYear=new Date().getFullYear();calSelDate=todayKey();updateMonthCalendar();showCalDayDetail(calSelDate)};
+
+function updateMonthCalendar(){
+  $('calMonthTitle').textContent=MO[calMonth]+' '+calYear;
+  const grid=$('calMonthGrid');if(!grid)return;
+  const entries=getEntries();
+  const allAbs=getAbsences().filter(a=>a.employeeId===user.id);
+  const hol=getHolidays(calYear);
+  const first=new Date(calYear,calMonth,1);
+  const lastDay=new Date(calYear,calMonth+1,0).getDate();
+  const startDow=(first.getDay()+6)%7; // 0=Mo
+
+  let html='';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach((d,i)=>{
+    html+='<div class="mg-header'+(i>=5?' weekend':'')+'">'+d+'</div>';
+  });
+
+  // Previous month fill
+  const prevLast=new Date(calYear,calMonth,0).getDate();
+  for(let i=startDow-1;i>=0;i--){
+    const d=prevLast-i;
+    const pm=calMonth===0?11:calMonth-1;
+    const py=calMonth===0?calYear-1:calYear;
+    const dk=py+'-'+String(pm+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    html+=buildMonthCell(dk,d,true,false,entries,allAbs,hol);
+  }
+
+  // Current month
+  for(let d=1;d<=lastDay;d++){
+    const dk=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const dow=new Date(calYear,calMonth,d).getDay();
+    const isWeekend=dow===0||dow===6;
+    html+=buildMonthCell(dk,d,false,isWeekend,entries,allAbs,hol);
+  }
+
+  // Next month fill
+  const totalCells=startDow+lastDay;
+  const remaining=totalCells%7===0?0:7-(totalCells%7);
+  for(let d=1;d<=remaining;d++){
+    const nm=calMonth===11?0:calMonth+1;
+    const ny=calMonth===11?calYear+1:calYear;
+    const dk=ny+'-'+String(nm+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    html+=buildMonthCell(dk,d,true,false,entries,allAbs,hol);
+  }
+
+  grid.innerHTML=html;
+}
+
+function buildMonthCell(dk,dayNum,otherMonth,isWeekend,entries,absences,holidays){
+  const isToday=dk===todayKey();
+  const isSel=dk===calSelDate;
+  const dayEntries=entries.filter(e=>e.date===dk);
+  const totalMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+  const holName=holidays[dk];
+  const abs=absences.find(a=>a.from<=dk&&a.to>=dk&&a.status!=='rejected');
+  const hasEntries=dayEntries.length>0;
+
+  let cls='month-cell';
+  if(otherMonth)cls+=' other-month';
+  if(isWeekend)cls+=' weekend';
+  if(isToday)cls+=' today';
+  if(isSel)cls+=' selected';
+
+  let inner='<div class="mc-day">'+dayNum+'</div>';
+  if(hasEntries)inner+='<div class="mc-hours">'+fmtH(totalMin)+'</div>';
+  if(holName)inner+='<div class="mc-badge holiday">Feiertag</div>';
+  else if(abs){
+    const icon=ABS_TYPES[abs.type]||'';
+    inner+='<div class="mc-badge absence">'+icon+'</div>';
+  }
+
+  return '<div class="'+cls+'" onclick="onCalCellClick(\''+dk+'\')" title="'+dk+(holName?' - '+holName:'')+'">'+inner+'</div>';
+}
+
+function onCalCellClick(dk){
+  calSelDate=dk;
+  updateMonthCalendar();
+  showCalDayDetail(dk);
+}
+
+function showCalDayDetail(dk){
+  const detail=$('calDayDetail');if(!detail)return;
+  detail.style.display='block';
+  const d=new Date(dk);
+  $('calDayTitle').textContent=DAYS_L[d.getDay()]+', '+fmtDate(d);
+  const entries=getEntries().filter(e=>e.date===dk);
+  const total=entries.reduce((s,e)=>s+(e.durationMin||0),0);
+  $('calDayTotal').textContent=fmtH(total);
+  renderKSBars('calDayKS',entries,total);
+  $('calDayEntriesTitle').textContent=entries.length+' Eintr\u00e4ge';
+  $('calDayEntries').innerHTML=entries.length?entries.map(renderEC).join(''):'<div class="empty-state"><div class="empty-icon">\ud83d\udcc5</div><p>Keine Eintr\u00e4ge</p></div>';
+}
 
 // ADMIN
 function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>').join('')}
@@ -815,7 +1030,7 @@ function saveSplitEntries(){
 
 
 // EMPLOYEE SETTINGS (Admin only)
-const EMP_DEFAULTS={pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,year:new Date().getFullYear()};
+const EMP_DEFAULTS={pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear()};
 function getEmpSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'emp_settings'))||{}}catch{return{}}}
 function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s)}
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
@@ -830,15 +1045,22 @@ function renderEmpSettings(){
     const s=settings[emp.id]||{...EMP_DEFAULTS};
     const tageStr=(s.arbeitsTage||[1,2,3,4,5]).map(d=>DAY_LABELS[d]||d).join(', ');
     const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
-    return '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>'+emp.name+'</strong><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+'</span></div><div style="display:flex;gap:12px;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)"><span>'+s.pensum+'%</span><span>'+s.weekHours+'h/Wo</span><span>'+tageStr+'</span><span>'+ferienAnspruch+' Ferientage</span>'+(s.ferienUebertrag?'<span style="color:var(--success)">+'+s.ferienUebertrag+' FU</span>':'')+''+(s.ueberstundenUebertrag?'<span style="color:var(--accent)">+'+s.ueberstundenUebertrag+'h \u00dc</span>':'')+'</div><button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="openEmpEdit(\''+emp.id+'\')">Bearbeiten</button></div>'
+    const tp=s.tempPensum||[];
+    const today=todayKey();
+    const activeTp=tp.find(t=>today>=t.von&&today<=t.bis);
+    let badges='';
+    if(s.raucher)badges+='<span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">🚬 Raucher</span>';
+    if(activeTp)badges+='<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:4px;font-size:.7rem">\u26A0 '+activeTp.pensum+'% bis '+new Date(activeTp.bis).toLocaleDateString('de-CH')+(activeTp.grund?' ('+activeTp.grund+')':'')+'</span>';
+    if(tp.length>0&&!activeTp){const future=tp.filter(t=>today<t.von);if(future.length)badges+='<span style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:.7rem">\u23F1 Geplant: '+future[0].pensum+'% ab '+new Date(future[0].von).toLocaleDateString('de-CH')+'</span>';}
+    return '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>'+emp.name+'</strong><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)"><span>'+s.pensum+'%</span><span>'+s.weekHours+'h/Wo</span><span>'+tageStr+'</span><span>'+ferienAnspruch+' Ferientage</span>'+(s.ferienUebertrag?'<span style="color:var(--success)">+'+s.ferienUebertrag+' FU</span>':'')+''+(s.ueberstundenUebertrag?'<span style="color:var(--accent)">+'+s.ueberstundenUebertrag+'h \u00dc</span>':'')+'</div>'+(badges?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+badges+'</div>':'')+'<button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="openEmpEdit(\''+emp.id+'\')">Bearbeiten</button></div>'
   }).join('');
 }
-
 function openEmpEdit(empId){
   const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return;
   const s=getEmpSetting(empId);
   const tage=s.arbeitsTage||[1,2,3,4,5];
   window._editEmpId=empId;
+  window._editTempPensum=(s.tempPensum||[]).map(t=>({...t}));
   $('empEditTitle').textContent=emp.name+' ('+emp.id+')';
   $('empPensum').value=s.pensum||100;
   $('empWeekH').value=s.weekHours||42.5;
@@ -846,9 +1068,10 @@ function openEmpEdit(empId){
   $('empFerienUe').value=s.ferienUebertrag||0;
   $('empUeStd').value=s.ueberstundenUebertrag||0;
   $('empYear').value=s.year||new Date().getFullYear();
+  $('empRaucher').checked=!!s.raucher;
   // Set checkboxes
   [1,2,3,4,5].forEach(d=>{const cb=$('empTag'+d);if(cb)cb.checked=tage.includes(d)});
-  // Auto calc
+  renderTempPensumList();
   calcEmpPreview();
   $('empEditModal').classList.add('show');
 }
@@ -858,16 +1081,21 @@ function calcEmpPreview(){
   const ferien=parseInt($('empFerien').value)||25;
   const weekH=parseFloat($('empWeekH').value)||42.5;
   const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
+  const raucher=$('empRaucher').checked;
   const ferienAnspruch=Math.round(ferien*(pensum/100)*10)/10;
   const tagesH=tage.length>0?Math.round(weekH/tage.length*100)/100:0;
+  const raucherAbzug=raucher?tage.length*15:0;
+  const raucherH=Math.round(raucherAbzug/60*100)/100;
   const prev=$('empPreview');
-  if(prev)prev.innerHTML='<div class="pause-summary"><div class="pause-row"><span>Pensum:</span><span>'+pensum+'%</span></div><div class="pause-row"><span>Arbeitstage:</span><span>'+tage.map(d=>DAY_LABELS[d]).join(', ')+'</span></div><div class="pause-row"><span>Soll/Tag:</span><span style="font-family:var(--font-mono)">'+tagesH+'h</span></div><div class="pause-row"><span>Soll/Woche:</span><span style="font-family:var(--font-mono)">'+weekH+'h</span></div><div class="pause-row total"><span>Ferienanspruch:</span><span>'+ferienAnspruch+' Tage</span></div></div>';
+  if(prev)prev.innerHTML='<div class="pause-summary"><div class="pause-row"><span>Pensum:</span><span>'+pensum+'%</span></div><div class="pause-row"><span>Arbeitstage:</span><span>'+tage.map(d=>DAY_LABELS[d]).join(', ')+'</span></div><div class="pause-row"><span>Soll/Tag:</span><span style="font-family:var(--font-mono)">'+tagesH+'h</span></div><div class="pause-row"><span>Soll/Woche:</span><span style="font-family:var(--font-mono)">'+weekH+'h</span></div>'+(raucher?'<div class="pause-row" style="color:var(--warning)"><span>🚬 Raucherabzug/Woche:</span><span style="font-family:var(--font-mono)">−'+raucherH+'h ('+raucherAbzug+' Min)</span></div>':'')+'<div class="pause-row total"><span>Ferienanspruch:</span><span>'+ferienAnspruch+' Tage</span></div></div>';
 }
 
 function saveEmpEdit(){
   const empId=window._editEmpId;if(!empId)return;
   const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
   if(!tage.length){toast('Mindestens 1 Arbeitstag','warning');return}
+  // Validate temp pensum entries
+  const tp=(window._editTempPensum||[]).filter(t=>t.von&&t.bis&&t.pensum);
   setEmpSetting(empId,{
     pensum:parseInt($('empPensum').value)||100,
     weekHours:parseFloat($('empWeekH').value)||42.5,
@@ -875,12 +1103,57 @@ function saveEmpEdit(){
     arbeitsTage:tage,
     ferienUebertrag:parseFloat($('empFerienUe').value)||0,
     ueberstundenUebertrag:parseFloat($('empUeStd').value)||0,
+    raucher:$('empRaucher').checked,
+    tempPensum:tp,
     year:parseInt($('empYear').value)||new Date().getFullYear()
   });
   $('empEditModal').classList.remove('show');
   toast('Einstellungen gespeichert','success');
   renderEmpSettings();
   renderAbsences();
+}
+
+// Temp Pensum UI
+function renderTempPensumList(){
+  const list=$('empTempPensumList');if(!list)return;
+  const tp=window._editTempPensum||[];
+  if(!tp.length){list.innerHTML='<div style="font-size:.8rem;color:var(--text-dim)">Keine temporären Anpassungen</div>';return}
+  list.innerHTML=tp.map((t,i)=>'<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap"><input type="date" class="form-input" style="flex:1;min-width:110px;font-size:.8rem" value="'+(t.von||'')+'" onchange="updateTempPensum('+i+',\'von\',this.value)"><span style="font-size:.8rem">–</span><input type="date" class="form-input" style="flex:1;min-width:110px;font-size:.8rem" value="'+(t.bis||'')+'" onchange="updateTempPensum('+i+',\'bis\',this.value)"><input type="number" class="form-input" style="width:65px;font-size:.8rem" value="'+(t.pensum||50)+'" min="0" max="100" step="5" onchange="updateTempPensum('+i+',\'pensum\',this.value)"><span style="font-size:.8rem">%</span><input type="text" class="form-input" style="flex:1;min-width:80px;font-size:.8rem" value="'+(t.grund||'')+'" placeholder="Grund..." onchange="updateTempPensum('+i+',\'grund\',this.value)"><button class="btn btn-secondary" style="padding:2px 8px;font-size:.8rem" onclick="removeTempPensum('+i+')">✕</button></div>').join('');
+}
+function addTempPensum(){
+  if(!window._editTempPensum)window._editTempPensum=[];
+  const today=new Date();const in2m=new Date(today);in2m.setMonth(in2m.getMonth()+2);
+  window._editTempPensum.push({von:todayKey(),bis:in2m.toISOString().split('T')[0],pensum:50,grund:''});
+  renderTempPensumList();
+}
+function updateTempPensum(i,field,val){
+  if(!window._editTempPensum||!window._editTempPensum[i])return;
+  window._editTempPensum[i][field]=field==='pensum'?parseInt(val):val;
+}
+function removeTempPensum(i){
+  if(!window._editTempPensum)return;
+  window._editTempPensum.splice(i,1);
+  renderTempPensumList();
+}
+
+// Get effective pensum/weekHours for a specific date (considers temp pensum)
+function getEffectiveSettings(empId,dateStr){
+  const s=getEmpSetting(empId);
+  const tp=s.tempPensum||[];
+  // Check if date falls in any temp pensum period
+  for(const t of tp){
+    if(dateStr>=t.von&&dateStr<=t.bis){
+      const ratio=t.pensum/(s.pensum||100);
+      return{...s,pensum:t.pensum,weekHours:Math.round(s.weekHours*ratio*100)/100,sollStunden:Math.round(s.weekHours*ratio*100)/100,_tempActive:true,_tempGrund:t.grund};
+    }
+  }
+  return{...s,sollStunden:s.weekHours,_tempActive:false};
+}
+
+// Get raucher abzug in minutes for a date
+function getRaucherAbzug(empId){
+  const s=getEmpSetting(empId);
+  return s.raucher?15:0;
 }
 
 async function loadEmpSettingsFromSP(){
@@ -914,6 +1187,41 @@ function countWorkdays(from,to,empId){
   let count=0;const d=new Date(from);const end=new Date(to);
   while(d<=end){const day=d.getDay();if(arbeitsTage.includes(day)){const dk=dateKey(d);const hol=getHolidays(d.getFullYear());if(!hol[dk])count++}d.setDate(d.getDate()+1)}
   return count}
+
+function countUniqueDates(entries){
+  const s=new Set();entries.forEach(e=>{if(e.date)s.add(e.date)});return s.size;
+}
+
+// Calculate Soll-hours considering temp pensum periods
+function calcSollHours(empId,from,to,s,workDays){
+  const tp=s.tempPensum||[];
+  if(!tp.length){
+    return workDays*(s.weekHours/(s.arbeitsTage||[1,2,3,4,5]).length);
+  }
+  // Calculate day by day
+  const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
+  const normalH=s.weekHours/arbeitsTage.length;
+  let total=0;
+  const d=new Date(from);const end=new Date(to);
+  while(d<=end){
+    const day=d.getDay();
+    const dk=dateKey(d);
+    if(arbeitsTage.includes(day)){
+      const hol=getHolidays(d.getFullYear());
+      if(!hol[dk]){
+        // Check temp pensum
+        const active=tp.find(t=>dk>=t.von&&dk<=t.bis);
+        if(active){
+          total+=normalH*(active.pensum/(s.pensum||100));
+        }else{
+          total+=normalH;
+        }
+      }
+    }
+    d.setDate(d.getDate()+1);
+  }
+  return total;
+}
 
 $('absSaveBtn').onclick=function(){
   const type=$('absType').value,from=$('absFrom').value,to=$('absTo').value,dur=$('absDuration').value,note=$('absNote').value.trim();
@@ -1094,11 +1402,13 @@ function generateReport(){
     const s=empSettings[emp.id]||{pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
     const entries=getEntriesForEmployee(emp.id,range.from,range.to);
     const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from>=range.from&&a.to<=range.to);
-    const totalMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0);
+    // Raucher: count work days with entries and subtract 15min each
+    const raucherMin=s.raucher?entries.reduce((sum,e)=>{const d=e.date;if(!sum._dates){sum._dates=new Set()}if(!sum._dates.has(d)){sum._dates.add(d);sum.val+=15}return sum},{val:0,_dates:null}).val||countUniqueDates(entries)*15:0;
+    const totalMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0)-raucherMin;
     const totalH=Math.round(totalMin/6)/10;
-    // Work days in range
+    // Work days in range - consider temp pensum
     const workDays=countWorkdays(range.from,range.to,emp.id);
-    const sollH=workDays*(s.weekHours/(s.arbeitsTage||[1,2,3,4,5]).length);
+    const sollH=calcSollHours(emp.id,range.from,range.to,s,workDays);
     const diffH=Math.round((totalH-sollH)*10)/10;
     const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
     const ferienTotal=ferienAnspruch+(s.ferienUebertrag||0);
@@ -1114,7 +1424,10 @@ function generateReport(){
     // Absence summary
     const absBrk={};absences.filter(a=>a.status!=='rejected').forEach(a=>{absBrk[a.type]=(absBrk[a.type]||0)+a.days});
 
-    html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' · '+s.pensum+'% · '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' – '+fmtDate(range.to)+'</div></div>';
+    html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+(s.raucher?' <span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDEAC</span>':'')+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' \u00b7 '+s.pensum+'% \u00b7 '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' \u2013 '+fmtDate(range.to)+'</div></div>';
+    const tpInRange=(s.tempPensum||[]).filter(t=>t.von<=range.to&&t.bis>=range.from);
+    if(tpInRange.length>0){html+='<div style="margin-bottom:12px">';tpInRange.forEach(t=>{html+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--danger);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:.8rem">\u26A0\uFE0F <strong>Pensum-Reduktion: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 '+t.grund:'')+'</div>'});const normalSollH=workDays*((s.weekHours||42.5)/(s.arbeitsTage||[1,2,3,4,5]).length);html+='<div style="font-size:.78rem;color:var(--text-dim);padding:2px 0">Soll ohne Reduktion: <strong>'+Math.round(normalSollH*10)/10+'h</strong></div></div>';}
+    if(s.raucher){html+='<div style="font-size:.78rem;color:var(--warning);margin-bottom:8px">\uD83D\uDEAC Raucherabzug: '+Math.round(raucherMin/60*10)/10+'h ('+countUniqueDates(entries)+' Tage \u00d7 15 Min)</div>';}
     // Stats grid
     html+='<div class="stat-grid" style="margin-bottom:16px"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Ist-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--text-dim)">'+Math.round(sollH*10)/10+'h</div><div class="stat-label">Soll-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:'+(diffH>=0?'var(--success)':'var(--danger)')+'">'+((diffH>=0?'+':'')+diffH)+'h</div><div class="stat-label">Saldo</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+(s.ueberstundenUebertrag||0)+'h</div><div class="stat-label">\u00dcberstunden VJ</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+ferienBezogen+'/'+ferienTotal+'</div><div class="stat-label">Ferien</div></div><div class="stat-box"><div class="stat-num" style="color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+'">'+ferienRest+'</div><div class="stat-label">Ferien Rest</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTage+'</div><div class="stat-label">Krankheit</div></div><div class="stat-box"><div class="stat-num">'+entries.length+'</div><div class="stat-label">Eintr\u00e4ge</div></div></div>';
     // KS breakdown
@@ -1148,19 +1461,20 @@ function exportReportCSV(){
   const emps=selEmp?EMPLOYEES.filter(e=>e.id===selEmp):EMPLOYEES;
   const allAbs=getAllAbsences();
   const empSettings=getEmpSettings();
-  let csv='\uFEFF'+'Mitarbeiter;MA-Nr;Pensum;Soll-h/Wo;Ist-Stunden;Soll-Stunden;Saldo;Ferien Anspruch;Ferien bezogen;Ferien Rest;Ferien VJ;\u00dcberstunden VJ;Krankheit Tage;Eintr\u00e4ge\n';
+  let csv='\uFEFF'+'Mitarbeiter;MA-Nr;Pensum;Raucher;Soll-h/Wo;Ist-Stunden;Raucherabzug;Soll-Stunden;Saldo;Ferien Anspruch;Ferien bezogen;Ferien Rest;Ferien VJ;\u00dcberstunden VJ;Krankheit Tage;Eintr\u00e4ge\n';
   emps.forEach(emp=>{
     const s=empSettings[emp.id]||{pensum:100,weekHours:42.5,ferienTage:25,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
     const entries=getEntriesForEmployee(emp.id,range.from,range.to);
     const absences=allAbs.filter(a=>a.employeeId===emp.id&&a.from>=range.from&&a.to<=range.to);
-    const totalMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0);
+    const raucherMin=s.raucher?countUniqueDates(entries)*15:0;
+    const totalMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0)-raucherMin;
     const totalH=Math.round(totalMin/6)/10;
     const workDays=countWorkdays(range.from,range.to,emp.id);
-    const sollH=Math.round(workDays*(s.weekHours/(s.arbeitsTage||[1,2,3,4,5]).length)*10)/10;
+    const sollH=Math.round(calcSollHours(emp.id,range.from,range.to,s,workDays)*10)/10;
     const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10+(s.ferienUebertrag||0);
     const ferienBez=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
     const krankT=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')).reduce((sum,a)=>sum+a.days,0);
-    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+s.weekHours+';'+totalH+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+(s.ferienUebertrag||0)+';'+(s.ueberstundenUebertrag||0)+';'+krankT+';'+entries.length+'\n';
+    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+(s.raucher?'Ja':'Nein')+';'+s.weekHours+';'+totalH+';'+Math.round(raucherMin/60*10)/10+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+(s.ferienUebertrag||0)+';'+(s.ueberstundenUebertrag||0)+';'+krankT+';'+entries.length+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='Mitarbeiter_Report_'+$('reportPeriod').value+'.csv';a.click();
@@ -1314,9 +1628,11 @@ function showWeeklyReports() {
   let html = '';
   emps.forEach(emp => {
     const entries = getEntriesForEmployee(emp.id, fromStr, toStr);
-    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:42.5, arbeitsTage:[1,2,3,4,5]};
+    const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:42.5, weekHours:42.5, arbeitsTage:[1,2,3,4,5]};
     const workDays = empSettings.arbeitsTage || [1,2,3,4,5];
-    const sollWeek = empSettings.sollStunden || 42.5;
+    const isRaucher = !!empSettings.raucher;
+    // Calculate Soll considering temp pensum
+    const sollWeek = calcSollHours(emp.id, fromStr, toStr, empSettings, countWorkdays(fromStr, toStr, emp.id));
 
     // Build days
     const days = {};
@@ -1333,6 +1649,13 @@ function showWeeklyReports() {
         days[e.date].totalHours += (e.hours || (e.durationMin ? e.durationMin/60 : 0));
       }
     });
+
+    // Apply raucher abzug per day
+    if(isRaucher){
+      Object.values(days).forEach(day => {
+        if(day.entries.length > 0) day.totalHours -= 0.25; // 15 min
+      });
+    }
 
     // Analyze warnings
     Object.values(days).forEach(day => {
@@ -1357,16 +1680,32 @@ function showWeeklyReports() {
     const weekLabel = fmtD(weekStart) + ' \u2013 ' + fmtD(weekEnd);
     let totalWeekH = 0, totalWarn = 0;
 
+    // Check for temp pensum in this week
+    const tp=empSettings.tempPensum||[];
+    const activeTp=tp.filter(t=>t.von<=toStr&&t.bis>=fromStr);
+    let tpBanner='';
+    if(activeTp.length>0){
+      activeTp.forEach(t=>{
+        const normalWeekH=empSettings.weekHours||42.5;
+        tpBanner+='<div style="background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.82rem">';
+        tpBanner+='\u26A0\uFE0F <strong>Reduziertes Pensum: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 Grund: '+t.grund:'');
+        tpBanner+='<br>Soll diese Woche: <strong>'+fmtH(sollWeek)+'</strong> statt '+fmtH(normalWeekH);
+        tpBanner+='</div>';
+      });
+    }
+
     html += '<div class="weekly-report">';
-    html += '<div class="report-header"><h3>\uD83D\uDCCB ' + emp.name + '</h3><div class="report-period">' + weekLabel + '</div></div>';
+    html += '<div class="report-header"><h3>\uD83D\uDCCB ' + emp.name + '</h3><div class="report-period">' + weekLabel + (isRaucher?' <span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDEAC Raucher</span>':'') + '</div></div>';
+    html += tpBanner;
 
     Object.values(days).forEach(day => {
       if(day.dow === 0 || day.dow === 6) return;
       totalWeekH += day.totalHours;
       totalWarn += day.warnings.filter(w=>w.type==='warn').length;
       const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][day.dow] + ' ' + new Date(day.date).toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit'});
+      const dayTpActive = tp.find(t=>day.date>=t.von&&day.date<=t.bis);
       html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + '">';
-      html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
+      html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + (dayTpActive?' <span style="color:var(--danger);font-size:.72rem;font-weight:400">(reduziert '+dayTpActive.pensum+'%)</span>':'') + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
 
       if(day.entries.length > 0) {
         day.entries.sort((a,b)=>(a.start||'').localeCompare(b.start||'')).forEach(e => {
@@ -1397,7 +1736,9 @@ function showWeeklyReports() {
     const saldo = totalWeekH - sollWeek;
     html += '<div class="report-summary">';
     html += '<div class="report-sum-row"><span>Total Woche:</span><strong>' + fmtH(totalWeekH) + '</strong></div>';
+    if(isRaucher) html += '<div class="report-sum-row" style="color:var(--warning)"><span>\uD83D\uDEAC Raucherabzug:</span><span>−' + fmtH(Object.values(days).filter(d=>d.entries.length>0).length*0.25) + '</span></div>';
     html += '<div class="report-sum-row"><span>Soll-Stunden:</span><span>' + fmtH(sollWeek) + '</span></div>';
+    if(activeTp.length>0){const normalWeekH=empSettings.weekHours||42.5;html+='<div class="report-sum-row" style="font-size:.78rem;color:var(--text-dim)"><span>Soll ohne Reduktion:</span><span>'+fmtH(normalWeekH)+'</span></div>';}
     html += '<div class="report-sum-row ' + (saldo>=0?'positive':'negative') + '"><span>Saldo:</span><strong>' + (saldo>=0?'+':'') + fmtH(saldo) + '</strong></div>';
     if(totalWarn > 0) html += '<div class="report-sum-row warn"><span>\u26A0\uFE0F Warnungen:</span><strong>' + totalWarn + '</strong></div>';
     html += '</div></div>';
@@ -1468,6 +1809,312 @@ function exportReportHTML(){
 
 // INIT
 $('logoutBtn').onclick=logout;setupAC('timerProject','timerProjectAC');setupAC('manProject','manProjectAC');initLogin();
+
+// ==================== MA-EDITIEREN ====================
+let _maeEmpId=null,_maeMonth=null,_maeEntries=[],_maeEditId=null,_maeAbsEditId=null,_maeImportData=[];
+
+function initMAEdit(){
+  const sel=$('maeEmp');if(!sel)return;
+  sel.innerHTML='<option value="">— Mitarbeiter wählen —</option>'+EMPLOYEES.map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('');
+  const mi=$('maeMonth');if(mi&&!mi.value){const now=new Date();mi.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')}
+  // Autocomplete for edit modal
+  setupAC('maeEditProject','maeEditProjectAC');
+}
+
+function maeLoad(){
+  _maeEmpId=$('maeEmp').value;
+  _maeMonth=$('maeMonth').value;
+  if(!_maeEmpId){toast('Mitarbeiter wählen','warning');return}
+  if(!_maeMonth){toast('Monat wählen','warning');return}
+  const [yr,mo]=_maeMonth.split('-');
+  const from=yr+'-'+mo+'-01';
+  const lastDay=new Date(parseInt(yr),parseInt(mo),0).getDate();
+  const to=yr+'-'+mo+'-'+String(lastDay).padStart(2,'0');
+  const emp=EMPLOYEES.find(e=>e.id===_maeEmpId);
+
+  // Load entries
+  _maeEntries=getEntriesForEmployee(_maeEmpId,from,to);
+  const $e=$('maeEntries');$e.style.display='block';
+  $('maeEntriesTitle').textContent=(emp?emp.name:_maeEmpId)+' – '+MO[parseInt(mo)-1]+' '+yr+' ('+_maeEntries.length+' Einträge)';
+
+  // Render entries table
+  let html='<table class="mae-table"><thead><tr><th>Datum</th><th>Start</th><th>Ende</th><th>Projekt</th><th>KS</th><th>Pause</th><th>Stunden</th><th>Aktion</th></tr></thead><tbody>';
+  _maeEntries.sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime)).forEach(e=>{
+    const dur=e.durationMin?fmtH(e.durationMin):(e.hours?e.hours.toFixed(2).replace('.',',')+'h':'?');
+    let pause='';
+    if(e.pauseZnueni||e.znueniPause)pause+='Z ';
+    if(e.pauseMittag&&e.pauseMittag!=='none')pause+=(e.pauseMittag==='60min'?'M1h':'M30');
+    else if(e.mittagsPause&&e.mittagsPause!=='none')pause+=(e.mittagsPause==='60min'?'M1h':'M30');
+    if(!pause)pause='-';
+    html+='<tr><td>'+new Date(e.date).toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit'})+'</td><td>'+(e.startTime||e.start||'-')+'</td><td>'+(e.endTime||e.end||'-')+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(e.project||'')+'">'+(e.project||'-')+'</td><td>'+(e.kostenstelle||e.costCenter||'-')+'</td><td>'+pause+'</td><td style="font-family:var(--font-mono)">'+dur+'</td><td class="mae-actions"><button onclick="maeEditEntry(\''+e.id+'\')" title="Bearbeiten">✏️</button><button onclick="maeDeleteEntry(\''+e.id+'\')" title="Löschen">🗑</button></td></tr>';
+  });
+  html+='</tbody></table>';
+  if(!_maeEntries.length)html='<div class="empty-state" style="padding:20px"><p>Keine Einträge in diesem Monat</p></div>';
+  $('maeEntriesList').innerHTML=html;
+
+  // Load absences
+  const allAbs=getAllAbsences();
+  const empAbs=allAbs.filter(a=>a.employeeId===_maeEmpId&&a.from<=to&&a.to>=from);
+  const $a=$('maeAbsences');$a.style.display='block';
+  let ahtml='<table class="mae-table"><thead><tr><th>Zeitraum</th><th>Typ</th><th>Tage</th><th>Dauer</th><th>Status</th><th>Aktion</th></tr></thead><tbody>';
+  empAbs.forEach(a=>{
+    const statusCls=a.status==='approved'?'color:var(--success)':a.status==='rejected'?'color:var(--danger)':'color:var(--warning)';
+    const statusTxt=a.status==='approved'?'Genehmigt':a.status==='rejected'?'Abgelehnt':'Pendent';
+    const durTxt=a.duration==='morning'?'VM':a.duration==='afternoon'?'NM':'Ganztag';
+    ahtml+='<tr><td>'+fmtDate(a.from)+(a.from!==a.to?' – '+fmtDate(a.to):'')+'</td><td>'+a.type+'</td><td>'+a.days+'</td><td>'+durTxt+'</td><td style="'+statusCls+'">'+statusTxt+'</td><td class="mae-actions"><button onclick="maeEditAbsence(\''+a.id+'\')" title="Bearbeiten">✏️</button><button onclick="maeDeleteAbsence(\''+a.id+'\')" title="Löschen">🗑</button></td></tr>';
+  });
+  ahtml+='</tbody></table>';
+  if(!empAbs.length)ahtml='<div class="empty-state" style="padding:20px"><p>Keine Abwesenheiten</p></div>';
+  $('maeAbsencesList').innerHTML=ahtml;
+}
+
+// Edit entry
+function maeEditEntry(id){
+  const e=_maeEntries.find(x=>x.id===id);if(!e)return;
+  _maeEditId=id;
+  $('maeEditTitle').textContent='Eintrag bearbeiten';
+  $('maeEditDate').value=e.date||'';
+  $('maeEditStart').value=e.startTime||e.start||'';
+  $('maeEditEnd').value=e.endTime||e.end||'';
+  $('maeEditProject').value=e.project||'';
+  $('maeEditKS').value=e.kostenstelle||e.costCenter||'';
+  $('maeEditZnueni').checked=!!(e.pauseZnueni||e.znueniPause);
+  $('maeEditMittag').value=e.pauseMittag||e.mittagsPause||'60min';
+  $('maeEditNote').value=e.bemerkung||e.note||'';
+  $('maeEditModal').classList.add('show');
+}
+
+function maeSaveEdit(){
+  const id=_maeEditId;
+  const dt=$('maeEditDate').value,st=$('maeEditStart').value,en=$('maeEditEnd').value;
+  const pr=$('maeEditProject').value.trim(),ks=$('maeEditKS').value;
+  if(!dt||!st||!en||!pr||!ks){toast('Alle Pflichtfelder ausfüllen','warning');return}
+  const sM=timeToMin(st),eM=timeToMin(en);
+  if(eM<=sM){toast('Endzeit nach Startzeit','warning');return}
+  const hasZnueni=$('maeEditZnueni').checked;
+  const mittagVal=$('maeEditMittag').value;
+  let p=0;if(hasZnueni)p+=15;if(mittagVal==='60min')p+=60;else if(mittagVal==='30min')p+=30;
+  const brutto=eM-sM;
+  const upd={date:dt,start:st,end:en,startTime:st,endTime:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,bemerkung:$('maeEditNote').value.trim(),note:$('maeEditNote').value.trim(),pauseMin:p,durationMin:brutto-p,hours:(brutto-p)/60,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:mittagVal,mittagsPause:mittagVal,breakMinutes:p,editedBy:user.name,editedAt:new Date().toISOString()};
+
+  if(id){
+    // Update existing - need to load correct user's entries
+    const empKey=C.LS+_maeEmpId+'_entries';
+    try{
+      const all=JSON.parse(localStorage.getItem(empKey)||'[]');
+      const i=all.findIndex(e=>e.id===id);
+      if(i>=0){all[i]={...all[i],...upd};localStorage.setItem(empKey,JSON.stringify(all));toast('Eintrag aktualisiert','success')}
+      else{toast('Eintrag nicht gefunden','error')}
+    }catch(e){toast('Fehler: '+e.message,'error')}
+  }else{
+    // New entry
+    upd.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    upd.created=new Date().toISOString();
+    upd.createdBy=user.name;
+    const empKey=C.LS+_maeEmpId+'_entries';
+    try{
+      const all=JSON.parse(localStorage.getItem(empKey)||'[]');
+      all.push(upd);localStorage.setItem(empKey,JSON.stringify(all));
+      toast('Eintrag hinzugefügt','success');
+    }catch(e){toast('Fehler: '+e.message,'error')}
+  }
+  $('maeEditModal').classList.remove('show');
+  _maeEditId=null;
+  maeLoad();
+}
+
+function maeDeleteEntry(id){
+  if(!confirm('Eintrag wirklich löschen?'))return;
+  const empKey=C.LS+_maeEmpId+'_entries';
+  try{
+    let all=JSON.parse(localStorage.getItem(empKey)||'[]');
+    all=all.filter(e=>e.id!==id);
+    localStorage.setItem(empKey,JSON.stringify(all));
+    toast('Eintrag gelöscht','success');
+    maeLoad();
+  }catch(e){toast('Fehler','error')}
+}
+
+function maeAddEntry(){
+  if(!_maeEmpId){toast('Zuerst Mitarbeiter laden','warning');return}
+  _maeEditId=null;
+  $('maeEditTitle').textContent='Neuer Eintrag für '+EMPLOYEES.find(e=>e.id===_maeEmpId)?.name;
+  $('maeEditDate').value=_maeMonth+'-01';
+  $('maeEditStart').value='07:00';
+  $('maeEditEnd').value='17:00';
+  $('maeEditProject').value='';
+  $('maeEditKS').value='';
+  $('maeEditZnueni').checked=true;
+  $('maeEditMittag').value='60min';
+  $('maeEditNote').value='';
+  $('maeEditModal').classList.add('show');
+}
+
+// Absences edit
+function maeEditAbsence(id){
+  const allAbs=getAllAbsences();
+  const a=allAbs.find(x=>x.id===id);if(!a)return;
+  _maeAbsEditId=id;
+  $('maeAbsType').value=a.type||'Ferien';
+  $('maeAbsFrom').value=a.from;
+  $('maeAbsTo').value=a.to;
+  $('maeAbsDuration').value=a.duration||'full';
+  $('maeAbsStatus').value=a.status||'pending';
+  $('maeAbsNote').value=a.note||'';
+  $('maeAbsEditModal').classList.add('show');
+}
+
+function maeSaveAbsEdit(){
+  const type=$('maeAbsType').value,from=$('maeAbsFrom').value,to=$('maeAbsTo').value;
+  const dur=$('maeAbsDuration').value,status=$('maeAbsStatus').value,note=$('maeAbsNote').value.trim();
+  if(!from||!to){toast('Zeitraum ausfüllen','warning');return}
+  const workdays=countWorkdays(from,to,_maeEmpId);
+  const days=dur==='full'?workdays:workdays*0.5;
+  const allAbs=getAllAbsences();
+
+  if(_maeAbsEditId){
+    const i=allAbs.findIndex(a=>a.id===_maeAbsEditId);
+    if(i>=0){allAbs[i]={...allAbs[i],type,from,to,duration:dur,status,note,days,editedBy:user.name,editedAt:new Date().toISOString()};saveAllAbsences(allAbs);toast('Abwesenheit aktualisiert','success')}
+  }else{
+    const emp=EMPLOYEES.find(e=>e.id===_maeEmpId);
+    allAbs.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),employeeId:_maeEmpId,employeeName:emp?emp.name:'',type,from,to,duration:dur,status,note,days,created:new Date().toISOString(),createdBy:user.name});
+    saveAllAbsences(allAbs);toast('Abwesenheit hinzugefügt','success');
+  }
+  $('maeAbsEditModal').classList.remove('show');
+  _maeAbsEditId=null;
+  maeLoad();
+}
+
+function maeDeleteAbsence(id){
+  if(!confirm('Abwesenheit wirklich löschen?'))return;
+  let allAbs=getAllAbsences();
+  allAbs=allAbs.filter(a=>a.id!==id);
+  saveAllAbsences(allAbs);
+  toast('Abwesenheit gelöscht','success');
+  maeLoad();
+}
+
+function maeAddAbsence(){
+  if(!_maeEmpId){toast('Zuerst Mitarbeiter laden','warning');return}
+  _maeAbsEditId=null;
+  $('maeAbsType').value='Ferien';
+  $('maeAbsFrom').value=_maeMonth+'-01';
+  $('maeAbsTo').value=_maeMonth+'-01';
+  $('maeAbsDuration').value='full';
+  $('maeAbsStatus').value='pending';
+  $('maeAbsNote').value='';
+  $('maeAbsEditModal').classList.add('show');
+}
+
+// ==================== CSV IMPORT ====================
+function maeShowImport(){
+  if(!_maeEmpId){toast('Zuerst Mitarbeiter laden','warning');return}
+  $('maeImportArea').style.display='block';
+  $('maeCSVFile').value='';
+  $('maeImportPreview').innerHTML='<p style="color:var(--text-dim);font-size:.82rem">CSV-Datei auswählen (Format: Datum;Start;Ende;Projekt;Kostenstelle;Bemerkung;Znüni;Mittagspause)</p>';
+  $('maeImportBtn').style.display='none';
+}
+
+function maeDownloadTemplate(){
+  const bom='\uFEFF';
+  const header='Datum;Start;Ende;Projekt;Kostenstelle;Bemerkung;Znueni;Mittagspause\n';
+  const ex1='10.02.2026;07:00;17:00;24-123 Kunde AG Geländer;Werkstatt;Geländer montiert;Ja;60min\n';
+  const ex2='11.02.2026;07:00;12:00;24-456 Projekt B;Montage;;Ja;durchgearbeitet\n';
+  const ex3='12.02.2026;06:30;16:30;24-789 Stahl AG;BAZ;CNC Fräsen;Nein;30min\n';
+  const blob=new Blob([bom+header+ex1+ex2+ex3],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Zeiterfassung_Import_Vorlage.csv';a.click();
+  toast('Vorlage heruntergeladen','success');
+}
+
+function maeParseCSV(){
+  const file=$('maeCSVFile').files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const lines=ev.target.result.split('\n').filter(l=>l.trim());
+    if(lines.length<2){$('maeImportPreview').innerHTML='<p style="color:var(--danger)">CSV leer oder ungültig</p>';return}
+    // Parse header
+    const hdr=lines[0].split(';').map(h=>h.trim().toLowerCase().replace(/[^a-z0-9äöü]/g,''));
+    const data=[];
+    const existingEntries=getEntriesForEmployee(_maeEmpId,'2000-01-01','2099-12-31');
+
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(';').map(c=>c.trim());
+      if(cols.length<4)continue;
+      const raw={datum:cols[0]||'',start:cols[1]||'',ende:cols[2]||'',projekt:cols[3]||'',ks:cols[4]||'',bemerkung:cols[5]||'',znueni:cols[6]||'Ja',mittag:cols[7]||'60min'};
+
+      // Parse date (DD.MM.YYYY or YYYY-MM-DD)
+      let dateStr='';
+      if(raw.datum.includes('.')){const p=raw.datum.split('.');if(p.length===3)dateStr=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0')}
+      else dateStr=raw.datum;
+
+      // Validate
+      const errors=[];
+      if(!dateStr||isNaN(new Date(dateStr).getTime()))errors.push('Ungültiges Datum');
+      if(!raw.start.match(/^\d{1,2}:\d{2}$/))errors.push('Start ungültig');
+      if(!raw.ende.match(/^\d{1,2}:\d{2}$/))errors.push('Ende ungültig');
+      if(!raw.projekt)errors.push('Projekt fehlt');
+      if(!raw.ks)errors.push('Kostenstelle fehlt');
+
+      // Check duplicate
+      const isDup=existingEntries.some(e=>e.date===dateStr&&(e.startTime===raw.start||e.start===raw.start));
+
+      const hasZnueni=raw.znueni.toLowerCase()==='ja'||raw.znueni==='1'||raw.znueni.toLowerCase()==='true';
+      let mittagVal='60min';
+      if(raw.mittag==='30min'||raw.mittag==='30')mittagVal='30min';
+      else if(raw.mittag.toLowerCase()==='durchgearbeitet'||raw.mittag==='none'||raw.mittag==='0'||raw.mittag.toLowerCase()==='nein')mittagVal='none';
+
+      let pauseMin=0;if(hasZnueni)pauseMin+=15;if(mittagVal==='60min')pauseMin+=60;else if(mittagVal==='30min')pauseMin+=30;
+
+      const sM=timeToMin(raw.start),eM=timeToMin(raw.ende);
+      const brutto=eM>sM?eM-sM:0;
+
+      data.push({raw,dateStr,hasZnueni,mittagVal,pauseMin,brutto,netMin:Math.max(brutto-pauseMin,0),errors,isDup,line:i});
+    }
+
+    _maeImportData=data;
+
+    // Render preview
+    let html='<div style="margin:8px 0;font-size:.82rem"><strong>'+data.length+'</strong> Einträge gefunden, <span style="color:var(--danger)">'+data.filter(d=>d.errors.length).length+' Fehler</span>, <span style="color:var(--warning)">'+data.filter(d=>d.isDup).length+' Duplikate</span></div>';
+    html+='<table class="mae-table"><thead><tr><th>#</th><th>Datum</th><th>Start</th><th>Ende</th><th>Projekt</th><th>KS</th><th>Netto</th><th>Status</th></tr></thead><tbody>';
+    data.forEach((d,i)=>{
+      const cls=d.errors.length?'error':d.isDup?'warn':'ok';
+      const status=d.errors.length?'❌ '+d.errors.join(', '):d.isDup?'⚠️ Duplikat':'✅';
+      html+='<tr class="mae-import-row '+cls+'"><td>'+(i+1)+'</td><td>'+d.raw.datum+'</td><td>'+d.raw.start+'</td><td>'+d.raw.ende+'</td><td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+d.raw.projekt+'</td><td>'+d.raw.ks+'</td><td style="font-family:var(--font-mono)">'+fmtH(d.netMin)+'</td><td style="font-size:.75rem">'+status+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    $('maeImportPreview').innerHTML=html;
+    const valid=data.filter(d=>!d.errors.length);
+    $('maeImportBtn').style.display=valid.length>0?'inline-flex':'none';
+    $('maeImportBtn').textContent='✅ '+valid.length+' Einträge importieren'+(data.filter(d=>d.isDup).length?' ('+data.filter(d=>d.isDup).length+' Duplikate überspringen)':'');
+  };
+  reader.readAsText(file);
+}
+
+function maeDoImport(){
+  if(!_maeEmpId||!_maeImportData.length)return;
+  const valid=_maeImportData.filter(d=>!d.errors.length&&!d.isDup);
+  if(!valid.length){toast('Keine gültigen Einträge','warning');return}
+  const empKey=C.LS+_maeEmpId+'_entries';
+  try{
+    const all=JSON.parse(localStorage.getItem(empKey)||'[]');
+    valid.forEach(d=>{
+      all.push({
+        id:Date.now().toString(36)+Math.random().toString(36).slice(2,6)+(d.line),
+        date:d.dateStr,start:d.raw.start,end:d.raw.ende,startTime:d.raw.start,endTime:d.raw.ende,
+        project:d.raw.projekt,projectName:d.raw.projekt,kostenstelle:d.raw.ks,costCenter:d.raw.ks,
+        bemerkung:d.raw.bemerkung,note:d.raw.bemerkung,
+        pauseMin:d.pauseMin,durationMin:d.netMin,hours:d.netMin/60,
+        pauseZnueni:d.hasZnueni,znueniPause:d.hasZnueni,pauseMittag:d.mittagVal,mittagsPause:d.mittagVal,breakMinutes:d.pauseMin,
+        created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString()
+      });
+    });
+    localStorage.setItem(empKey,JSON.stringify(all));
+    toast(valid.length+' Einträge importiert!','success');
+    $('maeImportArea').style.display='none';
+    _maeImportData=[];
+    maeLoad();
+  }catch(e){toast('Import-Fehler: '+e.message,'error')}
+}
 
 </script>
 </body>
