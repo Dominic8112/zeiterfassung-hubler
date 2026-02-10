@@ -45,6 +45,30 @@
 .timer-indicator{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--success),var(--primary));z-index:999;display:none}.timer-indicator.on{display:block;animation:pulse-bar 2s infinite}@keyframes pulse-bar{0%,100%{opacity:1}50%{opacity:.4}}
 @media(max-width:600px){.topbar{padding:10px 14px}.topbar-name{display:none}.nav-tab{flex:0 0 calc(25% - 2px);padding:8px 4px;font-size:.68rem}.tab-content{padding:14px}.timer-time{font-size:3rem}.timer-btn{width:56px;height:56px}.form-row{grid-template-columns:1fr}}
 
+.weekly-report{margin-bottom:24px;border-bottom:2px solid var(--border);padding-bottom:16px}
+.report-header{border-bottom:3px solid var(--accent);padding-bottom:10px;margin-bottom:12px}
+.report-header h3{margin:0;color:var(--accent);font-size:1.1rem}
+.report-period{color:var(--text-dim);font-size:.8rem}
+.report-day{border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px;background:var(--bg-card)}
+.report-day.has-warning{border-left:4px solid #f59e0b}
+.report-day-header{display:flex;justify-content:space-between;font-weight:700;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.report-day-name{color:var(--text)}
+.report-day-hours{color:var(--accent)}
+.report-entry{padding:4px 0 4px 12px;border-left:2px solid var(--border);margin:4px 0;font-size:.8rem}
+.report-entry.empty{color:var(--text-dim);font-style:italic}
+.report-entry-time{font-weight:600;color:#4A90D9}
+.report-entry-detail{color:var(--text)}
+.report-entry-pause{color:var(--text-dim);font-size:.75rem}
+.report-entry-note{color:var(--text-dim);font-size:.75rem;font-style:italic}
+.report-warning{padding:4px 8px;border-radius:4px;font-size:.75rem;margin-top:4px}
+.report-warning.warn{background:rgba(245,158,11,.15);color:#f59e0b}
+.report-warning.info{background:rgba(59,130,246,.1);color:#60a5fa}
+.report-summary{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:10px}
+.report-sum-row{display:flex;justify-content:space-between;padding:3px 0;font-size:.85rem}
+.report-sum-row.positive strong{color:#22c55e}
+.report-sum-row.negative strong{color:#ef4444}
+.report-sum-row.warn{color:#f59e0b}
+
 </style>
 </head>
 <body>
@@ -132,6 +156,20 @@
 
   <!-- EXPORT -->
   <div class="tab-content" id="tab-report">
+<div class="card" id="weeklyReportCard" style="display:none">
+  <h3 style="margin-bottom:8px">📋 Wochenreport</h3>
+  <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">Detaillierter Report pro Mitarbeiter: Alle Einträge, Pausen-Kontrolle und Warnhinweise.</p>
+  <div class="form-row">
+    <div class="form-group"><label>Kalenderwoche</label><input type="week" id="weeklyReportWeek" class="form-input"></div>
+    <div class="form-group"><label>Mitarbeiter</label><select id="weeklyReportEmp" class="form-input"><option value="all">Alle Mitarbeiter</option></select></div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-primary" onclick="showWeeklyReports()">📋 Report anzeigen</button>
+    <button class="btn" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text)" onclick="exportWeeklyReportPrint()">🖨 Druckversion</button>
+  </div>
+  <div id="weeklyReportResult" style="margin-top:16px"></div>
+</div>
+
     <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Mitarbeiter-Report</h2>
     <div class="card">
       <div class="card-title">Auswertung für Qualifikationsgespräche</div>
@@ -857,7 +895,7 @@ async function loadEmpSettingsFromSP(){
 }
 
 // ABSENCE MANAGEMENT
-const ABS_TYPES={'Ferien':'\U0001f3d6\ufe0f','Krankheit':'\U0001f912','Unfall':'\U0001f915','Milit\u00e4r/Zivildienst':'\U0001f396\ufe0f','Mutterschaft/Vaterschaft':'\U0001f476','Umzug':'\U0001f4e6','Unbezahlt':'\U0001f6ab','Sonstiges':'\U0001f4cb'};
+const ABS_TYPES={'Ferien':'🏖\ufe0f','Krankheit':'🤒','Unfall':'🤕','Milit\u00e4r/Zivildienst':'🎖\ufe0f','Mutterschaft/Vaterschaft':'👶','Umzug':'📦','Unbezahlt':'🚫','Sonstiges':'📋'};
 const ABS_COLORS={'Ferien':'#22c55e','Krankheit':'#ef4444','Unfall':'#f97316','Milit\u00e4r/Zivildienst':'#8b5cf6','Mutterschaft/Vaterschaft':'#ec4899','Umzug':'#06b6d4','Unbezahlt':'#6b7280','Sonstiges':'#a3a3a3'};
 
 function getAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'absences')||'[]')}catch{return[]}}
@@ -914,14 +952,14 @@ function renderAbsences(){
   $('absStats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--success);font-weight:700">'+ferienDays+' / '+ferienTotal+'</div><div style="font-size:.72rem;color:var(--text-dim)">Ferien bezogen / Anspruch</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+';font-weight:700">'+ferienRest+'</div><div style="font-size:.72rem;color:var(--text-dim)">Resttage</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--danger);font-weight:700">'+krankDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Krankheit/Unfall</div></div><div style="background:var(--bg-surface);padding:12px;border-radius:8px"><div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--warning);font-weight:700">'+pendingDays+'</div><div style="font-size:.72rem;color:var(--text-dim)">Pendent</div></div></div>'+(empS.ueberstundenUebertrag?'<div style="margin-top:8px;font-size:.8rem;color:var(--text-dim)">\u00dcberstunden Vortrag: <strong style="color:var(--accent)">'+empS.ueberstundenUebertrag+'h</strong></div>':'');
 
   // List
-  if(!abs.length){$('absList').innerHTML='<div class="empty-state"><div class="empty-icon">\U0001f3d6\ufe0f</div><p>Keine Abwesenheiten erfasst</p></div>';return}
+  if(!abs.length){$('absList').innerHTML='<div class="empty-state"><div class="empty-icon">🏖\ufe0f</div><p>Keine Abwesenheiten erfasst</p></div>';return}
   $('absList').innerHTML=abs.map(a=>{
-    const icon=ABS_TYPES[a.type]||'\U0001f4cb';
+    const icon=ABS_TYPES[a.type]||'📋';
     const color=ABS_COLORS[a.type]||'#666';
     const statusClass=a.status==='approved'?'approved':a.status==='rejected'?'rejected':'pending';
     const statusText=a.status==='approved'?'Genehmigt':a.status==='rejected'?'Abgelehnt':'Pendent';
     const durText=a.duration==='morning'?'(VM)':a.duration==='afternoon'?'(NM)':'';
-    return '<div class="abs-card" style="border-left-color:'+color+'"><div class="entry-info"><div class="entry-time"><span class="abs-type-icon">'+icon+'</span>'+a.type+' '+durText+'</div><div class="entry-meta">'+fmtDate(a.from)+(a.from!==a.to?' \u2013 '+fmtDate(a.to):'')+' \u00b7 '+a.days+' Tag'+(a.days!==1?'e':'')+(a.note?' \u00b7 '+a.note:'')+'</div></div><div class="entry-right"><span class="abs-badge '+statusClass+'">'+statusText+'</span>'+((a.status==='pending'||(user&&(user.admin||user.approver)))?'<button class="entry-action" onclick="deleteAbsence(\''+a.id+'\')" title="L\u00f6schen">\U0001f5d1</button>':'')+'</div></div>'
+    return '<div class="abs-card" style="border-left-color:'+color+'"><div class="entry-info"><div class="entry-time"><span class="abs-type-icon">'+icon+'</span>'+a.type+' '+durText+'</div><div class="entry-meta">'+fmtDate(a.from)+(a.from!==a.to?' \u2013 '+fmtDate(a.to):'')+' \u00b7 '+a.days+' Tag'+(a.days!==1?'e':'')+(a.note?' \u00b7 '+a.note:'')+'</div></div><div class="entry-right"><span class="abs-badge '+statusClass+'">'+statusText+'</span>'+((a.status==='pending'||(user&&(user.admin||user.approver)))?'<button class="entry-action" onclick="deleteAbsence(\''+a.id+'\')" title="L\u00f6schen">🗑</button>':'')+'</div></div>'
   }).join('');
 
   // Approval section (for approvers: Dominic + Roman)
@@ -932,7 +970,7 @@ function renderAbsences(){
     if(pending.length>0){
       card.style.display='block';
       $('absPendingList').innerHTML=pending.map(a=>{
-        const icon=ABS_TYPES[a.type]||'\U0001f4cb';const color=ABS_COLORS[a.type]||'#666';
+        const icon=ABS_TYPES[a.type]||'📋';const color=ABS_COLORS[a.type]||'#666';
         return '<div class="abs-card" style="border-left-color:'+color+'"><div class="entry-info"><div class="entry-time"><span class="abs-type-icon">'+icon+'</span><strong>'+a.employeeName+'</strong> \u2013 '+a.type+'</div><div class="entry-meta">'+fmtDate(a.from)+(a.from!==a.to?' \u2013 '+fmtDate(a.to):'')+' \u00b7 '+a.days+' Tag'+(a.days!==1?'e':'')+(a.note?' \u00b7 '+a.note:'')+'</div></div><div class="entry-right" style="gap:4px"><button class="abs-approve-btn approve" onclick="approveAbsence(\''+a.id+'\',true)">\u2705</button><button class="abs-approve-btn reject" onclick="approveAbsence(\''+a.id+'\',false)">\u274c</button></div></div>'
       }).join('');
     }else{card.style.display='block';$('absPendingList').innerHTML='<p style="color:var(--text-dim);font-size:.85rem">Keine offenen Antr\u00e4ge</p>'}
@@ -1010,6 +1048,25 @@ function renderReportTab(){
   const empSettings=getEmpSettings();
   el.innerHTML='<div class="form-row" style="margin-bottom:16px"><div class="form-group"><label class="form-label">Mitarbeiter</label><select class="form-select" id="reportEmp"><option value="">— Alle —</option>'+EMPLOYEES.map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('')+'</select></div><div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="reportPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Aktuelles Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="custom">Benutzerdefiniert</option></select></div></div><div id="reportCustomRange" style="display:none" class="form-row"><div class="form-group"><label class="form-label">Von</label><input type="date" class="form-input" id="reportFrom"></div><div class="form-group"><label class="form-label">Bis</label><input type="date" class="form-input" id="reportTo"></div></div><div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="generateReport()">📊 Report anzeigen</button><button class="btn btn-secondary btn-sm" onclick="exportReportCSV()">📤 CSV Export</button><button class="btn btn-secondary btn-sm" onclick="exportReportHTML()">🖨 Druckversion</button></div><div id="reportOutput"></div>';
   $('reportPeriod').onchange=function(){$('reportCustomRange').style.display=this.value==='custom'?'grid':'none'};
+
+  // Weekly report card
+  const wrc = $('weeklyReportCard');
+  if(wrc && canViewReports()) {
+    wrc.style.display = 'block';
+    // Set current week
+    const now = new Date();
+    const yr = now.getFullYear();
+    const startOfYear = new Date(yr, 0, 1);
+    const weekNum = Math.ceil((((now - startOfYear) / 86400000) + startOfYear.getDay() + 1) / 7);
+    const wi = $('weeklyReportWeek');
+    if(wi && !wi.value) wi.value = yr + '-W' + String(weekNum).padStart(2, '0');
+    // Populate employee dropdown
+    const sel = $('weeklyReportEmp');
+    if(sel && sel.options.length <= 1) {
+      EMPLOYEES.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+    }
+  }
+
 }
 
 function getReportDateRange(){
@@ -1108,6 +1165,289 @@ function exportReportCSV(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='Mitarbeiter_Report_'+$('reportPeriod').value+'.csv';a.click();
   toast('CSV exportiert','success');
+}
+
+
+// ==================== WOCHENREPORT ====================
+function generateWeeklyReport(empId, weekStart) {
+  if(!weekStart) {
+    // Current week: Monday
+    const now = new Date();
+    weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - ((now.getDay()+6)%7));
+  }
+  weekStart.setHours(0,0,0,0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23,59,59,999);
+
+  const empName = empId ? EMPLOYEES.find(e=>e.id===empId)?.name : null;
+  const entries = (window._allEntries||[]).filter(e => {
+    const d = new Date(e.date);
+    const matchDate = d >= weekStart && d <= weekEnd;
+    const matchEmp = empId ? e.date && true : true; // all entries for selected emp
+    return matchDate;
+  });
+
+  // Group by day
+  const days = {};
+  for(let i=0;i<7;i++){
+    const d=new Date(weekStart);
+    d.setDate(weekStart.getDate()+i);
+    const key=d.toISOString().split('T')[0];
+    const dayName=['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
+    days[key]={date:key, dayName, entries:[], totalHours:0, warnings:[]};
+  }
+
+  entries.forEach(e => {
+    const key = e.date;
+    if(days[key]) {
+      days[key].entries.push(e);
+      days[key].totalHours += (e.hours||0);
+    }
+  });
+
+  // Analyze each day for warnings
+  const empSettings = getEmpSetting(empId);
+  const sollPerDay = empSettings ? (empSettings.sollStunden / (empSettings.arbeitsTage||[1,2,3,4,5]).length) : 8.5;
+
+  Object.values(days).forEach(day => {
+    if(day.entries.length === 0) {
+      // Check if it's a workday
+      const d = new Date(day.date);
+      const dow = d.getDay();
+      const workDays = empSettings?.arbeitsTage || [1,2,3,4,5];
+      if(workDays.includes(dow)) {
+        // Check for absence
+        day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
+      }
+      return;
+    }
+
+    // Sort entries by start time
+    const sorted = [...day.entries].sort((a,b) => (a.start||'').localeCompare(b.start||''));
+
+    // Check Znüni pause
+    let hasZnueni = false;
+    let hasMittag = false;
+    let totalBreak = 0;
+
+    sorted.forEach(e => {
+      if(e.pauseZnueni) hasZnueni = true;
+      if(e.pauseMittag && e.pauseMittag !== 'none') hasMittag = true;
+      totalBreak += (e.breakMinutes||0);
+    });
+
+    // Calculate gross time
+    const firstStart = sorted[0]?.start;
+    const lastEnd = sorted[sorted.length-1]?.end;
+
+    if(day.totalHours > 6 && !hasMittag) {
+      day.warnings.push({type:'warn', msg:'Keine Mittagspause bei >6h Arbeit'});
+    }
+    if(!hasZnueni && day.totalHours > 2) {
+      day.warnings.push({type:'warn', msg:'Keine Zn\u00fcni-Pause erfasst'});
+    }
+    if(day.totalHours > 10) {
+      day.warnings.push({type:'warn', msg:'\u00dcber 10h Arbeitszeit'});
+    }
+    if(day.totalHours > 0 && day.totalHours < sollPerDay * 0.5 && day.entries.length > 0) {
+      day.warnings.push({type:'info', msg:'Weniger als 50% der Sollzeit'});
+    }
+    // Check if pause data exists at all
+    sorted.forEach(e => {
+      if(!e.pauseZnueni && !e.pauseMittag && !e.breakMinutes && day.totalHours > 4) {
+        day.warnings.push({type:'info', msg:'Keine Pauseninformationen erfasst'});
+      }
+    });
+  });
+
+  return {empId, empName, weekStart, weekEnd, days, empSettings, sollPerDay};
+}
+
+function renderWeeklyReportHTML(report) {
+  const fmtD = d => {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+  };
+  const fmtH = h => h.toFixed(2).replace('.',',') + 'h';
+
+  let totalWeekHours = 0;
+  let totalWarnings = 0;
+  let html = '';
+
+  // Summary header
+  const weekLabel = fmtD(report.weekStart) + ' \u2013 ' + fmtD(report.weekEnd);
+
+  html += '<div class="weekly-report">';
+  html += '<div class="report-header"><h3>\uD83D\uDCCB Wochenreport: ' + (report.empName||'') + '</h3>';
+  html += '<div class="report-period">' + weekLabel + '</div></div>';
+
+  // Day by day
+  Object.values(report.days).forEach(day => {
+    const d = new Date(day.date);
+    const dow = d.getDay();
+    if(dow === 0 || dow === 6) return; // Skip weekends
+
+    totalWeekHours += day.totalHours;
+    totalWarnings += day.warnings.filter(w=>w.type==='warn').length;
+
+    const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][dow] + ' ' + d.toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit'});
+
+    html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + '">';
+    html += '<div class="report-day-header">';
+    html += '<span class="report-day-name">' + dayLabel + '</span>';
+    html += '<span class="report-day-hours">' + fmtH(day.totalHours) + '</span>';
+    html += '</div>';
+
+    // Entries
+    if(day.entries.length > 0) {
+      day.entries.sort((a,b)=>(a.start||'').localeCompare(b.start||'')).forEach(e => {
+        const proj = e.project || e.projectName || '-';
+        const ks = e.costCenter || '-';
+        const zeit = (e.start||'?') + '\u2013' + (e.end||'?');
+        let pauseInfo = '';
+        if(e.pauseZnueni) pauseInfo += 'Zn\u00fcni \u2713 ';
+        if(e.pauseMittag && e.pauseMittag !== 'none') pauseInfo += 'Mittag: ' + (e.pauseMittag==='60min'?'1h':e.pauseMittag==='30min'?'30min':'durchgearbeitet') + ' ';
+        if(e.breakMinutes) pauseInfo += '(Pause: ' + e.breakMinutes + 'min)';
+        if(!pauseInfo) pauseInfo = '<span class="text-dim">Keine Pauseninfo</span>';
+
+        html += '<div class="report-entry">';
+        html += '<div class="report-entry-time">' + zeit + '</div>';
+        html += '<div class="report-entry-detail">' + proj + ' <span class="text-dim">\u00b7 ' + ks + '</span></div>';
+        html += '<div class="report-entry-pause">\u2615 ' + pauseInfo + '</div>';
+        if(e.note) html += '<div class="report-entry-note">\uD83D\uDCDD ' + e.note + '</div>';
+        html += '</div>';
+      });
+    } else {
+      html += '<div class="report-entry empty">Keine Eintr\u00e4ge</div>';
+    }
+
+    // Warnings
+    day.warnings.forEach(w => {
+      html += '<div class="report-warning ' + w.type + '">' + (w.type==='warn'?'\u26A0\uFE0F':'\u2139\uFE0F') + ' ' + w.msg + '</div>';
+    });
+
+    html += '</div>';
+  });
+
+  // Summary footer
+  const sollWeek = report.empSettings ? report.empSettings.sollStunden : 42.5;
+  const saldo = totalWeekHours - sollWeek;
+  const saldoClass = saldo >= 0 ? 'positive' : 'negative';
+
+  html += '<div class="report-summary">';
+  html += '<div class="report-sum-row"><span>Total Woche:</span><strong>' + fmtH(totalWeekHours) + '</strong></div>';
+  html += '<div class="report-sum-row"><span>Soll-Stunden:</span><span>' + fmtH(sollWeek) + '</span></div>';
+  html += '<div class="report-sum-row ' + saldoClass + '"><span>Saldo:</span><strong>' + (saldo>=0?'+':'') + fmtH(saldo) + '</strong></div>';
+  if(totalWarnings > 0) html += '<div class="report-sum-row warn"><span>\u26A0\uFE0F Warnungen:</span><strong>' + totalWarnings + '</strong></div>';
+  html += '</div></div>';
+
+  return html;
+}
+
+function showWeeklyReports() {
+  if(!user || (!user.admin && !user.approver)) return;
+
+  // Get selected week
+  const weekInput = $('weeklyReportWeek');
+  let weekStart;
+  if(weekInput && weekInput.value) {
+    // Input type=week gives "2026-W07" format
+    const parts = weekInput.value.split('-W');
+    const year = parseInt(parts[0]);
+    const week = parseInt(parts[1]);
+    // Calculate Monday of that week
+    const jan4 = new Date(year, 0, 4);
+    const d = new Date(jan4);
+    d.setDate(jan4.getDate() - ((jan4.getDay()+6)%7) + (week-1)*7);
+    weekStart = d;
+  } else {
+    const now = new Date();
+    weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - ((now.getDay()+6)%7));
+  }
+
+  const empFilter = $('weeklyReportEmp')?.value || 'all';
+  const container = $('weeklyReportResult');
+  if(!container) return;
+
+  container.innerHTML = '<div class="loading">Lade Daten...</div>';
+
+  // Load entries for each employee
+  const emps = empFilter === 'all' ? EMPLOYEES : EMPLOYEES.filter(e=>e.id===empFilter);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate()+6);
+
+  let allReports = [];
+  let loaded = 0;
+
+  emps.forEach(emp => {
+    getEntriesForEmployee(emp.id, weekStart, weekEnd).then(entries => {
+      window._allEntries = entries;
+      const report = generateWeeklyReport(emp.id, new Date(weekStart));
+      report.empName = emp.name;
+      allReports.push(report);
+      loaded++;
+      if(loaded === emps.length) {
+        allReports.sort((a,b) => a.empName.localeCompare(b.empName));
+        let html = '';
+        allReports.forEach(r => { html += renderWeeklyReportHTML(r); });
+        container.innerHTML = html || '<div class="empty-state">Keine Daten gefunden</div>';
+      }
+    }).catch(err => {
+      loaded++;
+      if(loaded === emps.length) {
+        container.innerHTML = '<div class="empty-state">Fehler beim Laden</div>';
+      }
+    });
+  });
+}
+
+function exportWeeklyReportPrint() {
+  const content = $('weeklyReportResult')?.innerHTML;
+  if(!content) return;
+
+  const weekInput = $('weeklyReportWeek');
+  const weekLabel = weekInput?.value || 'aktuell';
+
+  const printHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wochenreport ' + weekLabel + '</title><style>' +
+    'body{font-family:Arial,sans-serif;padding:20px;color:#333}' +
+    '.weekly-report{margin-bottom:30px;page-break-after:always}' +
+    '.report-header{border-bottom:3px solid #FF6B35;padding-bottom:10px;margin-bottom:15px}' +
+    '.report-header h3{margin:0;color:#FF6B35;font-size:18px}' +
+    '.report-period{color:#666;font-size:13px}' +
+    '.report-day{border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:10px}' +
+    '.report-day.has-warning{border-left:4px solid #f59e0b}' +
+    '.report-day-header{display:flex;justify-content:space-between;font-weight:bold;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #eee}' +
+    '.report-entry{padding:4px 0 4px 12px;border-left:2px solid #e0e4ea;margin:4px 0;font-size:13px}' +
+    '.report-entry.empty{color:#999;font-style:italic}' +
+    '.report-entry-time{font-weight:600;color:#004E89}' +
+    '.report-entry-pause{color:#666;font-size:12px}' +
+    '.report-entry-note{color:#888;font-size:12px;font-style:italic}' +
+    '.report-warning{padding:4px 8px;border-radius:4px;font-size:12px;margin-top:4px}' +
+    '.report-warning.warn{background:#fef3c7;color:#92400e}' +
+    '.report-warning.info{background:#e0f2fe;color:#0369a1}' +
+    '.report-summary{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-top:10px}' +
+    '.report-sum-row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px}' +
+    '.report-sum-row.positive strong{color:#22c55e}' +
+    '.report-sum-row.negative strong{color:#ef4444}' +
+    '.report-sum-row.warn{color:#f59e0b}' +
+    '.text-dim{color:#999}' +
+    '@media print{.weekly-report{page-break-after:always}}' +
+    '</style></head><body>' +
+    '<h1 style="color:#004E89">Wochenreport Hubler Metallbau AG</h1>' +
+    '<p style="color:#666">Kalenderwoche ' + weekLabel + '</p>' +
+    content +
+    '</body></html>';
+
+  const blob = new Blob([printHtml], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Wochenreport_' + weekLabel + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportReportHTML(){
