@@ -631,6 +631,19 @@ function loadEmployees(){try{const d=JSON.parse(localStorage.getItem(C.LS+'emplo
 function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list})}
 let EMPLOYEES=loadEmployees();
 function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
+// Migrate old dual-absences to single source
+(function(){
+  const oldLocal=localStorage.getItem(C.LS+'absences');
+  const oldGlobal=localStorage.getItem(C.LS+'global_absences');
+  const newKey=C.LS+'all_absences';
+  if(!localStorage.getItem(newKey)){
+    let merged=[];
+    try{if(oldGlobal)merged=JSON.parse(oldGlobal)}catch{}
+    try{if(oldLocal){const loc=JSON.parse(oldLocal);const ids=new Set(merged.map(a=>a.id));loc.forEach(a=>{if(!ids.has(a.id))merged.push(a)})}}catch{}
+    if(merged.length){localStorage.setItem(newKey,JSON.stringify(merged));console.log('[Migration] Abwesenheiten migriert:',merged.length)}
+  }
+})();
+
 const KS_COLORS={"Büro":'#3b82f6',Zuschnitt:'#8b5cf6',BAZ:'#06b6d4',Werkstatt:'#22c55e',Montage:'#FF6B35'};
 const DAYS_S=['So','Mo','Di','Mi','Do','Fr','Sa'],DAYS_L=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],MO=['Januar','Februar','M\u00e4rz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 let user=null,accessToken=null,projects=[...PROJECTS_DATA];
@@ -1340,14 +1353,13 @@ async function loadEmpSettingsFromSP(){
 const ABS_TYPES={'Ferien':'🏖\ufe0f','Krankheit':'🤒','Unfall':'🤕','Milit\u00e4r/Zivildienst':'🎖\ufe0f','Mutterschaft/Vaterschaft':'👶','Umzug':'📦','Unbezahlt':'🚫','Sonstiges':'📋'};
 const ABS_COLORS={'Ferien':'#22c55e','Krankheit':'#ef4444','Unfall':'#f97316','Milit\u00e4r/Zivildienst':'#8b5cf6','Mutterschaft/Vaterschaft':'#ec4899','Umzug':'#06b6d4','Unbezahlt':'#6b7280','Sonstiges':'#a3a3a3'};
 
-function getAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'absences')||'[]')}catch{return[]}}
-function saveAbsences(a){localStorage.setItem(C.LS+'absences',JSON.stringify(a));queueAbsSync()}
-function getAllAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'global_absences')||'[]')}catch{return[]}}
-function saveAllAbsences(a){localStorage.setItem(C.LS+'global_absences',JSON.stringify(a))}
+function getAllAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'all_absences')||'[]')}catch{return[]}}
+function saveAllAbsences(a){localStorage.setItem(C.LS+'all_absences',JSON.stringify(a));queueAbsSync()}
+function getAbsences(){return getAllAbsences()}
 
 let absSyncTm=null;
 function queueAbsSync(){if(!accessToken)return;clearTimeout(absSyncTm);absSyncTm=setTimeout(async()=>{
-  try{await SP.writeFile('Abwesenheiten/'+user.id+'.json',{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),absences:getAbsences()})}catch(e){console.warn('Abs sync:',e)}
+  try{await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:getAllAbsences()});console.log('[SP] Abwesenheiten gespeichert')}catch(e){console.warn('Abs sync:',e)}
 },2000)}
 
 function countWorkdays(from,to,empId){
@@ -1407,10 +1419,7 @@ $('absSaveBtn').onclick=function(){
   const needsApproval=type==='Ferien'||type==='Unbezahlt'||type==='Sonstiges'||type==='Umzug';
   const autoApproved=type==='Krankheit'||type==='Unfall'||type==='Milit\u00e4r/Zivildienst'||type==='Mutterschaft/Vaterschaft';
   const abs={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:type,from:from,to:to,duration:dur,days:days,note:note,status:autoApproved?'approved':'pending',employeeId:user.id,employeeName:user.name,created:new Date().toISOString(),approvedBy:autoApproved?'Auto':null,approvedAt:autoApproved?new Date().toISOString():null};
-  const all=getAbsences();all.push(abs);saveAbsences(all);
-  // Also add to global list for approvers
-  const glob=getAllAbsences();glob.push(abs);saveAllAbsences(glob);
-  if(accessToken){SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:glob})}
+  const all=getAllAbsences();all.push(abs);saveAllAbsences(all);
   $('absType').value='';$('absNote').value='';
   toast(needsApproval?'Antrag eingereicht - wartet auf Freigabe':'Abwesenheit gespeichert','success');
   renderAbsences();
@@ -1465,9 +1474,7 @@ function renderAbsences(){
 
 function deleteAbsence(id){
   if(!confirm('Antrag wirklich l\u00f6schen?'))return;
-  const abs=getAbsences().filter(a=>a.id!==id);saveAbsences(abs);
-  const glob=getAllAbsences().filter(a=>a.id!==id);saveAllAbsences(glob);
-  if(accessToken)SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:glob});
+  const all=getAllAbsences().filter(a=>a.id!==id);saveAllAbsences(all);
   toast('Gel\u00f6scht','info');renderAbsences();
 }
 
@@ -1479,9 +1486,6 @@ function approveAbsence(id,approved){
   a.approvedBy=user.name;
   a.approvedAt=new Date().toISOString();
   saveAllAbsences(glob);
-  // Also update in employee's local list if it's us
-  if(a.employeeId===user.id){const own=getAbsences();const o=own.find(x=>x.id===id);if(o){o.status=a.status;o.approvedBy=a.approvedBy;o.approvedAt=a.approvedAt;saveAbsences(own)}}
-  if(accessToken)SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:glob});
   toast(approved?'Genehmigt \u2713':'Abgelehnt',approved?'success':'warning');
   renderAbsences();
 }
@@ -1512,12 +1516,16 @@ if($('exportAbsBtn'))$('exportAbsBtn').onclick=function(){
 async function loadAbsencesFromSP(){
   if(!accessToken)return;
   try{
-    // Load own absences
-    const own=await SP.readFile('Abwesenheiten/'+user.id+'.json');
-    if(own&&own.absences){const local=getAbsences();const ids=new Set(local.map(a=>a.id));const merged=[...local];own.absences.forEach(a=>{if(!ids.has(a.id))merged.push(a)});saveAbsences(merged)}
-    // Load all absences (for approvers)
-    const all=await SP.readFile('Abwesenheiten/alle.json');
-    if(all&&all.absences){saveAllAbsences(all.absences)}
+    const data=await SP.readFile('Abwesenheiten/alle.json');
+    if(data&&data.absences){
+      // Merge with local: keep local entries that aren't in SP, update from SP
+      const local=getAllAbsences();
+      const spIds=new Set(data.absences.map(a=>a.id));
+      const localOnly=local.filter(a=>!spIds.has(a.id));
+      const merged=[...data.absences,...localOnly];
+      localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
+      console.log('[SP] Abwesenheiten geladen:',merged.length);
+    }
     renderAbsences();
   }catch(e){console.warn('Abs load:',e)}
 }
