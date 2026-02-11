@@ -296,6 +296,7 @@
     <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="empMgName"></div>
     <div class="form-group"><label class="form-label">E-Mail</label><input type="email" class="form-input" id="empMgEmail" placeholder="name@firma.ch oder privat"></div>
     <div class="form-group"><label class="form-label">Rolle</label><select class="form-select" id="empMgRole"><option value="employee">Mitarbeiter</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div>
+    <div class="form-group"><label class="form-label">Geburtstag</label><input type="date" class="form-input" id="empMgBirthday"></div>
     <div class="modal-actions"><button class="btn btn-secondary" onclick="$('empManageModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveEmpManageModal()">💾 Speichern</button></div>
   </div></div>
 
@@ -322,7 +323,7 @@
   <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">Detaillierter Report pro Mitarbeiter: Alle Einträge, Pausen-Kontrolle und Warnhinweise.</p>
   <div class="form-row">
     <div class="form-group"><label>Kalenderwoche</label><input type="week" id="weeklyReportWeek" class="form-input"></div>
-    <div class="form-group"><label>Mitarbeiter</label><select id="weeklyReportEmp" class="form-input"><option value="all">Alle Mitarbeiter</option></select></div>
+    <div class="form-group"><label>Mitarbeiter</label><div id="weeklyReportEmpFilter" style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;font-size:.8rem"></div></div>
   </div>
   <div style="display:flex;gap:8px;margin-top:12px">
     <button class="btn btn-primary" onclick="showWeeklyReports()">📋 Report anzeigen</button>
@@ -332,6 +333,18 @@
 </div>
 
     <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Mitarbeiter-Report</h2>
+
+<!-- ABWESENHEITSKALENDER (Jahresansicht) -->
+<div class="card">
+  <h3 style="margin-bottom:8px">📅 Abwesenheitskalender</h3>
+  <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">Jahresübersicht: Abwesenheiten, Feiertage, Betriebsferien und Geburtstage aller Mitarbeiter.</p>
+  <div class="form-row" style="margin-bottom:12px">
+    <div class="form-group"><label>Jahr</label><input type="number" id="absCalYear" class="form-input" value="2026" min="2024" max="2030"></div>
+    <div class="form-group"><label>Mitarbeiter</label><div id="absCalEmpFilter" style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;font-size:.8rem"></div></div>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="renderAbsCalendar()" style="margin-bottom:12px">📅 Anzeigen</button>
+  <div id="absCalResult"></div>
+</div>
     <div class="card">
       <div class="card-title">Auswertung für Qualifikationsgespräche</div>
       <div id="reportContent"></div>
@@ -400,8 +413,10 @@
 <div class="modal-overlay" id="recoveryModal"><div class="modal"><div class="modal-title">🔄 Timer wiederherstellen?</div><div id="recoveryBody"></div><div class="modal-actions"><button class="btn btn-secondary" id="recoveryDiscard">Verwerfen</button><button class="btn btn-primary" id="recoveryRestore">Wiederherstellen</button></div></div></div>
 <div class="modal-overlay" id="addProjModal"><div class="modal"><div class="modal-title">➕ Neues Projekt</div><div class="form-group"><label class="form-label">Nr.</label><input type="text" class="form-input" id="newProjId"></div><div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="newProjName"></div><div class="modal-actions"><button class="btn btn-secondary" id="addProjCancel">Abbrechen</button><button class="btn btn-primary" id="addProjSave">Hinzufügen</button></div></div></div>
 <div class="modal-overlay" id="splitModal"><div class="modal" style="max-width:600px"><div class="modal-title">✂️ Zeit aufteilen</div><div id="splitBody"></div><div class="modal-actions"><button class="btn btn-secondary" onclick="$('splitModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveSplitEntries()">✓ Alle speichern</button></div></div></div>
+<div class="modal-overlay" id="segEditModal"><div class="modal"><div class="modal-title">✏️ Segment bearbeiten</div><div id="segEditBody"></div><div class="modal-actions"><button class="btn btn-secondary" onclick="$('segEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" id="segEditSave">Speichern</button></div></div></div>
 <div class="modal-overlay" id="empEditModal"><div class="modal"><div class="modal-title">✏️ <span id="empEditTitle"></span></div>
   <div class="form-group"><label class="form-label">Jahr</label><input type="number" class="form-input" id="empYear" value="2026" min="2024" max="2030"></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Eintrittsdatum</label><input type="date" class="form-input" id="empEintritt" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Austrittsdatum</label><input type="date" class="form-input" id="empAustritt" oninput="calcEmpPreview()"></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="41" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
   <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="23" min="10" max="40" oninput="calcEmpPreview()"></div>
   <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div></div>
@@ -423,6 +438,7 @@
 
 <script>
 const PROJECTS_DATA=[
+{id:"AD1720",name:"Büro Allgemein",aktiv:true},
 {id:"210",name:"Loogartenstrasse 50, 8048 Zürich - Eingangstüre",aktiv:true},
 {id:"209",name:"Lohnarbeiten",aktiv:true},
 {id:"208",name:"In der Luberzen 19, 8902 Urdorf",aktiv:true},
@@ -620,7 +636,6 @@ const PROJECTS_DATA=[
 {id:"3",name:"Faltwand und Festverglasung",aktiv:true},
 {id:"2",name:"Durchbruch Coop",aktiv:true},
 {id:"1",name:"Ferrum",aktiv:true},
-{id:"AD1720",name:"AD1720 – Büro Diverses",aktiv:true},
 {id:"AD1730",name:"AD1730 – Organisation, Vorbereitung, Führung",aktiv:true},
 {id:"AD1740",name:"AD1740 – Marketing",aktiv:true},
 {id:"V1800",name:"V1800 – Verkauf allg.",aktiv:true},
@@ -787,7 +802,7 @@ fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+
   if(!emp)emp=getActiveEmployees().find(e=>e.name.toLowerCase()===profile.displayName.toLowerCase());
   // Fallback: partial email match (before @)
   if(!emp){const localPart=email.split('@')[0];emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase().split('@')[0]===localPart)}
-  if(emp){user={...emp};localStorage.setItem(C.LS+'session',JSON.stringify(user));localStorage.setItem(C.LS+'token',accessToken);console.log('[Auth] Angemeldet als:',emp.name);showApp();SP.fullSync()}
+  if(emp){user={...emp};localStorage.setItem(C.LS+'session',JSON.stringify(user));localStorage.setItem(C.LS+'token',accessToken);setTokenExpiry();console.log('[Auth] Angemeldet als:',emp.name);showApp();SP.fullSync()}
   else{console.warn('[Auth] Email nicht gefunden:',email,'Bekannte:',getActiveEmployees().map(e=>e.email).filter(Boolean).join(', '));toast('Email nicht registriert: '+email+'. Bitte Admin kontaktieren.','error');$('login-screen').style.display='flex'}
 }).catch(e=>{console.error('[Auth]:',e);toast('Login fehlgeschlagen: '+e.message,'error');$('login-screen').style.display='flex'});
 return true}
@@ -837,7 +852,7 @@ const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(s
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif()}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar()}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -858,9 +873,12 @@ $('btnStop').onclick=function(){if(!timer.on)return;clearInterval(timerIv);if(ti
     // Single project - show normal pause dialog
     const sd=new Date(timer.start),ed=new Date();pendingEntry={date:dateKey(sd),startTime:String(sd.getHours()).padStart(2,'0')+':'+String(sd.getMinutes()).padStart(2,'0'),endTime:String(ed.getHours()).padStart(2,'0')+':'+String(ed.getMinutes()).padStart(2,'0'),project:timer.project,kostenstelle:timer.ks,bemerkung:timer.note||''};showPauseDialog(pendingEntry);
   }};
-function tickTimer(){if(!timer.on)return;let el=timer.paused?(timer.pauseAt-timer.start-timer.totalPaused):(Date.now()-timer.start-timer.totalPaused);const s=Math.floor(el/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;$('timerDisplay').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
+let _lateWorkConfirmed=0;
+function tickTimer(){if(!timer.on)return;let el=timer.paused?(timer.pauseAt-timer.start-timer.totalPaused):(Date.now()-timer.start-timer.totalPaused);const s=Math.floor(el/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;$('timerDisplay').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+// After 18:00 warning
+const now=new Date();if(now.getHours()>=18&&!timer.paused&&Date.now()-_lateWorkConfirmed>7200000){_lateWorkConfirmed=Date.now();setTimeout(()=>{if(timer.on&&!timer.paused&&confirm('Es ist nach 18:00 \u2013 Arbeitest du noch?')){_lateWorkConfirmed=Date.now()}else if(timer.on){$('btnStop').click()}},100)}}
 function updateTimerUI(){const st=$('btnStart'),pa=$('btnPause'),sp=$('btnStop'),di=$('timerDisplay'),sw=$('btnSwitch');if(timer.on&&!timer.paused){st.style.display='none';pa.style.display='flex';sp.style.display='flex';di.className='timer-time running';if(sw)sw.style.display='inline-flex'}else if(timer.paused){st.style.display='flex';pa.style.display='none';sp.style.display='flex';di.className='timer-time paused';if(sw)sw.style.display='inline-flex'}else{st.style.display='flex';pa.style.display='none';sp.style.display='none';di.className='timer-time';if(sw)sw.style.display='none'}}
-function resetTimer(){timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};localStorage.removeItem(lk('timer'));$('timerDisplay').textContent='00:00:00';$('timerDisplay').className='timer-time';$('timerProjDisp').textContent='';$('timerIndicator').classList.remove('on');updateTimerUI()}
+function resetTimer(){timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};localStorage.removeItem(lk('timer'));$('timerDisplay').textContent='00:00:00';$('timerDisplay').className='timer-time';$('timerProjDisp').textContent='';$('timerIndicator').classList.remove('on');updateTimerUI();updateSegmentDisplay()}
 
 // PAUSE DIALOG
 function showPauseDialog(e){const sMin=timeToMin(e.startTime),eMin=timeToMin(e.endTime),brutto=eMin-sMin,day=new Date(e.date).getDay(),isFri=day===5,cl=sMin<780&&eMin>720;let h='<div class="pause-summary" style="margin-bottom:16px"><div class="pause-row"><span>Arbeitszeit:</span><span style="font-family:var(--font-mono)">'+e.startTime+' \u2013 '+e.endTime+'</span></div><div class="pause-row"><span>Brutto:</span><span style="font-family:var(--font-mono)">'+fmtMin(brutto)+'</span></div></div><div style="font-weight:600;margin-bottom:8px;font-size:.9rem">Pausen-Abz\u00fcge:</div><div class="pause-opt sel" onclick="toggleZn(this)"><input type="checkbox" id="pZn" checked><label for="pZn">Zn\u00fcni-Pause</label><span class="pt">15 Min</span></div>';if(cl||brutto>360){h+='<div class="pause-opt '+(isFri?'':'sel')+'" onclick="selLunch(this)"><input type="radio" name="lunch" value="60" '+(isFri?'':'checked')+'><label>Normale Mittagspause</label><span class="pt">1h</span></div><div class="pause-opt" onclick="selLunch(this)"><input type="radio" name="lunch" value="30"><label>Kurzer Mittag</label><span class="pt">30 Min</span></div><div class="pause-opt '+(isFri?'sel':'')+'" onclick="selLunch(this)"><input type="radio" name="lunch" value="0" '+(isFri?'checked':'')+'><label>Durchgearbeitet</label><span class="pt">0 Min</span></div>'}h+='<div class="pause-summary" id="nettoDisp"></div>';$('pauseBody').innerHTML=h;$('pauseModal').classList.add('show');calcNetto(brutto)}
@@ -880,9 +898,20 @@ $('recoveryDiscard').onclick=function(){localStorage.removeItem(lk('timer'));$('
 $('manSaveBtn').onclick=function(){const dt=$('manDate').value,st=$('manStart').value,en=$('manEnd').value,pr=$('manProject').value.trim(),ks=$('manKS').value,nt=$('manNote').value.trim();if(!dt||!st||!en){toast('Datum und Zeiten ausf\u00fcllen','warning');return}if(!pr){toast('Projekt w\u00e4hlen','warning');return}if(!ks){toast('Kostenstelle w\u00e4hlen','warning');return}const sM=timeToMin(st),eM=timeToMin(en);if(eM<=sM){toast('Endzeit nach Startzeit','warning');return}const brutto=eM-sM;const hasZnueni=$('manZnueni').checked;const mittagVal=$('manMittag').value;let p=0;if(hasZnueni)p+=15;if(mittagVal==='60min')p+=60;else if(mittagVal==='30min')p+=30;addEntry({date:dt,start:st,end:en,startTime:st,endTime:en,pauseMin:p,durationMin:brutto-p,hours:(brutto-p)/60,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,bemerkung:nt,note:nt,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:mittagVal,mittagsPause:mittagVal,breakMinutes:p});$('manProject').value='';$('manKS').value='';$('manNote').value='';$('manZnueni').checked=true;$('manMittag').value='60min'};
 
 // EDIT/DELETE
-function openEdit(id){const e=getEntries().find(x=>x.id===id);if(!e)return;editId=id;const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option '+(k===e.kostenstelle?'selected':'')+'>'+k+'</option>').join('');$('editBody').innerHTML='<div class="form-row"><div class="form-group"><label class="form-label">Startzeit</label><input type="time" class="form-input" id="edStart" value="'+e.startTime+'"></div><div class="form-group"><label class="form-label">Endzeit</label><input type="time" class="form-input" id="edEnd" value="'+e.endTime+'"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="edProject" value="'+e.project+'" autocomplete="off"><div class="autocomplete-list" id="edProjectAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="edKS"><option value="">\u2014</option>'+ksOpts+'</select></div><div class="form-group"><label class="form-label">Pause (Min)</label><input type="number" class="form-input" id="edPause" value="'+(e.pauseMin||0)+'" min="0" max="120"></div><div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="edNote" value="'+(e.bemerkung||'')+'"></div>';setupAC('edProject','edProjectAC');$('editModal').classList.add('show')}
+function openEdit(id){const e=getEntries().find(x=>x.id===id);if(!e)return;editId=id;const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option '+(k===(e.kostenstelle||e.costCenter)?'selected':'')+'>'+k+'</option>').join('');
+// Detect existing pause type from entry
+let hasZnueni=!!(e.pauseZnueni||e.znueniPause);
+let mittagVal=e.pauseMittag||e.mittagsPause||'none';
+let mittagCustom=0;
+const pm=e.pauseMin||0;
+// Backwards compat: infer from pauseMin if no explicit fields
+if(!hasZnueni&&!mittagVal&&pm>0){if(pm>=75){hasZnueni=true;mittagVal='60min'}else if(pm===60){mittagVal='60min'}else if(pm===45){hasZnueni=true;mittagVal='30min'}else if(pm===30){mittagVal='30min'}else if(pm===15){hasZnueni=true}else{mittagCustom=pm}}
+if(mittagVal!=='none'&&mittagVal!=='60min'&&mittagVal!=='30min'&&mittagVal!=='durchgearbeitet'){mittagCustom=parseInt(mittagVal)||0;mittagVal='custom'}
+$('editBody').innerHTML='<div class="form-row"><div class="form-group"><label class="form-label">Startzeit</label><input type="time" class="form-input" id="edStart" value="'+(e.startTime||e.start||'')+'"></div><div class="form-group"><label class="form-label">Endzeit</label><input type="time" class="form-input" id="edEnd" value="'+(e.endTime||e.end||'')+'"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="edProject" value="'+(e.project||'').replace(/"/g,'&quot;')+'" autocomplete="off"><div class="autocomplete-list" id="edProjectAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="edKS"><option value="">\u2014</option>'+ksOpts+'</select></div><div class="form-group"><label class="form-label">Pausen</label><div style="display:flex;flex-direction:column;gap:8px"><label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer"><input type="checkbox" id="edZnueni" '+(hasZnueni?'checked':'')+' onchange="edUpdatePause()"> \u2615 Zn\u00fcni (15 Min)</label><div style="display:flex;align-items:center;gap:8px;font-size:.85rem"><span>\uD83C\uDF5D Mittag:</span><select class="form-select" id="edMittag" style="width:auto;padding:4px 8px" onchange="edUpdatePause()"><option value="none">Durchgearbeitet</option><option value="30min" '+(mittagVal==='30min'?'selected':'')+'>30 Min</option><option value="60min" '+(mittagVal==='60min'?'selected':'')+'>1 Stunde</option><option value="custom" '+(mittagVal==='custom'?'selected':'')+'>Benutzerdefiniert</option></select></div><div id="edMittagCustomWrap" style="display:'+(mittagVal==='custom'?'block':'none')+'"><input type="number" class="form-input" id="edMittagCustom" value="'+mittagCustom+'" min="0" max="120" placeholder="Minuten" onchange="edUpdatePause()" style="width:100px"></div><div style="font-size:.8rem;color:var(--text-dim)">Total Pause: <strong id="edPauseTotal">'+(pm||0)+' Min</strong></div></div></div><div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="edNote" value="'+(e.bemerkung||e.note||'').replace(/"/g,'&quot;')+'"></div>';
+setupAC('edProject','edProjectAC');edUpdatePause();$('editModal').classList.add('show')}
+function edUpdatePause(){const z=$('edZnueni')&&$('edZnueni').checked?15:0;const mv=$('edMittag')?$('edMittag').value:'none';let m=0;if(mv==='30min')m=30;else if(mv==='60min')m=60;else if(mv==='custom')m=parseInt($('edMittagCustom')&&$('edMittagCustom').value)||0;$('edMittagCustomWrap').style.display=mv==='custom'?'block':'none';const t=z+m;if($('edPauseTotal'))$('edPauseTotal').textContent=t+' Min'}
 $('editCancel').onclick=function(){$('editModal').classList.remove('show');editId=null};
-$('editSave').onclick=function(){if(!editId)return;const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,p=parseInt($('edPause').value)||0,nt=$('edNote').value.trim();if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}updateEntry(editId,{startTime:st,endTime:en,project:pr,kostenstelle:ks,pauseMin:p,durationMin:timeToMin(en)-timeToMin(st)-p,bemerkung:nt});toast('Aktualisiert','success');$('editModal').classList.remove('show');editId=null};
+$('editSave').onclick=function(){if(!editId)return;const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,nt=($('edNote')?$('edNote').value:'').trim();if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}const hasZ=$('edZnueni').checked;const mv=$('edMittag').value;let mMin=0;if(mv==='30min')mMin=30;else if(mv==='60min')mMin=60;else if(mv==='custom')mMin=parseInt($('edMittagCustom').value)||0;const totalPause=( hasZ?15:0)+mMin;updateEntry(editId,{startTime:st,endTime:en,start:st,end:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,pauseMin:totalPause,durationMin:timeToMin(en)-timeToMin(st)-totalPause,bemerkung:nt,note:nt,pauseZnueni:hasZ,znueniPause:hasZ,pauseMittag:mv==='custom'?String(mMin)+'min':mv,mittagsPause:mv==='custom'?String(mMin)+'min':mv,breakMinutes:totalPause});toast('Aktualisiert','success');$('editModal').classList.remove('show');editId=null};
 $('editDelete').onclick=function(){if(!editId)return;if(confirm('Eintrag wirklich l\u00f6schen?')){removeEntry(editId);toast('Gel\u00f6scht','info');$('editModal').classList.remove('show');editId=null}};
 
 // RENDER
@@ -970,7 +999,11 @@ function buildMonthCell(dk,dayNum,otherMonth,isWeekend,entries,absences,holidays
     inner+='<div class="mc-badge absence">'+icon+'</div>';
   }
 
-  return '<div class="'+cls+'" onclick="onCalCellClick(\''+dk+'\')" title="'+dk+(holName?' - '+holName:'')+(bf?' - '+bf.label:'')+'">'+inner+'</div>';
+  // Check birthdays
+  const mmdd=dk.substring(5);
+  const birthdayEmps=EMPLOYEES.filter(e=>e.birthday&&e.birthday.substring(5)===mmdd&&!e.archived);
+  if(birthdayEmps.length)inner+='<div class="mc-badge" style="background:#ec4899;color:#fff;font-size:.6rem">\uD83C\uDF82</div>';
+  return '<div class="'+cls+'" onclick="onCalCellClick(\''+dk+'\')" title="'+dk+(holName?' - '+holName:'')+(bf?' - '+bf.label:'')+(birthdayEmps.length?' - \uD83C\uDF82 '+birthdayEmps.map(e=>e.name.split(' ')[0]).join(', '):'')+'">'+inner+'</div>';
 }
 
 function onCalCellClick(dk){
@@ -999,6 +1032,11 @@ function showCalDayDetail(dk){
   // Betriebsferien check
   const bf=isBetriebsferien(dk);
   if(bf)html+='<div style="background:rgba(99,102,241,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">\uD83C\uDFE2 <strong>'+bf.type+':</strong> '+bf.label+(entries.length?' \u2013 Du hast gearbeitet (kein Ferienabzug)':'')+'</div>';
+
+  // Birthdays
+  const dayMmDd=dk.substring(5);
+  const bdayEmps=EMPLOYEES.filter(e=>e.birthday&&e.birthday.substring(5)===dayMmDd&&!e.archived);
+  if(bdayEmps.length)html+='<div style="background:rgba(236,72,153,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">\uD83C\uDF82 <strong>Geburtstag:</strong> '+bdayEmps.map(e=>e.name).join(', ')+'</div>';
 
   // Absences
   const myAbs=getAbsences().filter(a=>a.employeeId===user.id&&a.from<=dk&&a.to>=dk&&a.status!=='rejected');
@@ -1138,8 +1176,29 @@ function updateSegmentDisplay(){
   let el=$('segmentInfo');
   if(!el){el=document.createElement('div');el.id='segmentInfo';el.style.cssText='margin-top:12px;font-size:.8rem;color:var(--text-dim)';const tc=document.querySelector('#tab-timer .timer-controls');if(tc)tc.parentNode.insertBefore(el,tc.nextSibling)}
   if(!timer.segments||!timer.segments.length){el.innerHTML='';return}
-  const segs=timer.segments.map((s,i)=>{const dur=Math.round((s.end-s.start)/60000);return '<div style="display:flex;justify-content:space-between;padding:4px 8px;background:var(--bg-surface);border-radius:4px;margin-bottom:4px;border-left:3px solid '+(KS_COLORS[s.ks]||'#666')+'"><span>'+s.ks+' \u00b7 '+s.project.substring(0,40)+'</span><span style="font-family:var(--font-mono)">'+fmtH(dur)+'</span></div>'}).join('');
+  const segs=timer.segments.map((s,i)=>{const dur=Math.round((s.end-s.start)/60000);return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--bg-surface);border-radius:4px;margin-bottom:4px;border-left:3px solid '+(KS_COLORS[s.ks]||'#666')+'"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+s.ks+' \u00b7 '+s.project.substring(0,40)+'</span><span style="font-family:var(--font-mono);margin:0 8px">'+fmtH(dur)+'</span><button onclick="editTimerSegment('+i+')" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:2px" title="Bearbeiten">\u270F\uFE0F</button></div>'}).join('');
   el.innerHTML='<div style="font-weight:600;margin-bottom:6px;font-size:.75rem;text-transform:uppercase;color:var(--text-muted)">Bisherige Segmente ('+timer.segments.length+')</div>'+segs;
+}
+
+function editTimerSegment(idx){
+  const seg=timer.segments[idx];if(!seg)return;
+  const dur=Math.round((seg.end-seg.start)/60000);
+  const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option '+(k===seg.ks?'selected':'')+'>'+k+'</option>').join('');
+  $('segEditBody').innerHTML='<p style="color:var(--text-dim);font-size:.85rem;margin-bottom:12px">Segment '+fmtH(dur)+' bearbeiten (Timer l\u00e4uft weiter)</p><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="segEditProj" value="'+seg.project.replace(/"/g,'&quot;')+'" autocomplete="off"><div class="autocomplete-list" id="segEditProjAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="segEditKS"><option value="">--</option>'+ksOpts+'</select></div>';
+  setupAC('segEditProj','segEditProjAC');
+  window._segEditIdx=idx;
+  $('segEditSave').onclick=function(){
+    const proj=$('segEditProj').value.trim();
+    const ks=$('segEditKS').value;
+    if(!proj||!ks){toast('Projekt und KS ausf\u00fcllen','warning');return}
+    timer.segments[window._segEditIdx].project=proj;
+    timer.segments[window._segEditIdx].ks=ks;
+    localStorage.setItem(lk('timer'),JSON.stringify(timer));
+    $('segEditModal').classList.remove('show');
+    updateSegmentDisplay();
+    toast('Segment aktualisiert','success');
+  };
+  $('segEditModal').classList.add('show');
 }
 
 // SPLIT DIALOG (when stopping timer with segments)
@@ -1169,6 +1228,11 @@ function showSplitDialog(totalStart,totalEnd){
     h+='<div class="entry-card" style="border-left-color:'+ksColor+';margin-bottom:8px"><div class="entry-info"><div class="entry-time">'+sTime+' \u2013 '+eTime+' ('+fmtH(segDur)+')</div><div class="entry-meta">'+seg.ks+' \u00b7 '+seg.project+'</div></div><div class="entry-right"><div class="entry-duration" style="color:var(--accent)">'+fmtH(segDur)+'</div></div></div>';
   });
   h+='</div>';
+  h+='<div style="margin-top:12px;padding:12px;background:var(--bg-surface);border-radius:8px"><div style="font-weight:600;margin-bottom:8px;font-size:.85rem">\u2615 Pausen</div>';
+  h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:.85rem">';
+  h+='<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="splitZnueni" checked> Zn\u00fcni (15 Min, 9:00\u20139:15)</label>';
+  h+='<label style="display:flex;align-items:center;gap:6px">Mittag: <select id="splitMittag" class="form-select" style="width:auto;padding:4px 8px"><option value="60min">1h (12:00\u201313:00)</option><option value="30min">30 Min</option><option value="none">Durchgearbeitet</option></select></label>';
+  h+='</div></div>';
   h+='<div style="margin-top:12px"><button class="btn btn-secondary btn-sm" onclick="addSplitRow()" style="width:100%">+ Weiteres Segment hinzuf\u00fcgen</button></div>';
   h+='<div id="extraSplitRows"></div>';
 
@@ -1197,15 +1261,34 @@ function saveSplitEntries(){
   const date=window._splitDate;
   if(!segs.length){$('splitModal').classList.remove('show');return}
 
-  // Save each segment as entry
-  // First ask for pause distribution
   const totalMin=window._splitTotalMin;
-  const day=new Date(date).getDay();
-  const isFri=day===5;
-  // Simple: apply pause to first segment (znueni) and lunch to longest segment
-  let znueni=15;
-  let lunch=0;
-  if(totalMin>360&&!isFri)lunch=60;
+  const empS=user?getEmpSetting(user.id):{...EMP_DEFAULTS};
+  const isRaucher=!!empS.raucher;
+
+  // Smart pause assignment based on time overlap
+  // Znüni: 9:00-9:15 (15min), Mittag: 12:00-13:00 (60min)
+  const znueniStart=9*60, znueniEnd=9*60+15; // 540-555
+  const mittagStart=12*60, mittagEnd=13*60; // 720-780
+
+  // Check user overrides from UI
+  const znueniEnabled=$('splitZnueni')?$('splitZnueni').checked:true;
+  const mittagVal=$('splitMittag')?$('splitMittag').value:'60min';
+  const mittagMin=mittagVal==='60min'?60:mittagVal==='30min'?30:0;
+
+  // Find which segment overlaps znüni/mittag times
+  let znueniSegIdx=-1, mittagSegIdx=-1, longestIdx=0, longestDur=0;
+  segs.forEach((seg,i)=>{
+    const segS=new Date(seg.start);
+    const segE=new Date(seg.end);
+    const sMin=segS.getHours()*60+segS.getMinutes();
+    const eMin=segE.getHours()*60+segE.getMinutes();
+    const dur=Math.round((seg.end-seg.start)/60000);
+    if(dur>longestDur){longestDur=dur;longestIdx=i}
+    // Znüni overlap: segment spans across 9:00-9:15
+    if(sMin<znueniEnd&&eMin>znueniStart)znueniSegIdx=i;
+    // Mittag overlap: segment spans across 12:00-13:00
+    if(sMin<mittagEnd&&eMin>mittagStart)mittagSegIdx=i;
+  });
 
   segs.forEach((seg,i)=>{
     const segDur=Math.round((seg.end-seg.start)/60000);
@@ -1214,11 +1297,24 @@ function saveSplitEntries(){
     const sTime=String(segStart.getHours()).padStart(2,'0')+':'+String(segStart.getMinutes()).padStart(2,'0');
     const eTime=String(segEnd.getHours()).padStart(2,'0')+':'+String(segEnd.getMinutes()).padStart(2,'0');
     let pauseMin=0;
-    if(i===0)pauseMin+=znueni;// Znueni on first segment
-    // Apply lunch to the segment that crosses 12:00
-    const crossesLunch=segStart.getHours()<12&&segEnd.getHours()>=12;
-    if(crossesLunch&&lunch>0){pauseMin+=lunch;lunch=0}
-    addEntry({date:date,startTime:sTime,endTime:eTime,pauseMin:pauseMin,durationMin:segDur-pauseMin,project:seg.project,kostenstelle:seg.ks,bemerkung:seg.note||''});
+    let hasZnueni=false, pauseMittag='none';
+    // Assign Znüni to the segment that overlaps 9:00-9:15
+    if(znueniEnabled&&i===znueniSegIdx){pauseMin+=15;hasZnueni=true}
+    // Assign Mittag to the segment that overlaps 12:00-13:00
+    if(mittagMin>0&&i===mittagSegIdx){pauseMin+=mittagMin;pauseMittag=mittagVal}
+    // Raucher: deduct 15min from longest segment
+    const raucherOnThis=isRaucher&&i===longestIdx;
+
+    addEntry({date:date,startTime:sTime,endTime:eTime,start:sTime,end:eTime,
+      pauseMin:pauseMin,durationMin:segDur-pauseMin,
+      project:seg.project,projectName:seg.project,
+      kostenstelle:seg.ks,costCenter:seg.ks,
+      bemerkung:seg.note||'',note:seg.note||'',
+      pauseZnueni:hasZnueni,znueniPause:hasZnueni,
+      pauseMittag:pauseMittag,mittagsPause:pauseMittag,
+      breakMinutes:pauseMin,
+      raucherAbzug:raucherOnThis?15:0
+    });
   });
 
   // Also save any extra manual split rows
@@ -1232,7 +1328,7 @@ function saveSplitEntries(){
       const ks=row.querySelector('[class*=split-ks]');
       if(st&&en&&pr&&ks&&st.value&&en.value&&pr.value&&ks.value){
         const sM=timeToMin(st.value),eM=timeToMin(en.value);
-        if(eM>sM){addEntry({date:date,startTime:st.value,endTime:en.value,pauseMin:0,durationMin:eM-sM,project:pr.value,kostenstelle:ks.value,bemerkung:''})}
+        if(eM>sM){addEntry({date:date,startTime:st.value,endTime:en.value,start:st.value,end:en.value,pauseMin:0,durationMin:eM-sM,project:pr.value,projectName:pr.value,kostenstelle:ks.value,costCenter:ks.value,bemerkung:'',note:''})}
       }
     }
   }
@@ -1245,7 +1341,31 @@ function saveSplitEntries(){
 
 
 // EMPLOYEE SETTINGS (Admin only)
-const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear()};
+const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear(),eintritt:null,austritt:null};
+
+// Pro-rata Ferienanspruch based on Eintritt/Austritt
+function calcFerienAnspruch(empId,year){
+  const s=getEmpSetting(empId);
+  const ferienTage=s.ferienTage||23;
+  const pensum=s.pensum||100;
+  const eintritt=s.eintritt||null;
+  const austritt=s.austritt||null;
+  const yrStart=year+'-01-01';
+  const yrEnd=year+'-12-31';
+  // If fully employed all year
+  if((!eintritt||eintritt<=yrStart)&&(!austritt||austritt>=yrEnd)){
+    return Math.round(ferienTage*(pensum/100)*10)/10;
+  }
+  // Pro-rata: count active months
+  const start=eintritt&&eintritt>yrStart?new Date(eintritt):new Date(yrStart);
+  const end=austritt&&austritt<yrEnd?new Date(austritt):new Date(yrEnd);
+  if(start>end)return 0;
+  // Calculate months (round up partial months)
+  let months=(end.getFullYear()-start.getFullYear())*12+(end.getMonth()-start.getMonth());
+  if(end.getDate()>=15||end.getMonth()!==start.getMonth())months+=1;
+  months=Math.min(months,12);
+  return Math.round(ferienTage*(pensum/100)*(months/12)*10)/10;
+}
 function getEmpSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'emp_settings'))||{}}catch{return{}}}
 function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s).then(()=>console.log('[SP] emp_settings gespeichert')).catch(e=>console.warn('[SP] emp_settings Fehler:',e))}
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
@@ -1284,6 +1404,8 @@ function openEmpEdit(empId){
   $('empUeStd').value=s.ueberstundenUebertrag||0;
   $('empYear').value=s.year||new Date().getFullYear();
   $('empRaucher').checked=!!s.raucher;
+  $('empEintritt').value=s.eintritt||'';
+  $('empAustritt').value=s.austritt||'';
   // Set checkboxes
   [1,2,3,4,5].forEach(d=>{const cb=$('empTag'+d);if(cb)cb.checked=tage.includes(d)});
   renderTempPensumList();
@@ -1297,12 +1419,26 @@ function calcEmpPreview(){
   const weekH=parseFloat($('empWeekH').value)||41;
   const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
   const raucher=$('empRaucher').checked;
-  const ferienAnspruch=Math.round(ferien*(pensum/100)*10)/10;
+  const eintritt=$('empEintritt').value||null;
+  const austritt=$('empAustritt').value||null;
+  const yr=parseInt($('empYear').value)||new Date().getFullYear();
+  let ferienAnspruch=Math.round(ferien*(pensum/100)*10)/10;
+  let proRataInfo='';
+  const yrStart=yr+'-01-01',yrEnd=yr+'-12-31';
+  if((eintritt&&eintritt>yrStart)||(austritt&&austritt<yrEnd)){
+    const start=eintritt&&eintritt>yrStart?new Date(eintritt):new Date(yrStart);
+    const end=austritt&&austritt<yrEnd?new Date(austritt):new Date(yrEnd);
+    let months=(end.getFullYear()-start.getFullYear())*12+(end.getMonth()-start.getMonth());
+    if(end.getDate()>=15||end.getMonth()!==start.getMonth())months+=1;
+    months=Math.min(months,12);
+    ferienAnspruch=Math.round(ferien*(pensum/100)*(months/12)*10)/10;
+    proRataInfo='<div class="pause-row" style="color:var(--warning)"><span>\u26A0\uFE0F Pro-rata ('+months+'/12 Monate):</span><span>'+ferienAnspruch+' Tage</span></div>';
+  }
   const tagesH=tage.length>0?Math.round(weekH/tage.length*100)/100:0;
   const raucherAbzug=raucher?tage.length*15:0;
   const raucherH=Math.round(raucherAbzug/60*100)/100;
   const prev=$('empPreview');
-  if(prev)prev.innerHTML='<div class="pause-summary"><div class="pause-row"><span>Pensum:</span><span>'+pensum+'%</span></div><div class="pause-row"><span>Arbeitstage:</span><span>'+tage.map(d=>DAY_LABELS[d]).join(', ')+'</span></div><div class="pause-row"><span>Soll/Tag:</span><span style="font-family:var(--font-mono)">'+tagesH+'h</span></div><div class="pause-row"><span>Soll/Woche:</span><span style="font-family:var(--font-mono)">'+weekH+'h</span></div>'+(raucher?'<div class="pause-row" style="color:var(--warning)"><span>🚬 Raucherabzug/Woche:</span><span style="font-family:var(--font-mono)">−'+raucherH+'h ('+raucherAbzug+' Min)</span></div>':'')+'<div class="pause-row total"><span>Ferienanspruch:</span><span>'+ferienAnspruch+' Tage</span></div></div>';
+  if(prev)prev.innerHTML='<div class="pause-summary"><div class="pause-row"><span>Pensum:</span><span>'+pensum+'%</span></div>'+(eintritt?'<div class="pause-row"><span>Eintritt:</span><span>'+fmtDate(eintritt)+'</span></div>':'')+(austritt?'<div class="pause-row"><span>Austritt:</span><span>'+fmtDate(austritt)+'</span></div>':'')+'<div class="pause-row"><span>Arbeitstage:</span><span>'+tage.map(d=>DAY_LABELS[d]).join(', ')+'</span></div><div class="pause-row"><span>Soll/Tag:</span><span style="font-family:var(--font-mono)">'+tagesH+'h</span></div><div class="pause-row"><span>Soll/Woche:</span><span style="font-family:var(--font-mono)">'+weekH+'h</span></div>'+(raucher?'<div class="pause-row" style="color:var(--warning)"><span>\uD83D\uDEAC Raucherabzug/Woche:</span><span style="font-family:var(--font-mono)">\u2212'+raucherH+'h ('+raucherAbzug+' Min)</span></div>':'')+proRataInfo+'<div class="pause-row total"><span>Ferienanspruch '+yr+':</span><span>'+ferienAnspruch+' Tage</span></div></div>';
 }
 
 function saveEmpEdit(){
@@ -1320,7 +1456,9 @@ function saveEmpEdit(){
     ueberstundenUebertrag:parseFloat($('empUeStd').value)||0,
     raucher:$('empRaucher').checked,
     tempPensum:tp,
-    year:parseInt($('empYear').value)||new Date().getFullYear()
+    year:parseInt($('empYear').value)||new Date().getFullYear(),
+    eintritt:$('empEintritt').value||null,
+    austritt:$('empAustritt').value||null
   });
   $('empEditModal').classList.remove('show');
   toast('Einstellungen gespeichert','success');
@@ -1419,25 +1557,27 @@ function calcSollHours(empId,from,to,s,workDays){
   const allAbs=getAllAbsences().filter(a=>a.employeeId===empId&&a.status==='approved'&&a.from<=to&&a.to>=from);
   const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
   const normalH=(s.weekHours||41)/arbeitsTage.length;
+  const eintritt=s.eintritt||null;
+  const austritt=s.austritt||null;
   let total=0;
   const d=new Date(from);const end=new Date(to);
   while(d<=end){
     const day=d.getDay();
     const dk=dateKey(d);
+    // Skip days outside employment period
+    if(eintritt&&dk<eintritt){d.setDate(d.getDate()+1);continue}
+    if(austritt&&dk>austritt){d.setDate(d.getDate()+1);continue}
     if(arbeitsTage.includes(day)){
       const hol=getHolidays(d.getFullYear());
       if(!hol[dk]){
-        // Check Betriebsferien: if BF and no entry, Soll=0
         const bfDay=bf.find(b=>dk>=b.from&&dk<=b.to);
         if(bfDay&&!entryDates.has(dk)){
           // BF day without work - no Soll
         }else{
-          // Check approved full-day absences (Ferien, Krankheit, Unfall etc.)
           const absDay=allAbs.find(a=>dk>=a.from&&dk<=a.to&&a.duration==='full');
           if(absDay&&!entryDates.has(dk)){
-            // Approved full-day absence without work - no Soll
+            // Approved full-day absence - no Soll
           }else{
-            // Half-day absence: half Soll
             const absHalf=allAbs.find(a=>dk>=a.from&&dk<=a.to&&(a.duration==='morning'||a.duration==='afternoon'));
             const active=tp.find(t=>dk>=t.von&&dk<=t.bis);
             let dayH=normalH;
@@ -1481,7 +1621,7 @@ function renderAbsences(){
   const pendingDays=yearAbs.filter(a=>a.status==='pending').reduce((s,a)=>s+a.days,0);
   // Get employee settings for proper calculation
   const empS=user?getEmpSetting(user.id):{...EMP_DEFAULTS};
-  const ferienAnspruch=Math.round(empS.ferienTage*(empS.pensum/100)*10)/10;
+  const ferienAnspruch=calcFerienAnspruch(user.id,parseInt(year));
   const ferienTotal=ferienAnspruch+(empS.ferienUebertrag||0);
   const bfDaysOwn=user?countBetriebsferienDays(user.id,year+'-01-01',year+'-12-31'):0;
   const ferienBezogen=ferienDays+bfDaysOwn;
@@ -1596,10 +1736,12 @@ function renderReportTab(){
     const weekNum = Math.ceil((((now - startOfYear) / 86400000) + startOfYear.getDay() + 1) / 7);
     const wi = $('weeklyReportWeek');
     if(wi && !wi.value) wi.value = yr + '-W' + String(weekNum).padStart(2, '0');
-    // Populate employee dropdown
-    const sel = $('weeklyReportEmp');
-    if(sel && sel.options.length <= 1) {
-      EMPLOYEES.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+    // Populate employee filter checkboxes
+    const filterDiv = $('weeklyReportEmpFilter');
+    if(filterDiv && !filterDiv.children.length) {
+      let fhtml='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="weeklyAllCB" checked onchange="document.querySelectorAll(\'.weeklyEmpCB\').forEach(c=>c.checked=this.checked)"> Alle</label>';
+      EMPLOYEES.forEach(e => { fhtml+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="weeklyEmpCB" value="'+e.id+'" checked> '+e.name+'</label>'; });
+      filterDiv.innerHTML=fhtml;
     }
   }
 
@@ -1772,11 +1914,12 @@ function showWeeklyReports() {
   }
   weekStart.setHours(0,0,0,0);
 
-  const empFilter = $('weeklyReportEmp')?.value || 'all';
+  const selEmpIds=new Set();
+  document.querySelectorAll('.weeklyEmpCB:checked').forEach(cb=>selEmpIds.add(cb.value));
   const container = $('weeklyReportResult');
   if(!container) return;
 
-  const emps = empFilter === 'all' ? EMPLOYEES : EMPLOYEES.filter(e=>e.id===empFilter);
+  const emps = selEmpIds.size===0?EMPLOYEES:EMPLOYEES.filter(e=>selEmpIds.has(e.id));
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate()+6);
   const fromStr = weekStart.toISOString().split('T')[0];
@@ -1804,7 +1947,7 @@ function showWeeklyReports() {
     entries.forEach(e => {
       if(days[e.date]) {
         days[e.date].entries.push(e);
-        days[e.date].totalHours += (e.hours || (e.durationMin ? e.durationMin/60 : 0));
+        days[e.date].totalHours += (e.durationMin ? e.durationMin/60 : e.hours || 0);
       }
     });
 
@@ -1885,15 +2028,16 @@ function showWeeklyReports() {
       html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + (dayTpActive?' <span style="color:var(--danger);font-size:.72rem;font-weight:400">(reduziert '+dayTpActive.pensum+'%)</span>':'') + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
 
       if(day.entries.length > 0) {
-        day.entries.sort((a,b)=>(a.start||'').localeCompare(b.start||'')).forEach(e => {
+        day.entries.sort((a,b)=>(a.startTime||a.start||'').localeCompare(b.startTime||b.start||'')).forEach(e => {
           const proj = e.projectName || e.project || '-';
-          const ks = e.costCenter || '-';
-          const zeit = (e.start||'?') + '\u2013' + (e.end||'?');
+          const ks = e.kostenstelle || e.costCenter || '-';
+          const zeit = (e.startTime||e.start||'?') + '\u2013' + (e.endTime||e.end||'?');
           let pause = '';
           if(e.pauseZnueni || e.znueniPause) pause += 'Zn\u00fcni \u2713 ';
           if(e.pauseMittag && e.pauseMittag !== 'none') pause += 'Mittag: ' + (e.pauseMittag==='60min'?'1h':e.pauseMittag==='30min'?'30min':'durchgearbeitet') + ' ';
           if(e.mittagsPause && e.mittagsPause !== 'none') pause += 'Mittag: ' + (e.mittagsPause==='60min'?'1h':e.mittagsPause==='30min'?'30min':'durchgearbeitet') + ' ';
           if(e.breakMinutes) pause += '(Pause: ' + e.breakMinutes + 'min)';
+          if(!pause && e.pauseMin > 0) pause = 'Pause: ' + e.pauseMin + 'min';
           if(!pause) pause = '<span class="text-dim">Keine Pauseninfo</span>';
           html += '<div class="report-entry"><div class="report-entry-time">' + zeit + '</div>';
           html += '<div class="report-entry-detail">' + proj + ' <span class="text-dim">\u00b7 ' + ks + '</span></div>';
@@ -2353,11 +2497,12 @@ async function loadBetriebsferienFromSP(){
 // ==================== MITARBEITER VERWALTEN ====================
 function renderEmpManagement(){
   const el=$('empManageList');if(!el)return;
-  let html='<table class="mae-table"><thead><tr><th>MA-Nr</th><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktion</th></tr></thead><tbody>';
+  let html='<table class="mae-table"><thead><tr><th>MA-Nr</th><th>Name</th><th>E-Mail</th><th>Rolle</th><th>\uD83C\uDF82</th><th>Status</th><th>Aktion</th></tr></thead><tbody>';
   EMPLOYEES.forEach(e=>{
     const role=e.admin?'Admin':e.approver?'Approver':'Mitarbeiter';
     const archived=e.archived;
-    html+='<tr style="'+(archived?'opacity:.5':'')+'"><td>'+e.id+'</td><td>'+e.name+'</td><td style="font-size:.75rem">'+(e.email||'<span style="color:var(--danger)">fehlt</span>')+'</td><td>'+role+'</td><td>'+(archived?'\uD83D\uDD12 Archiviert'+(e.archivedDate?' ('+fmtDate(e.archivedDate)+')':''):'\u2705 Aktiv')+'</td><td class="mae-actions"><button onclick="openEmpEditModal(\''+e.id+'\')" title="Bearbeiten">\u270F\uFE0F</button>'+(archived?'<button onclick="reactivateEmployee(\''+e.id+'\')" title="Reaktivieren">\u267B\uFE0F</button>':'<button onclick="archiveEmployee(\''+e.id+'\')" title="Archivieren">\uD83D\uDD12</button>')+'</td></tr>';
+    const bdStr=e.birthday?fmtDate(e.birthday):'';
+    html+='<tr style="'+(archived?'opacity:.5':'')+'"><td>'+e.id+'</td><td>'+e.name+'</td><td style="font-size:.75rem">'+(e.email||'<span style="color:var(--danger)">fehlt</span>')+'</td><td>'+role+'</td><td style="font-size:.75rem">'+bdStr+'</td><td>'+(archived?'\uD83D\uDD12 Archiviert'+(e.archivedDate?' ('+fmtDate(e.archivedDate)+')':''):'\u2705 Aktiv')+'</td><td class="mae-actions"><button onclick="openEmpEditModal(\''+e.id+'\')" title="Bearbeiten">\u270F\uFE0F</button>'+(archived?'<button onclick="reactivateEmployee(\''+e.id+'\')" title="Reaktivieren">\u267B\uFE0F</button>':'<button onclick="archiveEmployee(\''+e.id+'\')" title="Archivieren">\uD83D\uDD12</button>')+'</td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -2685,6 +2830,7 @@ function openEmpEditModal(id){
   $('empMgName').value=emp.name;
   $('empMgEmail').value=emp.email||'';
   $('empMgRole').value=emp.admin?'admin':emp.approver?'approver':'employee';
+  $('empMgBirthday').value=emp.birthday||'';
   $('empManageModal').classList.add('show');
 }
 
@@ -2693,9 +2839,11 @@ function saveEmpManageModal(){
   const name=$('empMgName').value.trim();
   const email=$('empMgEmail').value.trim();
   const role=$('empMgRole').value;
+  const birthday=$('empMgBirthday').value||null;
   if(!name){toast('Name eingeben','warning');return}
   emp.name=name;
   emp.email=email||null;
+  emp.birthday=birthday;
   emp.admin=role==='admin';
   emp.approver=role==='approver'||role==='admin';
   saveEmployees(EMPLOYEES);
@@ -2761,6 +2909,186 @@ function checkMyNotifications(){
   }
 }
 setInterval(checkMyNotifications,60000);
+
+// ============================================================
+// TOKEN REFRESH + AUTO-SYNC ON TAB FOCUS
+// ============================================================
+let _tokenExpiry=null;
+function setTokenExpiry(){_tokenExpiry=Date.now()+3300000} // 55 min (tokens last ~60min)
+function isTokenExpired(){return _tokenExpiry&&Date.now()>_tokenExpiry}
+
+function silentRefreshToken(){
+  if(!accessToken)return;
+  console.log('[Auth] Versuche silent token refresh...');
+  const authUrl='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
+  const iframe=document.createElement('iframe');
+  iframe.style.display='none';
+  iframe.src=authUrl;
+  iframe.onload=function(){
+    try{
+      const hash=iframe.contentWindow.location.hash;
+      if(hash&&hash.includes('access_token')){
+        const p=new URLSearchParams(hash.slice(1));
+        accessToken=p.get('access_token');
+        localStorage.setItem(C.LS+'token',accessToken);
+        setTokenExpiry();
+        setSyncStatus('online');
+        console.log('[Auth] Token erneuert');
+      }
+    }catch(e){
+      // Cross-origin error is expected if silent refresh fails
+      console.warn('[Auth] Silent refresh fehlgeschlagen - manueller Login nötig');
+    }
+    document.body.removeChild(iframe);
+  };
+  document.body.appendChild(iframe);
+}
+
+// Token refresh every 45 minutes
+setInterval(()=>{if(accessToken&&isTokenExpired())silentRefreshToken()},2700000);
+
+// On tab focus: check token + sync
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'&&user){
+    console.log('[Sync] Tab aktiv - prüfe Verbindung');
+    if(accessToken){
+      if(isTokenExpired()){
+        silentRefreshToken();
+      }
+      // Re-sync on tab focus
+      SP.getDriveId().then(driveId=>{
+        if(driveId){
+          setSyncStatus('syncing');
+          Promise.all([
+            SP.saveEntries(),
+            loadAbsencesFromSP(),
+            loadEmpSettingsFromSP(),
+            loadEmployeesFromSP()
+          ]).then(()=>{
+            setSyncStatus('online');
+            refreshView();
+          }).catch(e=>{
+            console.warn('[Sync] Tab-Sync fehlgeschlagen:',e.message);
+            if(e.message.includes('401')||e.message.includes('403')){
+              toast('⚠️ Sitzung abgelaufen - bitte neu anmelden','warning');
+              setSyncStatus('offline');
+            }else{
+              toast('⚠️ Synchronisation fehlgeschlagen','warning');
+              setSyncStatus('offline');
+            }
+          });
+        }
+      }).catch(()=>{});
+    }
+    // Check notifications
+    if(typeof checkMyNotifications==='function')checkMyNotifications();
+  }
+});
+
+// Wrap gf to handle 401 with push notification
+const _origGf=SP.gf;
+SP.gf=async function(ep,opts){
+  try{return await _origGf.call(SP,ep,opts)}
+  catch(e){
+    if(e.message.includes('401')){
+      setSyncStatus('offline');
+      if(Notification.permission==='granted'){
+        new Notification('Hubler Zeiterfassung',{body:'⚠️ Sitzung abgelaufen - bitte App öffnen und neu anmelden',icon:'⚠️'});
+      }
+    }
+    throw e;
+  }
+};
+
+
+// ============================================================
+// ABWESENHEITSKALENDER (Report Tab)
+// ============================================================
+function initAbsCalendar(){
+  const yr=$('absCalYear');
+  if(!yr)return;
+  yr.value=new Date().getFullYear();
+  const container=$('absCalEmpFilter');
+  if(!container)return;
+  let html='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="absCalAll" checked onchange="absCalToggleAll(this.checked)"> Alle</label>';
+  getActiveEmployees().forEach(e=>{
+    html+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="absCalEmpCB" value="'+e.id+'" checked> '+e.name+'</label>';
+  });
+  container.innerHTML=html;
+}
+function absCalToggleAll(checked){
+  document.querySelectorAll('.absCalEmpCB').forEach(cb=>cb.checked=checked);
+}
+
+function renderAbsCalendar(){
+  const yr=parseInt($('absCalYear').value)||new Date().getFullYear();
+  const selEmps=new Set();
+  document.querySelectorAll('.absCalEmpCB:checked').forEach(cb=>selEmps.add(cb.value));
+  if(!selEmps.size){toast('Mindestens einen MA w\u00e4hlen','warning');return}
+
+  const emps=getActiveEmployees().filter(e=>selEmps.has(e.id));
+  const fromStr=yr+'-01-01';
+  const toStr=yr+'-12-31';
+  const allAbs=getAllAbsences().filter(a=>a.from<=toStr&&a.to>=fromStr&&a.status!=='rejected');
+  const holidays=getHolidays(yr);
+  const bf=getBetriebsferien().filter(b=>b.from<=toStr&&b.to>=fromStr);
+  const MO=['Jan','Feb','M\u00e4r','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+  let html='';
+  // One table per employee
+  emps.forEach(emp=>{
+    const s=getEmpSetting(emp.id);
+    html+='<div style="margin-bottom:20px"><div style="font-weight:600;font-size:.9rem;margin-bottom:6px">'+emp.name+'</div>';
+    html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.6rem;line-height:1">';
+    for(let mo=0;mo<12;mo++){
+      const daysInMonth=new Date(yr,mo+1,0).getDate();
+      // Month header row
+      html+='<tr><td style="padding:2px 4px;font-weight:600;font-size:.7rem;background:var(--bg-surface);position:sticky;left:0;min-width:36px;border-bottom:1px solid var(--border)">'+MO[mo]+'</td>';
+      for(let d=1;d<=31;d++){
+        if(d>daysInMonth){html+='<td style="padding:1px;min-width:16px"></td>';continue}
+        const dk=yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        const dt=new Date(yr,mo,d);
+        const dow=dt.getDay();
+        const isWe=dow===0||dow===6;
+        const isHol=!!holidays[dk];
+        const isBf=bf.find(b=>dk>=b.from&&dk<=b.to);
+        const abs=allAbs.find(a=>a.employeeId===emp.id&&dk>=a.from&&dk<=a.to);
+        const bdayMatch=emp.birthday&&emp.birthday.substring(5)===dk.substring(5);
+        // Outside employment period
+        const beforeEintritt=s.eintritt&&dk<s.eintritt;
+        const afterAustritt=s.austritt&&dk>s.austritt;
+
+        let bg='transparent';let icon='';let title=d+'.'+MO[mo];
+        if(beforeEintritt||afterAustritt){bg='rgba(255,255,255,.02)';icon='';title+=' (nicht angestellt)'}
+        else if(isHol){bg='rgba(239,68,68,.2)';icon='\uD83C\uDF89';title+=' '+holidays[dk]}
+        else if(isBf&&!abs){bg='rgba(99,102,241,.2)';icon='\uD83C\uDFE2';title+=' BF'}
+        if(abs&&!beforeEintritt&&!afterAustritt){
+          const ABS_BG={'Ferien':'rgba(34,197,94,.3)','Krankheit':'rgba(239,68,68,.3)','Unfall':'rgba(249,115,22,.3)','Milit\u00e4r/Zivildienst':'rgba(107,114,128,.3)','Mutterschaft/Vaterschaft':'rgba(168,85,247,.3)','Umzug':'rgba(59,130,246,.3)','Unbezahlt':'rgba(156,163,175,.3)','Sonstiges':'rgba(156,163,175,.3)'};
+          bg=ABS_BG[abs.type]||'rgba(156,163,175,.3)';
+          icon=(ABS_TYPES[abs.type]||'');
+          title+=' '+abs.type+(abs.status==='pending'?' (pendent)':'');
+        }
+        if(bdayMatch&&!beforeEintritt){icon='\uD83C\uDF82';title+=' Geburtstag'}
+        const border=isWe?'background:rgba(255,255,255,.04);':'';
+
+        html+='<td style="padding:0;text-align:center;min-width:16px;height:18px;border:1px solid rgba(255,255,255,.05);'+border+'background:'+bg+';font-size:.55rem;cursor:default" title="'+title+'">'+icon+'</td>';
+      }
+      html+='</tr>';
+    }
+    html+='</table></div></div>';
+  });
+
+  // Legend
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:.7rem;color:var(--text-dim)">';
+  html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,.3)"></span> Ferien</span>';
+  html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,.3)"></span> Krankheit</span>';
+  html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,.3)"></span> Unfall</span>';
+  html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(99,102,241,.2)"></span> BF</span>';
+  html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,.2)"></span> Feiertag</span>';
+  html+='<span>\uD83C\uDF82 Geburtstag</span></div>';
+
+  $('absCalResult').innerHTML=html;
+}
 
 </script>
 </body>
