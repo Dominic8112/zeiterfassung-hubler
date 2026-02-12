@@ -145,7 +145,7 @@
     <div style="text-align:center;margin-top:8px"><button class="btn btn-secondary btn-sm" id="btnSwitch" style="display:none" onclick="switchProject()">🔄 Projekt wechseln</button></div>
     <div id="segmentInfo"></div>
     <div style="margin-top:1.5rem">
-      <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt <span class="req">*</span></label><input type="text" class="form-input" id="timerProject" placeholder="Nummer oder Name..." autocomplete="off"><div class="autocomplete-list" id="timerProjectAC"></div></div>
+      <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt <span class="req">*</span></label><div style="position:relative"><input type="text" class="form-input" id="timerProject" placeholder="Nummer oder Name..." autocomplete="off" style="padding-right:32px"><button type="button" id="timerProjClear" onclick="$('timerProject').value='';$('timerProject').focus();this.style.display='none'" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-dim);padding:4px;display:none" title="Projekt löschen">✕</button></div><div class="autocomplete-list" id="timerProjectAC"></div></div>
       <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="timerKS"><option value="">— Bitte wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
       <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="timerNote" placeholder="Optional..."></div>
     </div>
@@ -983,18 +983,24 @@ function buildMonthCell(dk,dayNum,otherMonth,isWeekend,entries,absences,holidays
   const bf=isBetriebsferien(dk);
   const hasEntries=dayEntries.length>0;
 
+  // Check employment period
+  const empS=user?getEmpSetting(user.id):null;
+  const outsideEmployment=empS&&((empS.eintritt&&dk<empS.eintritt)||(empS.austritt&&dk>empS.austritt));
+
   let cls='month-cell';
   if(otherMonth)cls+=' other-month';
   if(isWeekend)cls+=' weekend';
   if(isToday)cls+=' today';
   if(isSel)cls+=' selected';
+  if(outsideEmployment)cls+=' other-month'; // dim like other-month
 
   let inner='<div class="mc-day">'+dayNum+'</div>';
-  if(hasEntries)inner+='<div class="mc-hours">'+fmtH(totalMin)+'</div>';
-  if(holName)inner+='<div class="mc-badge holiday">Feiertag</div>';
-  else if(bf&&!hasEntries)inner+='<div class="mc-badge" style="background:#6366f1;color:#fff">'+(bf.type==='Betriebsferien'?'\uD83C\uDFE2':'\uD83C\uDF09')+'</div>';
-  else if(bf&&hasEntries)inner+='<div class="mc-badge has-entries">\uD83C\uDFE2\u2713</div>';
-  else if(abs){
+  if(outsideEmployment){inner+='<div class="mc-badge" style="background:rgba(156,163,175,.3);color:#fff;font-size:.55rem">\u2013</div>'}
+  else if(hasEntries)inner+='<div class="mc-hours">'+fmtH(totalMin)+'</div>';
+  if(!outsideEmployment&&holName)inner+='<div class="mc-badge holiday">Feiertag</div>';
+  else if(!outsideEmployment&&bf&&!hasEntries)inner+='<div class="mc-badge" style="background:#6366f1;color:#fff">'+(bf.type==='Betriebsferien'?'\uD83C\uDFE2':'\uD83C\uDF09')+'</div>';
+  else if(!outsideEmployment&&bf&&hasEntries)inner+='<div class="mc-badge has-entries">\uD83C\uDFE2\u2713</div>';
+  else if(!outsideEmployment&&abs){
     const icon=ABS_TYPES[abs.type]||'';
     inner+='<div class="mc-badge absence">'+icon+'</div>';
   }
@@ -1050,7 +1056,12 @@ function showCalDayDetail(dk){
   if(user){
     const empS=getEmpSetting(user.id);
     const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
-    if(arbeitsTage.includes(dow)&&!hol){
+    // Check employment period
+    const beforeEintritt=empS.eintritt&&dk<empS.eintritt;
+    const afterAustritt=empS.austritt&&dk>empS.austritt;
+    if(beforeEintritt)html+='<div style="background:rgba(156,163,175,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">\u26A0\uFE0F Vor Eintrittsdatum ('+fmtDate(empS.eintritt)+')</div>';
+    if(afterAustritt)html+='<div style="background:rgba(156,163,175,.12);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:.85rem">\u26A0\uFE0F Nach Austrittsdatum ('+fmtDate(empS.austritt)+')</div>';
+    if(arbeitsTage.includes(dow)&&!hol&&!beforeEintritt&&!afterAustritt){
       const raucherMin=empS.raucher&&entries.length?15:0;
       const istMin=total-raucherMin;
       const effS=getEffectiveSettings(user.id,dk);
@@ -1379,7 +1390,7 @@ function renderEmpSettings(){
   el.innerHTML=EMPLOYEES.map(emp=>{
     const s=settings[emp.id]||{...EMP_DEFAULTS};
     const tageStr=(s.arbeitsTage||[1,2,3,4,5]).map(d=>DAY_LABELS[d]||d).join(', ');
-    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
+    const ferienAnspruch=calcFerienAnspruch(emp.id,s.year||new Date().getFullYear());
     const tp=s.tempPensum||[];
     const today=todayKey();
     const activeTp=tp.find(t=>today>=t.von&&today<=t.bis);
@@ -1780,7 +1791,7 @@ function generateReport(){
     const workDays=countWorkdays(range.from,range.to,emp.id);
     const sollH=calcSollHours(emp.id,range.from,range.to,s,workDays);
     const diffH=Math.round((totalH-sollH)*10)/10;
-    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10;
+    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)));
     const ferienTotal=ferienAnspruch+(s.ferienUebertrag||0);
     const ferienBezogen=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
     const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
@@ -1879,7 +1890,7 @@ function exportReportCSV(){
     const totalH=Math.round(totalMin/6)/10;
     const workDays=countWorkdays(range.from,range.to,emp.id);
     const sollH=Math.round(calcSollHours(emp.id,range.from,range.to,s,workDays)*10)/10;
-    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10+(s.ferienUebertrag||0);
+    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)))+(s.ferienUebertrag||0);
     const ferienBez=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
     const krankT=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')).reduce((sum,a)=>sum+a.days,0);
     csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+(s.raucher?'Ja':'Nein')+';'+s.weekHours+';'+totalH+';'+Math.round(raucherMin/60*10)/10+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+(s.ferienUebertrag||0)+';'+(s.ueberstundenUebertrag||0)+';'+krankT+';'+entries.length+'\n';
@@ -1922,8 +1933,8 @@ function showWeeklyReports() {
   const emps = selEmpIds.size===0?EMPLOYEES:EMPLOYEES.filter(e=>selEmpIds.has(e.id));
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate()+6);
-  const fromStr = weekStart.toISOString().split('T')[0];
-  const toStr = weekEnd.toISOString().split('T')[0];
+  const fromStr = dateKey(weekStart);
+  const toStr = dateKey(weekEnd);
 
   // Use same approach as working generateReport: getEntriesForEmployee (localStorage)
   let html = '';
@@ -1940,7 +1951,7 @@ function showWeeklyReports() {
     for(let i=0;i<7;i++){
       const d = new Date(weekStart);
       d.setDate(weekStart.getDate()+i);
-      const key = d.toISOString().split('T')[0];
+      const key = dateKey(d);
       days[key] = {date:key, dow:d.getDay(), entries:[], totalHours:0, warnings:[]};
     }
 
@@ -2022,7 +2033,7 @@ function showWeeklyReports() {
       if(day.dow === 0 || day.dow === 6) return;
       totalWeekH += day.totalHours;
       totalWarn += day.warnings.filter(w=>w.type==='warn').length;
-      const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][day.dow] + ' ' + new Date(day.date).toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit'});
+      const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][day.dow] + ' ' + day.date.substring(8,10) + '.' + day.date.substring(5,7) + '.';
       const dayTpActive = tp.find(t=>day.date>=t.von&&day.date<=t.bis);
       html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + '">';
       html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + (dayTpActive?' <span style="color:var(--danger);font-size:.72rem;font-weight:400">(reduziert '+dayTpActive.pensum+'%)</span>':'') + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
@@ -2098,7 +2109,11 @@ function exportReportHTML(){
 }
 
 // INIT
-$('logoutBtn').onclick=logout;setupAC('timerProject','timerProjectAC');setupAC('manProject','manProjectAC');initLogin();
+$('logoutBtn').onclick=logout;setupAC('timerProject','timerProjectAC');setupAC('manProject','manProjectAC');
+// Show/hide project clear button
+const _tpInput=$('timerProject'),_tpClear=$('timerProjClear');
+if(_tpInput&&_tpClear){_tpInput.addEventListener('input',function(){_tpClear.style.display=this.value?'block':'none'});_tpInput.addEventListener('change',function(){_tpClear.style.display=this.value?'block':'none'})}
+initLogin();
 
 // ==================== MA-EDITIEREN ====================
 let _maeEmpId=null,_maeMonth=null,_maeEntries=[],_maeEditId=null,_maeAbsEditId=null,_maeImportData=[];
@@ -2680,7 +2695,7 @@ function loadDashboard(){
     const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
     const krankDays=absences.filter(a=>a.type==='Krankheit').reduce((s,a)=>s+a.days,0);
     const unfallDays=absences.filter(a=>a.type==='Unfall').reduce((s,a)=>s+a.days,0);
-    const ferienAnspruch=Math.round(s.ferienTage*(s.pensum/100)*10)/10+(s.ferienUebertrag||0);
+    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(fromStr.substring(0,4)))+(s.ferienUebertrag||0);
 
     totalMin+=empMin;totalEntries+=entries.length;
     krankTotal+=krankDays;unfallTotal+=unfallDays;
@@ -2919,33 +2934,53 @@ function isTokenExpired(){return _tokenExpiry&&Date.now()>_tokenExpiry}
 
 function silentRefreshToken(){
   if(!accessToken)return;
-  console.log('[Auth] Versuche silent token refresh...');
+  console.log('[Auth] Token abgelaufen - versuche Erneuerung via Popup...');
   const authUrl='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
-  const iframe=document.createElement('iframe');
-  iframe.style.display='none';
-  iframe.src=authUrl;
-  iframe.onload=function(){
+  const popup=window.open(authUrl,'tokenRefresh','width=500,height=600');
+  if(!popup){
+    toast('\u26A0\uFE0F Popup blockiert \u2013 bitte erneut anmelden','warning');
+    setSyncStatus('offline');
+    return;
+  }
+  const checkInterval=setInterval(()=>{
     try{
-      const hash=iframe.contentWindow.location.hash;
+      if(!popup||popup.closed){clearInterval(checkInterval);return}
+      const hash=popup.location.hash;
       if(hash&&hash.includes('access_token')){
         const p=new URLSearchParams(hash.slice(1));
         accessToken=p.get('access_token');
         localStorage.setItem(C.LS+'token',accessToken);
         setTokenExpiry();
         setSyncStatus('online');
-        console.log('[Auth] Token erneuert');
+        console.log('[Auth] Token erneuert via Popup');
+        toast('\u2705 Verbindung erneuert','success');
+        popup.close();
+        clearInterval(checkInterval);
+        // Re-sync after refresh
+        SP.fullSync();
       }
     }catch(e){
-      // Cross-origin error is expected if silent refresh fails
-      console.warn('[Auth] Silent refresh fehlgeschlagen - manueller Login nötig');
+      // Cross-origin error expected until redirect completes
     }
-    document.body.removeChild(iframe);
-  };
-  document.body.appendChild(iframe);
+  },500);
+  // Timeout after 30s
+  setTimeout(()=>{clearInterval(checkInterval);if(popup&&!popup.closed){popup.close();toast('\u26A0\uFE0F Sitzung abgelaufen \u2013 bitte erneut anmelden','warning');setSyncStatus('offline')}},30000);
 }
 
-// Token refresh every 45 minutes
-setInterval(()=>{if(accessToken&&isTokenExpired())silentRefreshToken()},2700000);
+// Token refresh: check every 5 minutes, refresh at 50 min
+setInterval(()=>{
+  if(accessToken&&isTokenExpired()){
+    silentRefreshToken();
+  }
+},300000);
+
+// Also refresh proactively at 50 min mark
+setInterval(()=>{
+  if(accessToken&&_tokenExpiry&&(Date.now()>_tokenExpiry-600000)&&(Date.now()<_tokenExpiry)){
+    console.log('[Auth] Proaktive Token-Erneuerung...');
+    silentRefreshToken();
+  }
+},600000);
 
 // On tab focus: check token + sync
 document.addEventListener('visibilitychange',function(){
