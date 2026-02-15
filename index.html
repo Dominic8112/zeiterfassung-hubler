@@ -395,6 +395,22 @@
     <!-- PROJECT IMPORT/EXPORT -->
     <div class="card"><div class="card-title">📥 Projekte Import/Export</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" id="loadSPProj">📡 SP laden</button><label class="btn btn-secondary btn-sm" style="cursor:pointer">📁 JSON<input type="file" accept=".json" id="importProjFile" style="display:none"></label><button class="btn btn-secondary btn-sm" id="exportProjBtn">📤 JSON</button></div></div>
 
+    <!-- PROJEKT ZUSAMMENFÜHREN -->
+    <div class="card"><div class="card-title">🔗 Projekte zusammenführen</div>
+      <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:12px">Findet Einträge mit gleicher Projektnummer aber unterschiedlicher Schreibweise (Bindestrich, Leerzeichen etc.) und führt sie auf den offiziellen Projektnamen zusammen.</p>
+      <button class="btn btn-primary btn-sm" onclick="scanDuplicateProjects()" style="margin-bottom:12px">🔍 Duplikate suchen</button>
+      <div id="projMergeResult"></div>
+    </div>
+
+    <!-- ALTDATEN IMPORT -->
+    <div class="card"><div class="card-title">📊 Altdaten importieren</div>
+      <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:12px">Stunden aus dem alten System pro Projekt und Mitarbeiter übertragen. Werden als Import-Einträge per 31.12. des Vorjahres gespeichert.</p>
+      <div class="form-group"><label class="form-label">CSV einfügen (Projekt;Kostenstelle;MA-Nr;Stunden)</label><textarea class="form-input" id="altdatenCSV" rows="5" placeholder="210 – Loogartenstrasse;Büro;HM-001;45.5&#10;135 – In der Rüti;Montage;HM-003;120"></textarea></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Datum</label><input type="date" class="form-input" id="altdatenDate" value="2025-12-31"></div></div>
+      <button class="btn btn-primary btn-sm" onclick="importAltdaten()">📊 Importieren</button>
+      <div id="altdatenResult" style="margin-top:12px"></div>
+    </div>
+
     <!-- NOTIFICATIONS -->
     <div class="card"><div class="card-title">🔔 Push-Benachrichtigungen</div><div class="sp-info"><strong>Status:</strong> <span id="notifStatus">...</span></div><div style="display:flex;gap:8px;margin-bottom:16px"><button class="btn btn-primary btn-sm" id="notifEnableBtn">🔔 Aktivieren</button><button class="btn btn-secondary btn-sm" id="notifTestBtn">🧪 Test</button></div>
       <div class="form-group"><label class="form-label">⏰ Morgen</label><div class="form-row"><input type="time" class="form-input" id="notifMorning" value="06:55"><select class="form-select" id="notifMorningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
@@ -423,6 +439,7 @@
   <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">🚬 Raucherpause</div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem"><input type="checkbox" id="empRaucher" onchange="calcEmpPreview()"> Raucher (−15 Min/Tag automatisch abziehen)</label>
   </div>
+  <div class="form-group"><label class="form-label">⏰ Timer-Endzeit</label><input type="time" class="form-input" id="empTimerEnd" value="18:00" style="width:120px"><p style="font-size:.72rem;color:var(--text-dim);margin-top:4px">Ab dieser Uhrzeit fragt der Timer ob noch gearbeitet wird. Standard: 18:00</p></div>
   <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">⏱ Temporäre Pensum-Anpassung</div>
     <p style="font-size:.78rem;color:var(--text-dim);margin-bottom:10px">z.B. bei Unfall, Wiedereingliederung oder Teilzeit auf Zeit</p>
     <div id="empTempPensumList"></div>
@@ -852,7 +869,7 @@ const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(s
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'online':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar()}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -876,7 +893,7 @@ $('btnStop').onclick=function(){if(!timer.on)return;clearInterval(timerIv);if(ti
 let _lateWorkConfirmed=0;
 function tickTimer(){if(!timer.on)return;let el=timer.paused?(timer.pauseAt-timer.start-timer.totalPaused):(Date.now()-timer.start-timer.totalPaused);const s=Math.floor(el/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;$('timerDisplay').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
 // After 18:00 warning
-const now=new Date();if(now.getHours()>=18&&!timer.paused&&Date.now()-_lateWorkConfirmed>7200000){_lateWorkConfirmed=Date.now();setTimeout(()=>{if(timer.on&&!timer.paused&&confirm('Es ist nach 18:00 \u2013 Arbeitest du noch?')){_lateWorkConfirmed=Date.now()}else if(timer.on){$('btnStop').click()}},100)}}
+const now=new Date();const _empTimerEnd=user?getEmpSetting(user.id).timerEndzeit||'18:00':'18:00';const [_teH,_teM]=_empTimerEnd.split(':').map(Number);const _teTotal=now.getHours()*60+now.getMinutes();if(_teTotal>=_teH*60+(_teM||0)&&!timer.paused&&Date.now()-_lateWorkConfirmed>7200000){_lateWorkConfirmed=Date.now();setTimeout(()=>{if(timer.on&&!timer.paused&&confirm('Es ist nach '+_empTimerEnd+' \u2013 Arbeitest du noch?')){_lateWorkConfirmed=Date.now()}else if(timer.on){$('btnStop').click()}},100)}}
 function updateTimerUI(){const st=$('btnStart'),pa=$('btnPause'),sp=$('btnStop'),di=$('timerDisplay'),sw=$('btnSwitch');if(timer.on&&!timer.paused){st.style.display='none';pa.style.display='flex';sp.style.display='flex';di.className='timer-time running';if(sw)sw.style.display='inline-flex'}else if(timer.paused){st.style.display='flex';pa.style.display='none';sp.style.display='flex';di.className='timer-time paused';if(sw)sw.style.display='inline-flex'}else{st.style.display='flex';pa.style.display='none';sp.style.display='none';di.className='timer-time';if(sw)sw.style.display='none'}}
 function resetTimer(){timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};localStorage.removeItem(lk('timer'));$('timerDisplay').textContent='00:00:00';$('timerDisplay').className='timer-time';$('timerProjDisp').textContent='';$('timerIndicator').classList.remove('on');updateTimerUI();updateSegmentDisplay()}
 
@@ -1142,7 +1159,14 @@ function loadNotifUI(){
   updateNotifStatus();
 }
 function updateNotifStatus(){const el=$('notifStatus');if(!el)return;if(!('Notification' in window)){el.textContent='Browser unterst\u00fctzt keine Benachrichtigungen';return}if(Notification.permission==='granted')el.textContent='Aktiviert';else if(Notification.permission==='denied')el.textContent='Blockiert - bitte in Browser-Einstellungen erlauben';else el.textContent='Noch nicht aktiviert'}
-function showNotif(title,body,tag){if(Notification.permission!=='granted')return;try{const n=new Notification(title,{body:body,tag:tag||'hm-'+Date.now(),requireInteraction:false});n.onclick=function(){window.focus();n.close()};setTimeout(()=>n.close(),15000)}catch(e){console.warn('Notif:',e)}}
+const _notifCooldown={};
+function showNotif(title,body,tag){
+  if(Notification.permission!=='granted')return;
+  const key=tag||title;
+  if(_notifCooldown[key]&&Date.now()-_notifCooldown[key]<1800000)return; // 30 min cooldown
+  _notifCooldown[key]=Date.now();
+  try{const n=new Notification(title,{body:body,tag:key,requireInteraction:false});n.onclick=function(){window.focus();n.close()};setTimeout(()=>n.close(),15000)}catch(e){console.warn('Notif:',e)}
+}
 $('notifEnableBtn').onclick=async function(){if(!('Notification' in window)){toast('Browser unterst\u00fctzt keine Benachrichtigungen','error');return}const perm=await Notification.requestPermission();if(perm==='granted'){toast('Benachrichtigungen aktiviert','success');updateNotifStatus();showNotif('Hubler Zeiterfassung','Benachrichtigungen sind jetzt aktiv!')}else{toast('Berechtigung abgelehnt','warning');updateNotifStatus()}};
 $('notifTestBtn').onclick=function(){if(Notification.permission!=='granted'){toast('Bitte zuerst aktivieren','warning');return}showNotif('Test-Benachrichtigung','Push-Notifications funktionieren!')};
 $('notifSaveBtn').onclick=function(){const s={morning:$('notifMorning').value,morningOn:$('notifMorningOn').value==='1',lunch:$('notifLunch').value,lunchOn:$('notifLunchOn').value==='1',eveningMoDo:$('notifEveningMoDo').value,eveningOn:$('notifEveningOn').value==='1',eveningFr:$('notifEveningFr').value,fridayOn:$('notifFridayOn').value==='1',overflowH:parseInt($('notifOverflow').value)||10,overflowOn:$('notifOverflowOn').value==='1'};saveNotifSettings(s);toast('Einstellungen gespeichert','success')};
@@ -1352,7 +1376,7 @@ function saveSplitEntries(){
 
 
 // EMPLOYEE SETTINGS (Admin only)
-const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear(),eintritt:null,austritt:null};
+const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear(),eintritt:null,austritt:null,timerEndzeit:'18:00'};
 
 // Pro-rata Ferienanspruch based on Eintritt/Austritt
 function calcFerienAnspruch(empId,year){
@@ -1417,6 +1441,7 @@ function openEmpEdit(empId){
   $('empRaucher').checked=!!s.raucher;
   $('empEintritt').value=s.eintritt||'';
   $('empAustritt').value=s.austritt||'';
+  $('empTimerEnd').value=s.timerEndzeit||'18:00';
   // Set checkboxes
   [1,2,3,4,5].forEach(d=>{const cb=$('empTag'+d);if(cb)cb.checked=tage.includes(d)});
   renderTempPensumList();
@@ -1469,7 +1494,8 @@ function saveEmpEdit(){
     tempPensum:tp,
     year:parseInt($('empYear').value)||new Date().getFullYear(),
     eintritt:$('empEintritt').value||null,
-    austritt:$('empAustritt').value||null
+    austritt:$('empAustritt').value||null,
+    timerEndzeit:$('empTimerEnd').value||'18:00'
   });
   $('empEditModal').classList.remove('show');
   toast('Einstellungen gespeichert','success');
@@ -2482,6 +2508,8 @@ function countBetriebsferienDays(empId,from,to){
   const entryDates=new Set(entries.map(e=>e.date));
   const empS=getEmpSetting(empId);
   const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
+  const eintritt=empS.eintritt||null;
+  const austritt=empS.austritt||null;
   let count=0;
   bf.forEach(b=>{
     const bFrom=b.from<from?from:b.from;
@@ -2490,6 +2518,9 @@ function countBetriebsferienDays(empId,from,to){
     while(d<=end){
       const dk=dateKey(d);
       const dow=d.getDay();
+      // Skip days outside employment period
+      if(eintritt&&dk<eintritt){d.setDate(d.getDate()+1);continue}
+      if(austritt&&dk>austritt){d.setDate(d.getDate()+1);continue}
       if(arbeitsTage.includes(dow)&&!entryDates.has(dk)){count++}
       d.setDate(d.getDate()+1);
     }
@@ -2695,7 +2726,7 @@ function loadDashboard(){
     const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
     const krankDays=absences.filter(a=>a.type==='Krankheit').reduce((s,a)=>s+a.days,0);
     const unfallDays=absences.filter(a=>a.type==='Unfall').reduce((s,a)=>s+a.days,0);
-    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(fromStr.substring(0,4)))+(s.ferienUebertrag||0);
+    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)))+(s.ferienUebertrag||0);
 
     totalMin+=empMin;totalEntries+=entries.length;
     krankTotal+=krankDays;unfallTotal+=unfallDays;
@@ -2983,58 +3014,61 @@ setInterval(()=>{
 },600000);
 
 // On tab focus: check token + sync
+let _lastVisCheck=0;
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='visible'&&user){
-    console.log('[Sync] Tab aktiv - prüfe Verbindung');
+    if(Date.now()-_lastVisCheck<60000)return;
+    _lastVisCheck=Date.now();
+    console.log('[Sync] Tab aktiv');
     if(accessToken){
-      if(isTokenExpired()){
-        silentRefreshToken();
-      }
-      // Re-sync on tab focus
+      if(isTokenExpired())silentRefreshToken();
       SP.getDriveId().then(driveId=>{
         if(driveId){
           setSyncStatus('syncing');
-          Promise.all([
-            SP.saveEntries(),
-            loadAbsencesFromSP(),
-            loadEmpSettingsFromSP(),
-            loadEmployeesFromSP()
-          ]).then(()=>{
-            setSyncStatus('online');
-            refreshView();
-          }).catch(e=>{
-            console.warn('[Sync] Tab-Sync fehlgeschlagen:',e.message);
-            if(e.message.includes('401')||e.message.includes('403')){
-              toast('⚠️ Sitzung abgelaufen - bitte neu anmelden','warning');
-              setSyncStatus('offline');
-            }else{
-              toast('⚠️ Synchronisation fehlgeschlagen','warning');
-              setSyncStatus('offline');
-            }
-          });
+          Promise.all([SP.saveEntries(),loadAbsencesFromSP(),loadEmpSettingsFromSP(),loadEmployeesFromSP()]).then(()=>{setSyncStatus('online');refreshView()}).catch(e=>{console.warn('[Sync]',e.message);setSyncStatus('offline')});
         }
       }).catch(()=>{});
     }
-    // Check notifications
-    if(typeof checkMyNotifications==='function')checkMyNotifications();
+    if(!timer.on&&typeof checkRemoteTimer==='function')checkRemoteTimer();
   }
 });
 
 // Wrap gf to handle 401 with push notification
 const _origGf=SP.gf;
+let _lastSyncOk=0;
 SP.gf=async function(ep,opts){
-  try{return await _origGf.call(SP,ep,opts)}
-  catch(e){
-    if(e.message.includes('401')){
-      setSyncStatus('offline');
+  try{
+    const result=await _origGf.call(SP,ep,opts);
+    _lastSyncOk=Date.now();
+    const el=$('syncStatus');
+    if(el&&el.classList.contains('offline'))setSyncStatus('online');
+    return result;
+  }catch(e){
+    setSyncStatus('offline');
+    if(e.message&&(e.message.includes('401')||e.message.includes('403'))){
+      console.warn('[SP] Auth-Fehler:',e.message);
       if(Notification.permission==='granted'){
-        new Notification('Hubler Zeiterfassung',{body:'⚠️ Sitzung abgelaufen - bitte App öffnen und neu anmelden',icon:'⚠️'});
+        new Notification('Hubler Zeiterfassung',{body:'\u26A0\uFE0F Sitzung abgelaufen - bitte App \u00f6ffnen und neu anmelden'});
       }
+      if(typeof silentRefreshToken==='function')silentRefreshToken();
+    }else{
+      console.warn('[SP] API-Fehler:',e.message);
     }
     throw e;
   }
 };
 
+// Periodic SP health check every 5 minutes
+setInterval(async()=>{
+  if(!accessToken||!user)return;
+  if(Date.now()-_lastSyncOk>600000){
+    try{
+      const driveId=await SP.getDriveId();
+      if(driveId){setSyncStatus('online');_lastSyncOk=Date.now()}
+      else setSyncStatus('offline');
+    }catch(e){setSyncStatus('offline')}
+  }
+},300000);
 
 // ============================================================
 // ABWESENHEITSKALENDER (Report Tab)
@@ -3123,6 +3157,292 @@ function renderAbsCalendar(){
   html+='<span>\uD83C\uDF82 Geburtstag</span></div>';
 
   $('absCalResult').innerHTML=html;
+}
+
+// ============================================================
+// TIMER SYNC ÜBER GERÄTE (SharePoint)
+// ============================================================
+let _timerSyncInterval=null;
+const _deviceId=Math.random().toString(36).substring(2,10);
+
+async function syncTimerToSP(){
+  if(!accessToken||!user)return;
+  try{
+    const state={
+      deviceId:_deviceId,
+      userId:user.id,
+      on:timer.on,
+      paused:timer.paused,
+      start:timer.start,
+      pauseAt:timer.pauseAt,
+      totalPaused:timer.totalPaused,
+      project:timer.project,
+      ks:timer.ks,
+      note:timer.note,
+      segments:timer.segments,
+      lastUpdate:Date.now()
+    };
+    await SP.writeFile('timer_'+user.id+'.json',state);
+  }catch(e){console.warn('[TimerSync] Upload fehlgeschlagen:',e.message)}
+}
+
+async function checkRemoteTimer(){
+  if(!accessToken||!user)return;
+  try{
+    const remote=await SP.readFile('timer_'+user.id+'.json');
+    if(!remote)return;
+    // If remote timer is running on ANOTHER device
+    if(remote.on&&remote.deviceId!==_deviceId&&!timer.on){
+      const elapsed=Date.now()-remote.start-remote.totalPaused;
+      const mins=Math.round(elapsed/60000);
+      if(mins>0&&mins<720){// Ignore if >12h old
+        const resume=confirm('Timer l\u00e4uft auf anderem Ger\u00e4t!\n\nProjekt: '+remote.project+'\nKostenstelle: '+remote.ks+'\nLaufzeit: '+Math.floor(mins/60)+'h '+String(mins%60).padStart(2,'0')+'min\n\nHier \u00fcbernehmen?');
+        if(resume){
+          timer={on:true,paused:remote.paused,start:remote.start,pauseAt:remote.pauseAt,totalPaused:remote.totalPaused,project:remote.project,ks:remote.ks,note:remote.note||'',segments:remote.segments||[]};
+          localStorage.setItem(lk('timer'),JSON.stringify(timer));
+          $('timerProject').value=timer.project;
+          $('timerKS').value=timer.ks;
+          $('timerNote').value=timer.note||'';
+          updateTimerUI();timerIv=setInterval(tickTimer,1000);tickTimer();
+          $('timerIndicator').classList.add('on');
+          $('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;
+          updateSegmentDisplay();
+          toast('Timer von anderem Ger\u00e4t \u00fcbernommen','success');
+          // Update SP with our deviceId
+          syncTimerToSP();
+        }
+      }
+    }
+  }catch(e){console.warn('[TimerSync] Remote check:',e.message)}
+}
+
+// Sync timer to SP every 30 seconds while running
+function startTimerSync(){
+  if(_timerSyncInterval)clearInterval(_timerSyncInterval);
+  _timerSyncInterval=setInterval(()=>{
+    if(timer.on&&accessToken)syncTimerToSP();
+  },30000);
+  // Immediate sync
+  if(timer.on&&accessToken)syncTimerToSP();
+}
+
+// Check for remote timer on app start and tab focus
+function initTimerSync(){
+  if(accessToken&&user){
+    checkRemoteTimer();
+    startTimerSync();
+  }
+}
+
+// Hook into timer start/stop
+const _origBtnStart=$('btnStart').onclick;
+$('btnStart').onclick=function(){
+  _origBtnStart.call(this);
+  if(timer.on)startTimerSync();
+};
+
+const _origBtnStop=$('btnStop').onclick;
+$('btnStop').onclick=function(){
+  _origBtnStop.call(this);
+  // Clear remote timer state
+  if(accessToken&&user){
+    SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).catch(()=>{});
+  }
+};
+
+
+// ============================================================
+// PROJEKT ZUSAMMENFÜHREN (Normalize & Merge)
+// ============================================================
+function normalizeProjectNum(name){
+  if(!name)return null;
+  // Extract number: everything before first dash/space+letter
+  const m=name.match(/^([A-Za-z]*\d+)/);
+  return m?m[1].toUpperCase():null;
+}
+
+function normalizeProjectName(name){
+  if(!name)return name;
+  // Normalize all dash variants and whitespace
+  return name.replace(/\s*[\u2013\u2014\u2015\-]+\s*/g,' \u2013 ').replace(/\s+/g,' ').trim();
+}
+
+function scanDuplicateProjects(){
+  // Collect entries from all employees
+  let allEntries=[...getEntries()];
+  EMPLOYEES.forEach(emp=>{
+    try{
+      const data=JSON.parse(localStorage.getItem(C.LS+emp.id+'_entries')||'[]');
+      data.forEach(e=>{if(!allEntries.find(x=>x.id===e.id))allEntries.push(e)});
+    }catch{}
+  });
+  
+  // Group entries by normalized project number
+  const groups={};
+  allEntries.forEach(e=>{
+    const num=normalizeProjectNum(e.project||e.projectName);
+    if(!num)return;
+    if(!groups[num])groups[num]={variants:{},total:0};
+    const name=e.project||e.projectName||'';
+    if(!groups[num].variants[name])groups[num].variants[name]=0;
+    groups[num].variants[name]++;
+    groups[num].total++;
+  });
+
+  // Find groups with multiple variants
+  const dupes=Object.entries(groups).filter(([num,g])=>Object.keys(g.variants).length>1);
+  
+  if(!dupes.length){
+    $('projMergeResult').innerHTML='<div style="color:var(--success);font-size:.85rem">\u2705 Keine Duplikate gefunden!</div>';
+    return;
+  }
+
+  // Find the official name from projects list
+  let html='<div style="font-size:.85rem;margin-bottom:8px"><strong>'+dupes.length+' Projekte mit Varianten gefunden:</strong></div>';
+  
+  dupes.forEach(([num,g])=>{
+    const variants=Object.entries(g.variants).sort((a,b)=>b[1]-a[1]);
+    // Find official name from project list
+    const official=projects.find(p=>normalizeProjectNum(p.name||p)===num);
+    const officialName=official?(official.name||official):variants[0][0];
+    
+    html+='<div style="background:var(--bg-surface);border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid var(--warning)">';
+    html+='<div style="font-weight:600;margin-bottom:6px">'+num+' ('+g.total+' Eintr\u00e4ge)</div>';
+    html+='<div style="font-size:.78rem;margin-bottom:8px">';
+    variants.forEach(([name,count])=>{
+      const isOfficial=normalizeProjectName(name)===normalizeProjectName(officialName);
+      html+='<div style="padding:2px 0;'+(isOfficial?'color:var(--success)':'')+'">'+(isOfficial?'\u2705':'\u26A0\uFE0F')+' "'+name+'" ('+count+'x)</div>';
+    });
+    html+='</div>';
+    html+='<div style="font-size:.8rem;margin-bottom:6px">Zusammenf\u00fchren auf: <strong>'+officialName+'</strong></div>';
+    html+='<button class="btn btn-primary btn-sm" onclick="mergeProjectAllEmployees(\''+num.replace(/'/g,"\\'")+'\',\''+officialName.replace(/'/g,"\\'")+'\')">Alle MA zusammenf\u00fchren</button>';
+    html+='</div>';
+  });
+
+  $('projMergeResult').innerHTML=html;
+}
+
+function mergeProject(num,officialName){
+  const entries=getEntries();
+  let merged=0;
+  entries.forEach(e=>{
+    const eNum=normalizeProjectNum(e.project||e.projectName);
+    if(eNum===num&&e.project!==officialName){
+      e.project=officialName;
+      e.projectName=officialName;
+      merged++;
+    }
+  });
+  
+  if(merged>0){
+    localStorage.setItem(C.LS+'entries',JSON.stringify(entries));
+    queueSync();
+    toast(merged+' Eintr\u00e4ge zusammengef\u00fchrt \u2192 "'+officialName+'"','success');
+    scanDuplicateProjects(); // Refresh
+  }else{
+    toast('Keine Eintr\u00e4ge zum Zusammenf\u00fchren','info');
+  }
+}
+
+// Also merge in all employee entries on SP
+async function mergeProjectAllEmployees(num,officialName){
+  if(!accessToken){mergeProject(num,officialName);return}
+  let totalMerged=0;
+  // Local entries
+  const entries=getEntries();
+  entries.forEach(e=>{
+    const eNum=normalizeProjectNum(e.project||e.projectName);
+    if(eNum===num&&e.project!==officialName){e.project=officialName;e.projectName=officialName;totalMerged++}
+  });
+  localStorage.setItem(C.LS+'entries',JSON.stringify(entries));
+  
+  // All employee entries on SP
+  for(const emp of EMPLOYEES){
+    try{
+      const data=await SP.readFile(emp.id+'.json');
+      if(data&&data.entries){
+        let changed=false;
+        data.entries.forEach(e=>{
+          const eNum=normalizeProjectNum(e.project||e.projectName);
+          if(eNum===num&&e.project!==officialName){e.project=officialName;e.projectName=officialName;totalMerged++;changed=true}
+        });
+        if(changed)await SP.writeFile(emp.id+'.json',data);
+      }
+    }catch(e){console.warn('[Merge] '+emp.id+':',e.message)}
+  }
+  
+  toast(totalMerged+' Eintr\u00e4ge (alle MA) zusammengef\u00fchrt','success');
+  scanDuplicateProjects();
+}
+
+// ============================================================
+// ALTDATEN IMPORT
+// ============================================================
+function importAltdaten(){
+  const csv=$('altdatenCSV').value.trim();
+  const date=$('altdatenDate').value;
+  if(!csv){toast('CSV eingeben','warning');return}
+  if(!date){toast('Datum w\u00e4hlen','warning');return}
+  
+  const lines=csv.split('\n').map(l=>l.trim()).filter(l=>l);
+  let imported=0,errors=[];
+  
+  lines.forEach((line,i)=>{
+    const parts=line.split(';').map(s=>s.trim());
+    if(parts.length<4){errors.push('Zeile '+(i+1)+': zu wenig Spalten');return}
+    const [projekt,ks,maId,stundenStr]=parts;
+    const stunden=parseFloat(stundenStr.replace(',','.'));
+    if(isNaN(stunden)||stunden<=0){errors.push('Zeile '+(i+1)+': ungültige Stunden "'+stundenStr+'"');return}
+    
+    const emp=EMPLOYEES.find(e=>e.id===maId);
+    if(!emp){errors.push('Zeile '+(i+1)+': MA "'+maId+'" nicht gefunden');return}
+    
+    const entry={
+      id:'imp-'+Date.now()+'-'+Math.random().toString(36).substring(2,6),
+      date:date,
+      startTime:'08:00',
+      endTime:'08:00',
+      start:'08:00',
+      end:'08:00',
+      project:projekt,
+      projectName:projekt,
+      kostenstelle:ks||'B\u00fcro',
+      costCenter:ks||'B\u00fcro',
+      durationMin:Math.round(stunden*60),
+      pauseMin:0,
+      bemerkung:'Import Altsystem',
+      note:'Import Altsystem',
+      isImport:true,
+      importEmployee:maId
+    };
+    
+    // Save to the employee's entries
+    const lsKey=C.LS+'entries_'+maId;
+    let empEntries=[];
+    try{empEntries=JSON.parse(localStorage.getItem(lsKey))||[]}catch{}
+    empEntries.push(entry);
+    localStorage.setItem(lsKey,JSON.stringify(empEntries));
+    
+    // If it's current user, also add to main entries
+    if(user&&user.id===maId){
+      const mainEntries=getEntries();
+      mainEntries.push(entry);
+      localStorage.setItem(C.LS+'entries',JSON.stringify(mainEntries));
+    }
+    
+    imported++;
+  });
+  
+  let html='<div style="font-size:.85rem">';
+  if(imported)html+='<div style="color:var(--success)">\u2705 '+imported+' Eintr\u00e4ge importiert (Datum: '+fmtDate(date)+')</div>';
+  if(errors.length)html+='<div style="color:var(--danger);margin-top:6px">\u274C Fehler:<br>'+errors.join('<br>')+'</div>';
+  html+='</div>';
+  $('altdatenResult').innerHTML=html;
+  
+  if(imported){
+    queueSync();
+    refreshView();
+  }
 }
 
 </script>
