@@ -425,6 +425,24 @@
       <div id="altdatenResult" style="margin-top:12px"></div>
     </div>
 
+    <!-- FEIERTAGE -->
+    <div class="card"><div class="card-title">🎉 Feiertage verwalten</div>
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="form-group"><label class="form-label">Jahr</label><input type="number" class="form-input" id="holYear" value="2026" min="2024" max="2030" onchange="renderHolidayAdmin()"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:4px">
+          <button class="btn btn-secondary btn-sm" onclick="exportHolidaysCSV()">📤 CSV</button>
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer">📁 Import<input type="file" accept=".csv" id="holImportFile" style="display:none" onchange="importHolidaysCSV(this)"></label>
+          <button class="btn btn-primary btn-sm" onclick="saveHolidaysSP()">💾 SP speichern</button>
+        </div>
+      </div>
+      <div id="holList"></div>
+      <div class="form-row" style="margin-top:12px">
+        <div class="form-group"><input type="date" class="form-input" id="holNewDate"></div>
+        <div class="form-group"><input type="text" class="form-input" id="holNewName" placeholder="Name..."></div>
+        <button class="btn btn-success btn-sm" onclick="addHoliday()">+ Hinzufügen</button>
+      </div>
+    </div>
+
     <!-- NOTIFICATIONS -->
     <div class="card"><div class="card-title">🔔 Push-Benachrichtigungen</div><div class="sp-info"><strong>Status:</strong> <span id="notifStatus">...</span></div><div style="display:flex;gap:8px;margin-bottom:16px"><button class="btn btn-primary btn-sm" id="notifEnableBtn">🔔 Aktivieren</button><button class="btn btn-secondary btn-sm" id="notifTestBtn">🧪 Test</button></div>
       <div class="form-group"><label class="form-label">⏰ Morgen</label><div class="form-row"><input type="time" class="form-input" id="notifMorning" value="06:55"><select class="form-select" id="notifMorningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
@@ -754,7 +772,13 @@ function projLabel(p){return p.id+' - '+p.name}
 function getActiveProjects(){return projects.filter(p=>p.aktiv)}
 function getWeekDates(){const t=new Date(),d=t.getDay(),mon=new Date(t);mon.setDate(t.getDate()-(d===0?6:d-1));return Array.from({length:7},(_,i)=>{const x=new Date(mon);x.setDate(mon.getDate()+i);return x})}
 function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type||'info');t.textContent=msg;$('toasts').appendChild(t);setTimeout(()=>t.remove(),3000)}
-function getHolidays(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1,easter=new Date(y,mo-1,da);const ad=(d2,n)=>{const r=new Date(d2);r.setDate(r.getDate()+n);return r},dk=d2=>dateKey(d2);const hol={};hol[dk(new Date(y,0,1))]='Neujahr';hol[dk(new Date(y,0,2))]='Berchtoldstag';hol[dk(ad(easter,-2))]='Karfreitag';hol[dk(ad(easter,1))]='Ostermontag';hol[dk(new Date(y,4,1))]='Tag der Arbeit';hol[dk(ad(easter,39))]='Auffahrt';hol[dk(ad(easter,50))]='Pfingstmontag';hol[dk(new Date(y,7,1))]='Bundesfeier';hol[dk(new Date(y,11,25))]='Weihnachten';hol[dk(new Date(y,11,26))]='Stephanstag';const s1=new Date(y,8,1),fm=new Date(s1);fm.setDate(1+(8-s1.getDay())%7);const ks2=new Date(fm);ks2.setDate(fm.getDate()+7);hol[dk(ks2)]='Knabenschiessen';return hol}
+let _customHolidays=null;
+function getHolidays(y){
+  // Use custom holidays if loaded
+  if(_customHolidays&&_customHolidays[y])return {..._defaultHolidays(y),..._customHolidays[y]};
+  return _defaultHolidays(y);
+}
+function _defaultHolidays(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1,easter=new Date(y,mo-1,da);const ad=(d2,n)=>{const r=new Date(d2);r.setDate(r.getDate()+n);return r},dk=d2=>dateKey(d2);const hol={};hol[dk(new Date(y,0,1))]='Neujahr';hol[dk(new Date(y,0,2))]='Berchtoldstag';hol[dk(ad(easter,-2))]='Karfreitag';hol[dk(ad(easter,1))]='Ostermontag';hol[dk(new Date(y,4,1))]='Tag der Arbeit';hol[dk(ad(easter,39))]='Auffahrt';hol[dk(ad(easter,50))]='Pfingstmontag';hol[dk(new Date(y,7,1))]='Bundesfeier';hol[dk(new Date(y,11,25))]='Weihnachten';hol[dk(new Date(y,11,26))]='Stephanstag';const s1=new Date(y,8,1),fm=new Date(s1);fm.setDate(1+(8-s1.getDay())%7);const ks2=new Date(fm);ks2.setDate(fm.getDate()+7);hol[dk(ks2)]='Knabenschiessen';return hol}
 
 // SHAREPOINT GRAPH API
 const SP={
@@ -844,14 +868,17 @@ const SP={
       return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getEntries()});
     }
   },
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
 };
 let _syncStatus='local';
+let _lastSyncOk=Date.now();
+let _firstSyncDone=false;
 function setSyncStatus(s){
   _syncStatus=s;
   const el=$('syncStatus');
   if(s==='online'){
     _lastSyncOk=Date.now();
+    _firstSyncDone=true;
     el.className='sync-status online';el.textContent='SharePoint';
   }else if(s==='syncing'){
     el.className='sync-status syncing';el.textContent='Sync...';
@@ -862,14 +889,13 @@ function setSyncStatus(s){
   }
   const stxt=$('spStatusText');
   if(s==='online'){
-    const ago=_lastSyncOk?Math.round((Date.now()-_lastSyncOk)/60000):0;
-    stxt.textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';
+    stxt.textContent='Verbunden \u00b7 Sync vor <1 Min';
   }else if(s==='syncing'){stxt.textContent='Synchronisiere...'}
   else if(s==='offline'){stxt.textContent='Offline \u2013 Daten werden lokal gespeichert'}
   else{stxt.textContent='Lokaler Modus (Demo)'}
 }
-// Update sync age display every minute
-setInterval(()=>{if(_syncStatus==='online'&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min'}}},60000);
+// Update sync age display every minute - only auto-offline after first successful sync
+setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min'}}},60000);
 let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||localStorage.getItem(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
 
 // OAUTH
@@ -961,7 +987,7 @@ const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(s
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC')}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -1208,9 +1234,65 @@ function showCalDayDetail(dk){
     html+='<div class="empty-state"><div class="empty-icon">\uD83D\uDCC5</div><p>Keine Eintr\u00e4ge</p></div>';
   }
 
+  // Add entry button
+  html+='<button class="btn btn-primary btn-block btn-sm" style="margin-top:12px" onclick="openCalDayEntry(\''+dk+'\')">+ Eintrag hinzuf\u00fcgen</button>';
+
   $('calDayEntries').innerHTML=html;
 }
 
+function openCalDayEntry(dk){
+  // Pre-fill the edit modal for a new entry on this date
+  $('editModal').classList.add('show');
+  $('editTitle').textContent='Neuer Eintrag \u2013 '+fmtDate(dk);
+  $('editDate').value=dk;
+  $('editStart').value='07:00';
+  $('editEnd').value='16:45';
+  $('editProj').value='';
+  $('editKS').value='B\u00fcro';
+  $('editNote').value='';
+  // Reset pause fields
+  if($('edZnueni'))$('edZnueni').checked=true;
+  if($('edMittag'))$('edMittag').value='60min';
+  if($('edCustomPause'))$('edCustomPause').style.display='none';
+  if(typeof edUpdatePause==='function')edUpdatePause();
+  // Set save action to create new entry
+  $('editSaveBtn').onclick=function(){
+    const start=$('editStart').value,end=$('editEnd').value;
+    const proj=$('editProj').value.trim(),ks=$('editKS').value;
+    if(!proj){toast('Bitte Projekt w\u00e4hlen','warning');return}
+    if(!start||!end){toast('Start/Ende eingeben','warning');return}
+    // Calculate duration
+    const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
+    let durMin=(eh*60+em)-(sh*60+sm);
+    // Calculate pause
+    let pauseMin=0;
+    if($('edZnueni')&&$('edZnueni').checked)pauseMin+=15;
+    const mittag=$('edMittag')?$('edMittag').value:'60min';
+    if(mittag==='60min')pauseMin+=60;
+    else if(mittag==='30min')pauseMin+=30;
+    else if(mittag==='custom'&&$('edCustomMin'))pauseMin+=parseInt($('edCustomMin').value)||0;
+    durMin-=pauseMin;
+    if(durMin<=0){toast('Dauer muss positiv sein','warning');return}
+    
+    const entry={
+      date:dk,
+      startTime:start,endTime:end,start:start,end:end,
+      project:proj,projectName:proj,
+      kostenstelle:ks,costCenter:ks,
+      durationMin:durMin,pauseMin:pauseMin,
+      pauseZnueni:$('edZnueni')?$('edZnueni').checked:false,
+      znueniPause:$('edZnueni')?$('edZnueni').checked:false,
+      pauseMittag:mittag,mittagsPause:mittag,
+      bemerkung:$('editNote').value.trim(),
+      note:$('editNote').value.trim()
+    };
+    addEntry(entry);
+    $('editModal').classList.remove('show');
+    showCalDayDetail(dk);
+    updateMonthCalendar();
+  };
+  setupAC('editProj','editProjAC');
+}
 // ADMIN
 function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>').join('')}
 $('projSearch').oninput=function(){renderProjectList(this.value)};
@@ -2613,7 +2695,11 @@ function countBetriebsferienDays(empId,from,to){
       // Skip days outside employment period
       if(eintritt&&dk<eintritt){d.setDate(d.getDate()+1);continue}
       if(austritt&&dk>austritt){d.setDate(d.getDate()+1);continue}
-      if(arbeitsTage.includes(dow)&&!entryDates.has(dk)){count++}
+      if(arbeitsTage.includes(dow)&&!entryDates.has(dk)){
+        // Skip Feiertage - they don't count as BF days
+        const hol=getHolidays(d.getFullYear());
+        if(!hol[dk])count++;
+      }
       d.setDate(d.getDate()+1);
     }
   });
@@ -2834,7 +2920,7 @@ function loadDashboard(){
       projBrk[proj].ks[ks]=(projBrk[proj].ks[ks]||0)+(e.durationMin||0);
     });
 
-    empData.push({emp,entries:entries.length,istH:Math.round(empMin/6)/10,sollH:Math.round(sollH*10)/10,ferienAnspruch,ferienBez:ferienDays+bfDays,ferienRest:Math.round((ferienAnspruch-ferienDays-bfDays)*10)/10,krankDays,unfallDays,bfDays});
+    empData.push({emp,entries:entries,entryCount:entries.length,istH:Math.round(empMin/6)/10,sollH:Math.round(sollH*10)/10,ferienAnspruch,ferienBez:ferienDays+bfDays,ferienRest:Math.round((ferienAnspruch-ferienDays-bfDays)*10)/10,krankDays,unfallDays,bfDays});
   });
 
   _dashData={range,totalMin,totalEntries,krankTotal,unfallTotal,ksBrk,projBrk,empData};
@@ -2892,12 +2978,34 @@ function renderDashboard(){
     Object.entries(pd.ks).forEach(([k,m])=>{selKsBrk[k]=(selKsBrk[k]||0)+m});
   });
 
-  // KPIs
+  // KPIs - show filtered when project selected
+  const allSelected=selProj.size===Object.keys(d.projBrk).length;
   const totalH=Math.round(d.totalMin/6)/10;
   const selH=Math.round(selMin/6)/10;
   const emps=getActiveEmployees();
-  const avgH=emps.length?Math.round(totalH/emps.length*10)/10:0;
-  $('dashKPIs').innerHTML='<div class="stat-grid" style="margin:12px 0"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Total Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+selH+'h</div><div class="stat-label">Gew\u00e4hlte Projekte</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+avgH+'h</div><div class="stat-label">\u00d8 pro MA</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+d.krankTotal+'</div><div class="stat-label">Krankheitstage</div></div><div class="stat-box"><div class="stat-num" style="color:var(--warning)">'+d.unfallTotal+'</div><div class="stat-label">Unfalltage</div></div><div class="stat-box"><div class="stat-num">'+selProj.size+'/'+Object.keys(d.projBrk).length+'</div><div class="stat-label">Projekte</div></div></div>';
+  const displayH=allSelected?totalH:selH;
+  const avgH=emps.length?Math.round(displayH/emps.length*10)/10:0;
+  // MA breakdown for selected projects
+  const maBreak={};
+  d.empData.forEach(ed=>{
+    let empMin=0;
+    ed.entries.forEach(e=>{
+      if(selProj.has(e.project||e.projectName)){empMin+=(e.durationMin||0)}
+    });
+    if(empMin>0)maBreak[ed.emp.name]=empMin;
+  });
+  $('dashKPIs').innerHTML='<div class="stat-grid" style="margin:12px 0"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+displayH+'h</div><div class="stat-label">'+(allSelected?'Total Stunden':'Gew\u00e4hlte Projekte')+'</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+selH+'h</div><div class="stat-label">Gew\u00e4hlte Projekte</div></div><div class="stat-box"><div class="stat-num" style="color:var(--accent)">'+avgH+'h</div><div class="stat-label">\u00d8 pro MA</div></div><div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+d.krankTotal+'</div><div class="stat-label">Krankheitstage</div></div><div class="stat-box"><div class="stat-num" style="color:var(--warning)">'+d.unfallTotal+'</div><div class="stat-label">Unfalltage</div></div><div class="stat-box"><div class="stat-num">'+selProj.size+'/'+Object.keys(d.projBrk).length+'</div><div class="stat-label">Projekte</div></div></div>';
+  // MA breakdown table
+  if(!allSelected&&Object.keys(maBreak).length){
+    let maHtml='<div style="margin:12px 0;padding:12px;background:var(--bg-surface);border-radius:8px"><div style="font-weight:600;font-size:.85rem;margin-bottom:8px">\uD83D\uDC65 MA-Aufschl\u00fcsselung (gew\u00e4hlte Projekte)</div>';
+    Object.entries(maBreak).sort((a,b)=>b[1]-a[1]).forEach(([name,min])=>{
+      const h=Math.round(min/6)/10;
+      const pct=selMin>0?Math.round(min/selMin*100):0;
+      maHtml+='<div class="stat-bar-item"><div class="stat-bar-label">'+name+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:var(--primary)"></div></div><div class="stat-bar-value">'+h+'h ('+pct+'%)</div></div>';
+    });
+    maHtml+='</div>';
+    $('dashKPIs').innerHTML+= maHtml;
+  }
 
   // KS
   $('dashKS').style.display='block';
@@ -3348,15 +3456,26 @@ $('btnStop').onclick=function(){
 // ============================================================
 function normalizeProjectNum(name){
   if(!name)return null;
-  // Extract number: everything before first dash/space+letter
-  const m=name.match(/^([A-Za-z]*\d+)/);
+  // Extract ID: everything before first dash variant or first space followed by letter
+  // Handles: "30 – Name", "30 - Name", "30- Name", "30 Name", "AD1720 - Name"
+  const m=name.match(/^([A-Za-z]*\d+[A-Za-z]*)/);
   return m?m[1].toUpperCase():null;
 }
 
 function normalizeProjectName(name){
   if(!name)return name;
-  // Normalize all dash variants and whitespace
   return name.replace(/\s*[\u2013\u2014\u2015\-]+\s*/g,' \u2013 ').replace(/\s+/g,' ').trim();
+}
+
+function findOfficialProject(num){
+  if(!num)return null;
+  // Match by project ID
+  return projects.find(p=>p.id&&p.id.toUpperCase()===num);
+}
+
+function getOfficialProjectLabel(num){
+  const p=findOfficialProject(num);
+  return p?projLabel(p):null;
 }
 
 function scanDuplicateProjects(){
@@ -3392,23 +3511,23 @@ function scanDuplicateProjects(){
   
   dupes.forEach(([num,g],idx)=>{
     const variants=Object.entries(g.variants).sort((a,b)=>b[1]-a[1]);
-    const official=projects.find(p=>normalizeProjectNum(p.name||p)===num);
-    const officialName=official?(official.name||official):null;
+    const officialName=getOfficialProjectLabel(num);
+    const targetName=officialName||variants[0][0];
     
-    window._mergeData.push({num,officialName:officialName||variants[0][0],variants});
+    window._mergeData.push({num,officialName:targetName,variants});
     
     html+='<div style="background:var(--bg-surface);border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid '+(officialName?'var(--warning)':'var(--danger)')+'">';
     html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px"><input type="checkbox" class="mergeCB" data-idx="'+idx+'" '+(officialName?'checked':'')+'><strong>'+num+'</strong> ('+g.total+' Eintr\u00e4ge)</label>';
     html+='<div style="font-size:.78rem;margin-bottom:6px">';
     variants.forEach(([name,count])=>{
-      const isOff=officialName&&normalizeProjectName(name)===normalizeProjectName(officialName);
-      html+='<div style="padding:1px 0;'+(isOff?'color:var(--success)':'color:var(--text-dim)')+'">  '+(isOff?'\u2705':'\u26A0\uFE0F')+' \"'+name+'\" ('+count+'x)</div>';
+      const isTarget=normalizeProjectName(name)===normalizeProjectName(targetName);
+      html+='<div style="padding:1px 0;'+(isTarget?'color:var(--success)':'color:var(--text-dim)')+'">  '+(isTarget?'\u2705':'\u26A0\uFE0F')+' \"'+name+'\" ('+count+'x)</div>';
     });
     html+='</div>';
     if(officialName){
       html+='<div style="font-size:.8rem">\u2192 <strong>'+officialName+'</strong></div>';
     }else{
-      html+='<div style="font-size:.8rem;color:var(--danger)">\u26A0\uFE0F Nicht in projekte.json! Bitte Projekt umbenennen.</div>';
+      html+='<div style="font-size:.8rem;color:var(--warning)">\u26A0\uFE0F Nicht in projekte.json \u2013 wird auf h\u00e4ufigste Variante zusammengef\u00fchrt: <strong>'+targetName+'</strong></div>';
     }
     html+='</div>';
   });
@@ -3612,6 +3731,120 @@ function importAltdaten(){
   
   if(imported){queueSync();refreshView()}
 }
+
+// ============================================================
+// FEIERTAGE ADMIN
+// ============================================================
+function renderHolidayAdmin(){
+  const yr=parseInt($('holYear').value)||new Date().getFullYear();
+  const hol=getHolidays(yr);
+  const sorted=Object.entries(hol).sort((a,b)=>a[0].localeCompare(b[0]));
+  const isCustom=_customHolidays&&_customHolidays[yr];
+  
+  let html='<table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">Datum</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">Wochentag</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">Name</th><th style="padding:6px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+  sorted.forEach(([dk,name])=>{
+    const d=new Date(dk);
+    const dow=DAYS_L[d.getDay()];
+    html+='<tr><td style="padding:4px 6px;font-family:var(--font-mono)">'+fmtDate(dk)+'</td><td style="padding:4px 6px">'+dow+'</td><td style="padding:4px 6px">'+name+'</td><td style="padding:4px 6px"><button class="btn btn-secondary" style="padding:2px 6px;font-size:.75rem" onclick="removeHoliday(\''+dk+'\')">✕</button></td></tr>';
+  });
+  html+='</tbody></table>';
+  html+='<div style="font-size:.75rem;color:var(--text-dim);margin-top:8px">'+sorted.length+' Feiertage'+(isCustom?' (angepasst)':' (Standard)')+'</div>';
+  $('holList').innerHTML=html;
+}
+
+function addHoliday(){
+  const date=$('holNewDate').value;
+  const name=$('holNewName').value.trim();
+  if(!date||!name){toast('Datum und Name eingeben','warning');return}
+  const yr=parseInt(date.substring(0,4));
+  if(!_customHolidays)_customHolidays={};
+  if(!_customHolidays[yr])_customHolidays[yr]={..._defaultHolidays(yr)};
+  _customHolidays[yr][date]=name;
+  localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+  $('holYear').value=yr;
+  $('holNewDate').value='';$('holNewName').value='';
+  renderHolidayAdmin();
+  toast('Feiertag hinzugef\u00fcgt','success');
+}
+
+function removeHoliday(dk){
+  const yr=parseInt(dk.substring(0,4));
+  if(!_customHolidays)_customHolidays={};
+  if(!_customHolidays[yr])_customHolidays[yr]={..._defaultHolidays(yr)};
+  delete _customHolidays[yr][dk];
+  localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+  renderHolidayAdmin();
+  toast('Feiertag entfernt','info');
+}
+
+function exportHolidaysCSV(){
+  const yr=parseInt($('holYear').value)||new Date().getFullYear();
+  const hol=getHolidays(yr);
+  let csv='\uFEFFDatum;Name\n';
+  Object.entries(hol).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([dk,name])=>{
+    csv+=dk+';'+name+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='feiertage_'+yr+'.csv';a.click();
+  toast('CSV exportiert','success');
+}
+
+function importHolidaysCSV(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const lines=e.target.result.split('\n').map(l=>l.trim()).filter(l=>l);
+    const sep=lines[0].includes(';')?';':',';
+    const first=lines[0].split(sep);
+    const isHeader=isNaN(Date.parse(first[0]));
+    const data=isHeader?lines.slice(1):lines;
+    
+    if(!_customHolidays)_customHolidays={};
+    let count=0;
+    data.forEach(line=>{
+      const parts=line.split(sep).map(s=>s.trim());
+      if(parts.length<2)return;
+      let [date,name]=parts;
+      // Handle DD.MM.YYYY format
+      if(date.includes('.')){
+        const p=date.split('.');
+        if(p.length===3)date=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+      }
+      if(!date||isNaN(Date.parse(date)))return;
+      const yr=parseInt(date.substring(0,4));
+      if(!_customHolidays[yr])_customHolidays[yr]={..._defaultHolidays(yr)};
+      _customHolidays[yr][date]=name;
+      count++;
+    });
+    localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+    renderHolidayAdmin();
+    toast(count+' Feiertage importiert','success');
+  };
+  reader.readAsText(file,'UTF-8');
+  input.value='';
+}
+
+async function saveHolidaysSP(){
+  if(!accessToken){toast('Nicht mit SP verbunden','warning');return}
+  const ok=await SP.writeFile('feiertage.json',_customHolidays||{});
+  if(ok)toast('Feiertage auf SharePoint gespeichert','success');
+  else toast('Fehler beim Speichern','error');
+}
+
+async function loadHolidaysFromSP(){
+  if(!accessToken)return;
+  try{
+    const data=await SP.readFile('feiertage.json');
+    if(data&&typeof data==='object'){
+      _customHolidays=data;
+      localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(data));
+    }
+  }catch{}
+}
+
+// Load custom holidays from localStorage on init
+try{const ch=localStorage.getItem(C.LS+'custom_holidays');if(ch)_customHolidays=JSON.parse(ch)}catch{}
 
 </script>
 </body>
