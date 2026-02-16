@@ -471,7 +471,7 @@
 </div>
 
 <!-- MODALS -->
-<div class="modal-overlay" id="pauseModal"><div class="modal"><div class="modal-title">⏱ Arbeitszeit bestätigen</div><div id="pauseBody"></div><div class="modal-actions"><button class="btn btn-secondary" id="pauseCancel">Korrigieren</button><button class="btn btn-primary" id="pauseConfirm">✓ Speichern</button></div></div></div>
+<div class="modal-overlay" id="pauseModal"><div class="modal"><div class="modal-title">⏱ Arbeitszeit bestätigen</div><div id="pauseBody"></div><div class="modal-actions" style="flex-wrap:wrap;gap:8px"><button class="btn btn-danger btn-sm" id="pauseDiscard" style="margin-right:auto">🗑 Verwerfen</button><button class="btn btn-secondary" id="pauseCancel">Korrigieren</button><button class="btn btn-primary" id="pauseConfirm">✓ Speichern</button></div></div></div>
 <div class="modal-overlay" id="editModal"><div class="modal"><div class="modal-title">✏️ Eintrag bearbeiten</div><div id="editBody"></div><div class="modal-actions"><button class="btn btn-danger btn-sm" id="editDelete">🗑 Löschen</button><button class="btn btn-secondary" id="editCancel">Abbrechen</button><button class="btn btn-primary" id="editSave">Speichern</button></div></div></div>
 <div class="modal-overlay" id="recoveryModal"><div class="modal"><div class="modal-title">🔄 Timer wiederherstellen?</div><div id="recoveryBody"></div><div class="modal-actions"><button class="btn btn-secondary" id="recoveryDiscard">Verwerfen</button><button class="btn btn-primary" id="recoveryRestore">Wiederherstellen</button></div></div></div>
 <div class="modal-overlay" id="addProjModal"><div class="modal"><div class="modal-title">➕ Neues Projekt</div><div class="form-group"><label class="form-label">Nr.</label><input type="text" class="form-input" id="newProjId"></div><div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="newProjName"></div><div class="modal-actions"><button class="btn btn-secondary" id="addProjCancel">Abbrechen</button><button class="btn btn-primary" id="addProjSave">Hinzufügen</button></div></div></div>
@@ -776,7 +776,7 @@ function mergeEntries(localArr,remoteArr){
 }
 function addEntry(e){const a=getRawEntries();e.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);e.created=new Date().toISOString();e.lastModified=Date.now();a.push(e);saveEntries(a);toast('Eintrag gespeichert','success');refreshView()}
 function updateEntry(id,u){const a=getRawEntries(),i=a.findIndex(e=>e.id===id);if(i>=0){a[i]={...a[i],...u,lastModified:Date.now()};saveEntries(a);refreshView();return true}return false}
-function removeEntry(id){const a=getEntries(),i=a.findIndex(e=>e.id===id);if(i>=0){a[i]._deleted=true;a[i].lastModified=Date.now()}saveEntries(a);refreshView()}
+function removeEntry(id){const a=getRawEntries(),i=a.findIndex(e=>e.id===id);if(i>=0){a[i]._deleted=true;a[i].lastModified=Date.now()}saveEntries(a);refreshView()}
 function dateKey(d){const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
 function todayKey(){return dateKey(new Date())}
 function fmtDate(d){const x=new Date(d);return String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+x.getFullYear()}
@@ -889,7 +889,7 @@ const SP={
     }catch(e){
       // If read fails, write local entries as fallback
       console.warn('[SP] Merge-Save fallback:',e.message);
-      return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getEntries()});
+      return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getRawEntries()});
     }
   },
   async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
@@ -1072,6 +1072,13 @@ function showPauseDialog(e){const sMin=timeToMin(e.startTime),eMin=timeToMin(e.e
 function recalcN(){calcNetto(timeToMin(pendingEntry.endTime)-timeToMin(pendingEntry.startTime))}
 function calcNetto(brutto){let p=0;const z=$('pZn');if(z&&z.checked)p+=15;const l=document.querySelector('input[name=lunch]:checked');if(l)p+=parseInt(l.value);const d=$('nettoDisp');if(d)d.innerHTML='<div class="pause-row"><span>Pausen total:</span><span style="font-family:var(--font-mono)">'+fmtMin(p)+'</span></div><div class="pause-row total"><span>NETTO:</span><span>'+fmtMin(brutto-p)+'</span></div>'}
 $('pauseCancel').onclick=function(){$('pauseModal').classList.remove('show')};
+$('pauseDiscard').onclick=function(){
+  if(!confirm('Timer wirklich verwerfen?\nDie erfasste Zeit wird NICHT gespeichert.'))return;
+  resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null;
+  // Clear remote timer state
+  if(accessToken&&user)SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).catch(()=>{});
+  toast('Timer verworfen','info');
+};
 $('pauseConfirm').onclick=function(){let p=0;const z=$('pZn');const hasZnueni=z&&z.checked;if(hasZnueni)p+=15;const l=document.querySelector('input[name=lunch]:checked');const lunchVal=l?parseInt(l.value):0;p+=lunchVal;const lunchType=lunchVal===60?'60min':lunchVal===30?'30min':'none';const e=pendingEntry;addEntry({date:e.date,startTime:e.startTime,endTime:e.endTime,start:e.startTime,end:e.endTime,pauseMin:p,durationMin:timeToMin(e.endTime)-timeToMin(e.startTime)-p,project:e.project,projectName:e.project,kostenstelle:e.kostenstelle,costCenter:e.kostenstelle,bemerkung:e.bemerkung,note:e.bemerkung,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:lunchType,mittagsPause:lunchType});resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null};
 
 // RECOVERY
@@ -3409,7 +3416,8 @@ function renderAbsCalendar(){
 // TIMER SYNC ÜBER GERÄTE (SharePoint)
 // ============================================================
 let _timerSyncInterval=null;
-const _deviceId=Math.random().toString(36).substring(2,10);
+const _deviceId=(function(){let id=localStorage.getItem('zt_deviceId');if(!id){id=Math.random().toString(36).substring(2,10);localStorage.setItem('zt_deviceId',id)}return id})();
+let _pendingTimerOff=false; // Track if we need to sync timer-off state
 
 async function syncTimerToSP(){
   if(!accessToken||!user)return;
@@ -3434,39 +3442,62 @@ async function syncTimerToSP(){
 
 async function checkRemoteTimer(){
   if(!accessToken||!user)return;
+  // First: if we have a pending timer-off, sync it now
+  if(_pendingTimerOff&&!timer.on){
+    try{
+      await SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()});
+      _pendingTimerOff=false;
+    }catch{}
+  }
   try{
     const remote=await SP.readFile('timer_'+user.id+'.json');
-    if(!remote)return;
-    // If remote timer is running on ANOTHER device
-    if(remote.on&&remote.deviceId!==_deviceId&&!timer.on){
-      const elapsed=Date.now()-remote.start-remote.totalPaused;
-      const mins=Math.round(elapsed/60000);
-      if(mins>0&&mins<720){// Ignore if >12h old
-        const resume=confirm('Timer l\u00e4uft auf anderem Ger\u00e4t!\n\nProjekt: '+remote.project+'\nKostenstelle: '+remote.ks+'\nLaufzeit: '+Math.floor(mins/60)+'h '+String(mins%60).padStart(2,'0')+'min\n\nHier \u00fcbernehmen?');
-        if(resume){
-          timer={on:true,paused:remote.paused,start:remote.start,pauseAt:remote.pauseAt,totalPaused:remote.totalPaused,project:remote.project,ks:remote.ks,note:remote.note||'',segments:remote.segments||[]};
-          localStorage.setItem(lk('timer'),JSON.stringify(timer));
-          $('timerProject').value=timer.project;
-          $('timerKS').value=timer.ks;
-          $('timerNote').value=timer.note||'';
-          updateTimerUI();timerIv=setInterval(tickTimer,1000);tickTimer();
-          $('timerIndicator').classList.add('on');
-          $('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;
-          updateSegmentDisplay();
-          toast('Timer von anderem Ger\u00e4t \u00fcbernommen','success');
-          // Update SP with our deviceId
-          syncTimerToSP();
-        }
-      }
+    if(!remote||!remote.on)return;
+    // Skip if it's our own device
+    if(remote.deviceId===_deviceId)return;
+    // Skip if our timer is already running
+    if(timer.on)return;
+    const elapsed=Date.now()-remote.start-(remote.totalPaused||0);
+    const mins=Math.round(elapsed/60000);
+    const lastUpdateAge=Date.now()-(remote.lastUpdate||0);
+    const lastUpdateMins=Math.round(lastUpdateAge/60000);
+    // Ignore if >12h old
+    if(mins<=0||mins>720)return;
+    // Build message with staleness warning
+    let msg='Timer l\u00e4uft auf anderem Ger\u00e4t!\n\nProjekt: '+remote.project+'\nKostenstelle: '+remote.ks+'\nLaufzeit: '+Math.floor(mins/60)+'h '+String(mins%60).padStart(2,'0')+'min';
+    if(lastUpdateMins>10){
+      msg+='\n\n\u26A0\uFE0F Letztes Update vor '+lastUpdateMins+' Min \u2013 das Ger\u00e4t ist m\u00f6glicherweise offline.';
+    }
+    msg+='\n\nHier \u00fcbernehmen?';
+    const resume=confirm(msg);
+    if(resume){
+      timer={on:true,paused:remote.paused||false,start:remote.start,pauseAt:remote.pauseAt||null,totalPaused:remote.totalPaused||0,project:remote.project,ks:remote.ks,note:remote.note||'',segments:remote.segments||[]};
+      localStorage.setItem(lk('timer'),JSON.stringify(timer));
+      $('timerProject').value=timer.project;
+      $('timerKS').value=timer.ks;
+      $('timerNote').value=timer.note||'';
+      updateTimerUI();timerIv=setInterval(tickTimer,1000);tickTimer();
+      $('timerIndicator').classList.add('on');
+      $('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;
+      updateSegmentDisplay();
+      toast('Timer von anderem Ger\u00e4t \u00fcbernommen','success');
+      syncTimerToSP();
+    }else{
+      // User declined - mark remote timer as stopped to prevent repeated prompts
+      try{
+        await SP.writeFile('timer_'+user.id+'.json',{deviceId:remote.deviceId,userId:user.id,on:false,lastUpdate:Date.now(),stoppedBy:_deviceId});
+      }catch{}
     }
   }catch(e){console.warn('[TimerSync] Remote check:',e.message)}
 }
 
-// Sync timer to SP every 30 seconds while running
 function startTimerSync(){
   if(_timerSyncInterval)clearInterval(_timerSyncInterval);
   _timerSyncInterval=setInterval(()=>{
-    if(timer.on&&accessToken)syncTimerToSP();
+    if(!accessToken)return;
+    if(timer.on)syncTimerToSP();
+    else if(_pendingTimerOff){
+      SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).then(()=>{_pendingTimerOff=false;console.log('[TimerSync] Pending off synced')}).catch(()=>{});
+    }
   },30000);
   // Immediate sync
   if(timer.on&&accessToken)syncTimerToSP();
@@ -3490,10 +3521,10 @@ $('btnStart').onclick=function(){
 const _origBtnStop=$('btnStop').onclick;
 $('btnStop').onclick=function(){
   _origBtnStop.call(this);
-  // Clear remote timer state
+  // Clear remote timer state, mark pending if offline
   if(accessToken&&user){
-    SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).catch(()=>{});
-  }
+    SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).then(()=>{_pendingTimerOff=false}).catch(()=>{_pendingTimerOff=true});
+  }else{_pendingTimerOff=true}
 };
 
 
