@@ -213,7 +213,7 @@
     <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Firmen-Dashboard</h2>
     <div class="card">
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="dashPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="custom">Benutzerdefiniert</option></select></div>
+        <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="dashPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="all">Gesamter Zeitraum</option><option value="custom">Benutzerdefiniert</option></select></div>
         <div class="form-group" style="flex:2"><label class="form-label">Projekte filtern</label><input type="text" class="form-input" id="dashProjSearch" placeholder="🔍 Suchen..." oninput="dashFilterProjects()"></div>
       </div>
       <div id="dashProjPicker" style="max-height:180px;overflow-y:auto;padding:8px;margin:8px 0;border:1px solid var(--border);border-radius:8px">
@@ -1046,7 +1046,7 @@ $('editBody').innerHTML='<div class="form-row"><div class="form-group"><label cl
 setupAC('edProject','edProjectAC');edUpdatePause();$('editModal').classList.add('show')}
 function edUpdatePause(){const z=$('edZnueni')&&$('edZnueni').checked?15:0;const mv=$('edMittag')?$('edMittag').value:'none';let m=0;if(mv==='30min')m=30;else if(mv==='60min')m=60;else if(mv==='custom')m=parseInt($('edMittagCustom')&&$('edMittagCustom').value)||0;$('edMittagCustomWrap').style.display=mv==='custom'?'block':'none';const t=z+m;if($('edPauseTotal'))$('edPauseTotal').textContent=t+' Min'}
 $('editCancel').onclick=function(){$('editModal').classList.remove('show');editId=null};
-$('editSave').onclick=function(){if(!editId)return;const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,nt=($('edNote')?$('edNote').value:'').trim();if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}const hasZ=$('edZnueni').checked;const mv=$('edMittag').value;let mMin=0;if(mv==='30min')mMin=30;else if(mv==='60min')mMin=60;else if(mv==='custom')mMin=parseInt($('edMittagCustom').value)||0;const totalPause=( hasZ?15:0)+mMin;updateEntry(editId,{startTime:st,endTime:en,start:st,end:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,pauseMin:totalPause,durationMin:timeToMin(en)-timeToMin(st)-totalPause,bemerkung:nt,note:nt,pauseZnueni:hasZ,znueniPause:hasZ,pauseMittag:mv==='custom'?String(mMin)+'min':mv,mittagsPause:mv==='custom'?String(mMin)+'min':mv,breakMinutes:totalPause});toast('Aktualisiert','success');$('editModal').classList.remove('show');editId=null};
+$('editSave').onclick=function(){if(!editId||editId.startsWith('__new_'))return;const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,nt=($('edNote')?$('edNote').value:'').trim();if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}const hasZ=$('edZnueni').checked;const mv=$('edMittag').value;let mMin=0;if(mv==='30min')mMin=30;else if(mv==='60min')mMin=60;else if(mv==='custom')mMin=parseInt($('edMittagCustom').value)||0;const totalPause=( hasZ?15:0)+mMin;updateEntry(editId,{startTime:st,endTime:en,start:st,end:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,pauseMin:totalPause,durationMin:timeToMin(en)-timeToMin(st)-totalPause,bemerkung:nt,note:nt,pauseZnueni:hasZ,znueniPause:hasZ,pauseMittag:mv==='custom'?String(mMin)+'min':mv,mittagsPause:mv==='custom'?String(mMin)+'min':mv,breakMinutes:totalPause});toast('Aktualisiert','success');$('editModal').classList.remove('show');editId=null};
 $('editDelete').onclick=function(){if(!editId)return;if(confirm('Eintrag wirklich l\u00f6schen?')){removeEntry(editId);toast('Gel\u00f6scht','info');$('editModal').classList.remove('show');editId=null}};
 
 // RENDER
@@ -1241,57 +1241,35 @@ function showCalDayDetail(dk){
 }
 
 function openCalDayEntry(dk){
-  // Pre-fill the edit modal for a new entry on this date
-  $('editModal').classList.add('show');
-  $('editTitle').textContent='Neuer Eintrag \u2013 '+fmtDate(dk);
-  $('editDate').value=dk;
-  $('editStart').value='07:00';
-  $('editEnd').value='16:45';
-  $('editProj').value='';
-  $('editKS').value='B\u00fcro';
-  $('editNote').value='';
-  // Reset pause fields
-  if($('edZnueni'))$('edZnueni').checked=true;
-  if($('edMittag'))$('edMittag').value='60min';
-  if($('edCustomPause'))$('edCustomPause').style.display='none';
-  if(typeof edUpdatePause==='function')edUpdatePause();
-  // Set save action to create new entry
-  $('editSaveBtn').onclick=function(){
-    const start=$('editStart').value,end=$('editEnd').value;
-    const proj=$('editProj').value.trim(),ks=$('editKS').value;
-    if(!proj){toast('Bitte Projekt w\u00e4hlen','warning');return}
-    if(!start||!end){toast('Start/Ende eingeben','warning');return}
-    // Calculate duration
-    const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
-    let durMin=(eh*60+em)-(sh*60+sm);
-    // Calculate pause
-    let pauseMin=0;
-    if($('edZnueni')&&$('edZnueni').checked)pauseMin+=15;
-    const mittag=$('edMittag')?$('edMittag').value:'60min';
-    if(mittag==='60min')pauseMin+=60;
-    else if(mittag==='30min')pauseMin+=30;
-    else if(mittag==='custom'&&$('edCustomMin'))pauseMin+=parseInt($('edCustomMin').value)||0;
-    durMin-=pauseMin;
+  editId='__new_'+dk;
+  const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option'+(k==='B\u00fcro'?' selected':'')+'>'+k+'</option>').join('');
+  $('editBody').innerHTML='<div class="form-group"><label class="form-label">Datum</label><input type="date" class="form-input" id="edNewDate" value="'+dk+'"></div><div class="form-row"><div class="form-group"><label class="form-label">Startzeit</label><input type="time" class="form-input" id="edStart" value="07:00"></div><div class="form-group"><label class="form-label">Endzeit</label><input type="time" class="form-input" id="edEnd" value="16:45"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="edProject" value="" autocomplete="off"><div class="autocomplete-list" id="edProjectAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="edKS"><option value="">\u2014</option>'+ksOpts+'</select></div><div class="form-group"><label class="form-label">Pausen</label><div style="display:flex;flex-direction:column;gap:8px"><label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer"><input type="checkbox" id="edZnueni" checked onchange="edUpdatePause()"> \u2615 Zn\u00fcni (15 Min)</label><div style="display:flex;align-items:center;gap:8px;font-size:.85rem"><span>\uD83C\uDF5D Mittag:</span><select class="form-select" id="edMittag" style="width:auto;padding:4px 8px" onchange="edUpdatePause()"><option value="none">Durchgearbeitet</option><option value="30min">30 Min</option><option value="60min" selected>1 Stunde</option><option value="custom">Benutzerdefiniert</option></select></div><div id="edMittagCustomWrap" style="display:none"><input type="number" class="form-input" id="edMittagCustom" value="0" min="0" max="120" placeholder="Minuten" onchange="edUpdatePause()" style="width:100px"></div><div style="font-size:.8rem;color:var(--text-dim)">Total Pause: <strong id="edPauseTotal">75 Min</strong></div></div></div><div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="edNote" value=""></div>';
+  setupAC('edProject','edProjectAC');
+  // Override save for new entry
+  $('editSave').onclick=function(){
+    const d=$('edNewDate')?$('edNewDate').value:dk;
+    const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,nt=($('edNote')?$('edNote').value:'').trim();
+    if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}
+    const hasZ=$('edZnueni').checked;const mv=$('edMittag').value;
+    let mMin=0;if(mv==='30min')mMin=30;else if(mv==='60min')mMin=60;else if(mv==='custom')mMin=parseInt($('edMittagCustom').value)||0;
+    const totalPause=(hasZ?15:0)+mMin;
+    const durMin=timeToMin(en)-timeToMin(st)-totalPause;
     if(durMin<=0){toast('Dauer muss positiv sein','warning');return}
-    
-    const entry={
-      date:dk,
-      startTime:start,endTime:end,start:start,end:end,
-      project:proj,projectName:proj,
-      kostenstelle:ks,costCenter:ks,
-      durationMin:durMin,pauseMin:pauseMin,
-      pauseZnueni:$('edZnueni')?$('edZnueni').checked:false,
-      znueniPause:$('edZnueni')?$('edZnueni').checked:false,
-      pauseMittag:mittag,mittagsPause:mittag,
-      bemerkung:$('editNote').value.trim(),
-      note:$('editNote').value.trim()
-    };
-    addEntry(entry);
+    addEntry({date:d,startTime:st,endTime:en,start:st,end:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,pauseMin:totalPause,durationMin:durMin,bemerkung:nt,note:nt,pauseZnueni:hasZ,znueniPause:hasZ,pauseMittag:mv==='custom'?String(mMin)+'min':mv,mittagsPause:mv==='custom'?String(mMin)+'min':mv});
     $('editModal').classList.remove('show');
-    showCalDayDetail(dk);
+    editId=null;
+    showCalDayDetail(d);
     updateMonthCalendar();
+    // Restore original save handler
+    bindEditSave();
   };
-  setupAC('editProj','editProjAC');
+  $('editDelete').style.display='none';
+  $('editModal').classList.add('show');
+}
+// Re-bind the original edit save handler
+function bindEditSave(){
+  $('editSave').onclick=function(){if(!editId||editId.startsWith('__new_'))return;const st=$('edStart').value,en=$('edEnd').value,pr=$('edProject').value.trim(),ks=$('edKS').value,nt=($('edNote')?$('edNote').value:'').trim();if(!st||!en||!pr||!ks){toast('Pflichtfelder ausf\u00fcllen','warning');return}const hasZ=$('edZnueni').checked;const mv=$('edMittag').value;let mMin=0;if(mv==='30min')mMin=30;else if(mv==='60min')mMin=60;else if(mv==='custom')mMin=parseInt($('edMittagCustom').value)||0;const totalPause=(hasZ?15:0)+mMin;updateEntry(editId,{startTime:st,endTime:en,start:st,end:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,pauseMin:totalPause,durationMin:timeToMin(en)-timeToMin(st)-totalPause,bemerkung:nt,note:nt,pauseZnueni:hasZ,znueniPause:hasZ,pauseMittag:mv==='custom'?String(mMin)+'min':mv,mittagsPause:mv==='custom'?String(mMin)+'min':mv,breakMinutes:totalPause});toast('Aktualisiert','success');$('editModal').classList.remove('show');editId=null};
+  $('editDelete').style.display='';
 }
 // ADMIN
 function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>').join('')}
@@ -2880,6 +2858,7 @@ function getDashRange(){
   if(p==='month')return{from:dateKey(new Date(y,m,1)),to:dateKey(new Date(y,m+1,0))};
   if(p==='quarter'){const q=Math.floor(m/3)*3;return{from:dateKey(new Date(y,q,1)),to:dateKey(new Date(y,q+3,0))};}
   if(p==='year')return{from:y+'-01-01',to:y+'-12-31'};
+  if(p==='all')return{from:'2020-01-01',to:dateKey(now)};
   return{from:$('dashFrom').value||y+'-01-01',to:$('dashTo').value||dateKey(now)};
 }
 
@@ -3240,19 +3219,19 @@ SP.gf=async function(ep,opts){
   try{
     const result=await _origGf.call(SP,ep,opts);
     _lastSyncOk=Date.now();
-    const el=$('syncStatus');
-    // Status managed by explicit sync calls
     return result;
   }catch(e){
-    setSyncStatus('offline');
-    if(e.message&&(e.message.includes('401')||e.message.includes('403'))){
-      console.warn('[SP] Auth-Fehler:',e.message);
-      if(Notification.permission==='granted'){
-        new Notification('Hubler Zeiterfassung',{body:'\u26A0\uFE0F Sitzung abgelaufen - bitte App \u00f6ffnen und neu anmelden'});
-      }
+    const msg=e.message||'';
+    if(msg.includes('401')||msg.includes('403')){
+      setSyncStatus('offline');
+      console.warn('[SP] Auth-Fehler:',msg);
       if(typeof silentRefreshToken==='function')silentRefreshToken();
+    }else if(msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('net::')){
+      setSyncStatus('offline');
+      console.warn('[SP] Netzwerk-Fehler:',msg);
     }else{
-      console.warn('[SP] API-Fehler:',e.message);
+      // 404 or other non-critical errors - don't change status
+      console.warn('[SP] API:',msg);
     }
     throw e;
   }
