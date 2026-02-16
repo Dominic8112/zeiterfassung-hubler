@@ -492,8 +492,15 @@
     <div id="empTempPensumList"></div>
     <button class="btn btn-secondary btn-sm" onclick="addTempPensum()" style="margin-top:8px">+ Zeitraum hinzufügen</button>
   </div>
-  <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">📅 Vorjahres-Guthaben</div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Ferienübertrag (Tage)</label><input type="number" class="form-input" id="empFerienUe" value="0" min="-10" max="30" step="0.5"></div><div class="form-group"><label class="form-label">Überstunden (h)</label><input type="number" class="form-input" id="empUeStd" value="0" min="-50" max="200" step="0.5"></div></div>
+  <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:8px">📅 Jahres-Vorträge</div>
+    <p style="font-size:.75rem;color:var(--text-dim);margin-bottom:10px">Ferien- und Überstunden-Guthaben aus dem jeweiligen Vorjahr. Pro Jahr einen Eintrag erfassen.</p>
+    <div id="vortraegeList"></div>
+    <div class="form-row" style="margin-top:8px;align-items:flex-end">
+      <div class="form-group" style="flex:0 0 80px"><label class="form-label">Jahr</label><input type="number" class="form-input" id="vtYear" min="2020" max="2040" step="1"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Ferien (Tage)</label><input type="number" class="form-input" id="vtFerien" value="0" min="-20" max="50" step="0.5"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Überstunden (h)</label><input type="number" class="form-input" id="vtUeStd" value="0" min="-100" max="500" step="0.5"></div>
+      <div class="form-group" style="flex:0 0 auto"><label class="form-label">&nbsp;</label><button class="btn btn-primary btn-sm" onclick="addVortrag()">+ Hinzufügen</button></div>
+    </div>
   </div>
   <div id="empPreview"></div>
   <div class="modal-actions"><button class="btn btn-secondary" onclick="$('empEditModal').classList.remove('show')">Abbrechen</button><button class="btn btn-primary" onclick="saveEmpEdit()">💾 Speichern</button></div>
@@ -1600,7 +1607,16 @@ function saveSplitEntries(){
 
 
 // EMPLOYEE SETTINGS (Admin only)
-const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],year:new Date().getFullYear(),eintritt:null,austritt:null,timerEndzeit:'18:00'};
+const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],vortraege:[],year:new Date().getFullYear(),eintritt:null,austritt:null,timerEndzeit:'18:00'};
+
+// Get Vortrag for a specific year (year-based or legacy fallback)
+function getVortrag(empId,year){
+  const s=getEmpSetting(empId);
+  const vt=(s.vortraege||[]).find(v=>v.year===year);
+  if(vt)return{ferien:vt.ferien||0,ueberstunden:vt.ueberstunden||0};
+  // Legacy fallback: use old single fields if no year-based entry exists
+  return{ferien:s.ferienUebertrag||0,ueberstunden:s.ueberstundenUebertrag||0};
+}
 
 // Pro-rata Ferienanspruch based on Eintritt/Austritt
 function calcFerienAnspruch(empId,year){
@@ -1646,7 +1662,7 @@ function renderEmpSettings(){
     if(s.raucher)badges+='<span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">🚬 Raucher</span>';
     if(activeTp)badges+='<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:4px;font-size:.7rem">\u26A0 '+activeTp.pensum+'% bis '+new Date(activeTp.bis).toLocaleDateString('de-CH')+(activeTp.grund?' ('+activeTp.grund+')':'')+'</span>';
     if(tp.length>0&&!activeTp){const future=tp.filter(t=>today<t.von);if(future.length)badges+='<span style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:.7rem">\u23F1 Geplant: '+future[0].pensum+'% ab '+new Date(future[0].von).toLocaleDateString('de-CH')+'</span>';}
-    return '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>'+emp.name+'</strong><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)"><span>'+s.pensum+'%</span><span>'+s.weekHours+'h/Wo</span><span>'+tageStr+'</span><span>'+ferienAnspruch+' Ferientage</span>'+(s.ferienUebertrag?'<span style="color:var(--success)">+'+s.ferienUebertrag+' FU</span>':'')+''+(s.ueberstundenUebertrag?'<span style="color:var(--accent)">+'+s.ueberstundenUebertrag+'h \u00dc</span>':'')+'</div>'+(badges?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+badges+'</div>':'')+'<button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="openEmpEdit(\''+emp.id+'\')">Bearbeiten</button></div>'
+    return '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>'+emp.name+'</strong><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)"><span>'+s.pensum+'%</span><span>'+s.weekHours+'h/Wo</span><span>'+tageStr+'</span><span>'+ferienAnspruch+' Ferientage</span>'+function(){var _v=getVortrag(emp.id,new Date().getFullYear());return(_v.ferien?'<span style="color:var(--success)">+'+_v.ferien+' FU</span>':'')+(_v.ueberstunden?'<span style="color:var(--accent)">+'+_v.ueberstunden+'h \u00dc</span>':'')}()+'</div>'+(badges?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+badges+'</div>':'')+'<button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="openEmpEdit(\''+emp.id+'\')">Bearbeiten</button></div>'
   }).join('');
 }
 function openEmpEdit(empId){
@@ -1655,20 +1671,26 @@ function openEmpEdit(empId){
   const tage=s.arbeitsTage||[1,2,3,4,5];
   window._editEmpId=empId;
   window._editTempPensum=(s.tempPensum||[]).map(t=>({...t}));
+  window._editVortraege=(s.vortraege||[]).map(v=>({...v}));
+  // Migrate legacy fields if no vortraege exist yet
+  if(!window._editVortraege.length&&(s.ferienUebertrag||s.ueberstundenUebertrag)){
+    const yr=s.year||new Date().getFullYear();
+    window._editVortraege=[{year:yr,ferien:s.ferienUebertrag||0,ueberstunden:s.ueberstundenUebertrag||0}];
+  }
   $('empEditTitle').textContent=emp.name+' ('+emp.id+')';
   $('empPensum').value=s.pensum||100;
   $('empWeekH').value=s.weekHours||41;
   $('empFerien').value=s.ferienTage||25;
-  $('empFerienUe').value=s.ferienUebertrag||0;
-  $('empUeStd').value=s.ueberstundenUebertrag||0;
   $('empYear').value=s.year||new Date().getFullYear();
   $('empRaucher').checked=!!s.raucher;
   $('empEintritt').value=s.eintritt||'';
   $('empAustritt').value=s.austritt||'';
   $('empTimerEnd').value=s.timerEndzeit||'18:00';
+  $('vtYear').value=new Date().getFullYear();
   // Set checkboxes
   [1,2,3,4,5].forEach(d=>{const cb=$('empTag'+d);if(cb)cb.checked=tage.includes(d)});
   renderTempPensumList();
+  renderVortraege();
   calcEmpPreview();
   $('empEditModal').classList.add('show');
 }
@@ -1701,22 +1723,64 @@ function calcEmpPreview(){
   if(prev)prev.innerHTML='<div class="pause-summary"><div class="pause-row"><span>Pensum:</span><span>'+pensum+'%</span></div>'+(eintritt?'<div class="pause-row"><span>Eintritt:</span><span>'+fmtDate(eintritt)+'</span></div>':'')+(austritt?'<div class="pause-row"><span>Austritt:</span><span>'+fmtDate(austritt)+'</span></div>':'')+'<div class="pause-row"><span>Arbeitstage:</span><span>'+tage.map(d=>DAY_LABELS[d]).join(', ')+'</span></div><div class="pause-row"><span>Soll/Tag:</span><span style="font-family:var(--font-mono)">'+tagesH+'h</span></div><div class="pause-row"><span>Soll/Woche:</span><span style="font-family:var(--font-mono)">'+weekH+'h</span></div>'+(raucher?'<div class="pause-row" style="color:var(--warning)"><span>\uD83D\uDEAC Raucherabzug/Woche:</span><span style="font-family:var(--font-mono)">\u2212'+raucherH+'h ('+raucherAbzug+' Min)</span></div>':'')+proRataInfo+'<div class="pause-row total"><span>Ferienanspruch '+yr+':</span><span>'+ferienAnspruch+' Tage</span></div></div>';
 }
 
+function renderVortraege(){
+  const list=$('vortraegeList');if(!list)return;
+  const vt=(window._editVortraege||[]).sort((a,b)=>b.year-a.year);
+  if(!vt.length){list.innerHTML='<p style="font-size:.78rem;color:var(--text-dim);font-style:italic">Noch keine Vortr\u00e4ge erfasst</p>';return}
+  let h='<table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead><tr><th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Jahr</th><th style="text-align:right;padding:4px;border-bottom:1px solid var(--border)">Ferien (Tage)</th><th style="text-align:right;padding:4px;border-bottom:1px solid var(--border)">\u00dcberstunden (h)</th><th style="width:40px"></th></tr></thead><tbody>';
+  vt.forEach((v,i)=>{
+    h+='<tr><td style="padding:4px;font-weight:600">'+v.year+'</td><td style="padding:4px;text-align:right;font-family:var(--font-mono);color:var(--success)">'+(v.ferien>=0?'+':'')+v.ferien+'</td><td style="padding:4px;text-align:right;font-family:var(--font-mono);color:var(--accent)">'+(v.ueberstunden>=0?'+':'')+v.ueberstunden+'h</td><td style="padding:4px;text-align:center"><button class="btn btn-secondary" style="padding:1px 6px;font-size:.7rem" onclick="removeVortrag('+v.year+')">\u2715</button></td></tr>';
+  });
+  h+='</tbody></table>';
+  list.innerHTML=h;
+}
+
+function addVortrag(){
+  const year=parseInt($('vtYear').value);
+  const ferien=parseFloat($('vtFerien').value)||0;
+  const ue=parseFloat($('vtUeStd').value)||0;
+  if(!year||year<2020||year>2040){toast('G\u00fcltiges Jahr eingeben','warning');return}
+  if(!window._editVortraege)window._editVortraege=[];
+  const existing=window._editVortraege.findIndex(v=>v.year===year);
+  if(existing>=0){
+    window._editVortraege[existing]={year,ferien,ueberstunden:ue};
+    toast('Vortrag '+year+' aktualisiert','success');
+  }else{
+    window._editVortraege.push({year,ferien,ueberstunden:ue});
+    toast('Vortrag '+year+' hinzugef\u00fcgt','success');
+  }
+  $('vtFerien').value='0';$('vtUeStd').value='0';$('vtYear').value=year+1;
+  renderVortraege();
+}
+
+function removeVortrag(year){
+  if(!confirm('Vortrag f\u00fcr '+year+' l\u00f6schen?'))return;
+  window._editVortraege=(window._editVortraege||[]).filter(v=>v.year!==year);
+  renderVortraege();
+  toast('Vortrag '+year+' gel\u00f6scht','info');
+}
+
 function saveEmpEdit(){
   const empId=window._editEmpId;if(!empId)return;
   const tage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
   if(!tage.length){toast('Mindestens 1 Arbeitstag','warning');return}
   // Validate temp pensum entries
   const tp=(window._editTempPensum||[]).filter(t=>t.von&&t.bis&&t.pensum);
+  const vt=(window._editVortraege||[]);
+  // Compute legacy fields from vortraege for backward compat
+  const curYr=parseInt($('empYear').value)||new Date().getFullYear();
+  const curVt=vt.find(v=>v.year===curYr);
   setEmpSetting(empId,{
     pensum:parseInt($('empPensum').value)||100,
     weekHours:parseFloat($('empWeekH').value)||41,
     ferienTage:parseInt($('empFerien').value)||25,
     arbeitsTage:tage,
-    ferienUebertrag:parseFloat($('empFerienUe').value)||0,
-    ueberstundenUebertrag:parseFloat($('empUeStd').value)||0,
+    vortraege:vt,
+    ferienUebertrag:curVt?curVt.ferien:0,
+    ueberstundenUebertrag:curVt?curVt.ueberstunden:0,
     raucher:$('empRaucher').checked,
     tempPensum:tp,
-    year:parseInt($('empYear').value)||new Date().getFullYear(),
+    year:curYr,
     eintritt:$('empEintritt').value||null,
     austritt:$('empAustritt').value||null,
     timerEndzeit:$('empTimerEnd').value||'18:00'
@@ -1884,7 +1948,8 @@ function renderAbsences(){
   // Get employee settings for proper calculation
   const empS=user?getEmpSetting(user.id):{...EMP_DEFAULTS};
   const ferienAnspruch=calcFerienAnspruch(user.id,parseInt(year));
-  const ferienTotal=ferienAnspruch+(empS.ferienUebertrag||0);
+  const _vtAbs=user?getVortrag(user.id,parseInt(year)):{ferien:0,ueberstunden:0};
+  const ferienTotal=ferienAnspruch+_vtAbs.ferien;
   const bfDaysOwn=user?countBetriebsferienDays(user.id,year+'-01-01',year+'-12-31'):0;
   const ferienBezogen=ferienDays+bfDaysOwn;
   const ferienRest=Math.round((ferienTotal-ferienBezogen)*10)/10;
@@ -2045,8 +2110,10 @@ function generateReport(){
     const workDays=countWorkdays(range.from,sollTo,emp.id);
     const sollH=calcSollHours(emp.id,range.from,sollTo,s,workDays);
     const diffH=Math.round((totalH-sollH)*10)/10;
-    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)));
-    const ferienTotal=ferienAnspruch+(s.ferienUebertrag||0);
+    const _rpYr=parseInt(range.from.substring(0,4));
+    const ferienAnspruch=calcFerienAnspruch(emp.id,_rpYr);
+    const _vtRp=getVortrag(emp.id,_rpYr);
+    const ferienTotal=ferienAnspruch+_vtRp.ferien;
     const ferienBezogen=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
     const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
     const ferienRest=Math.round((ferienTotal-ferienBezogen-bfDays)*10)/10;
@@ -2156,10 +2223,12 @@ function exportReportCSV(){
     const _sollToC=_todayC<range.to?_todayC:range.to;
     const workDays=countWorkdays(range.from,_sollToC,emp.id);
     const sollH=Math.round(calcSollHours(emp.id,range.from,_sollToC,s,workDays)*10)/10;
-    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)))+(s.ferienUebertrag||0);
+    const _csvYr=parseInt(range.from.substring(0,4));
+    const _vtCsv=getVortrag(emp.id,_csvYr);
+    const ferienAnspruch=calcFerienAnspruch(emp.id,_csvYr)+_vtCsv.ferien;
     const ferienBez=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
     const krankT=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')).reduce((sum,a)=>sum+a.days,0);
-    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+(s.raucher?'Ja':'Nein')+';'+s.weekHours+';'+totalH+';'+Math.round(raucherMin/60*10)/10+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+(s.ferienUebertrag||0)+';'+(s.ueberstundenUebertrag||0)+';'+krankT+';'+entries.length+'\n';
+    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+(s.raucher?'Ja':'Nein')+';'+s.weekHours+';'+totalH+';'+Math.round(raucherMin/60*10)/10+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+_vtCsv.ferien+';'+_vtCsv.ueberstunden+';'+krankT+';'+entries.length+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='Mitarbeiter_Report_'+$('reportPeriod').value+'.csv';a.click();
@@ -2973,7 +3042,7 @@ function loadDashboard(){
     const bfDays=countBetriebsferienDays(emp.id,range.from,range.to);
     const krankDays=absences.filter(a=>a.type==='Krankheit').reduce((s,a)=>s+a.days,0);
     const unfallDays=absences.filter(a=>a.type==='Unfall').reduce((s,a)=>s+a.days,0);
-    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)))+(s.ferienUebertrag||0);
+    const ferienAnspruch=calcFerienAnspruch(emp.id,parseInt(range.from.substring(0,4)))+getVortrag(emp.id,parseInt(range.from.substring(0,4))).ferien;
 
     totalMin+=empMin;totalEntries+=entries.length;
     krankTotal+=krankDays;unfallTotal+=unfallDays;
@@ -4038,7 +4107,8 @@ function calcOvertimeAccount(empId,year){
   const dailyH=(s.weekHours||41)/arbeitsTage.length;
   const kompH=Math.round(kompDays*dailyH*100)/100;
   
-  const vortrag=s.ueberstundenUebertrag||0;
+  const _vtOt=getVortrag(empId,parseInt(year));
+  const vortrag=_vtOt.ueberstunden;
   const guthaben=Math.round((vortrag+saldoH-payoutH-kompH)*100)/100;
   
   return{vortrag,saldoH,payoutH,kompDays,kompH,guthaben,payouts,bisHeute:to};
