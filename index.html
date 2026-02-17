@@ -133,6 +133,7 @@
     <button class="nav-tab" data-tab="absence">🏖 Abwesenheit</button>
     <button class="nav-tab" data-tab="report" style="display:none">📊 Report</button>
     <button class="nav-tab" data-tab="export">💾 Export</button>
+    <button class="nav-tab" data-tab="notif">🔔 Benachrichtigungen</button>
     <button class="nav-tab" data-tab="dashboard" style="display:none">📊 Dashboard</button>
     <button class="nav-tab" data-tab="maedit" style="display:none">👥 MA-Edit</button>
     <button class="nav-tab" data-tab="admin" style="display:none">⚙️ Admin</button>
@@ -148,15 +149,6 @@
       <div class="form-group autocomplete-wrapper"><label class="form-label">Projekt <span class="req">*</span></label><div style="position:relative"><input type="text" class="form-input" id="timerProject" placeholder="Nummer oder Name..." autocomplete="off" style="padding-right:32px"><button type="button" id="timerProjClear" onclick="$('timerProject').value='';$('timerProject').focus();this.style.display='none'" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-dim);padding:4px;display:none" title="Projekt löschen">✕</button></div><div class="autocomplete-list" id="timerProjectAC"></div></div>
       <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="timerKS"><option value="">— Bitte wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
       <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="timerNote" placeholder="Optional..."></div>
-    </div>
-    <!-- Personal Notifications -->
-    <div class="card" style="margin-top:24px">
-      <div class="card-title">🔔 Benachrichtigungen</div>
-      <div class="sp-info"><strong>Status:</strong> <span id="myNotifStatus">...</span></div>
-      <div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn btn-primary btn-sm" id="myNotifEnableBtn">🔔 Aktivieren</button><button class="btn btn-secondary btn-sm" id="myNotifTestBtn">🧪 Test</button></div>
-      <div class="form-group"><label class="form-label">⏰ Morgen-Erinnerung</label><div class="form-row"><input type="time" class="form-input" id="myNotifMorning" value="06:55"><select class="form-select" id="myNotifMorningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
-      <div class="form-group"><label class="form-label">🏠 Feierabend-Erinnerung</label><div class="form-row"><input type="time" class="form-input" id="myNotifEvening" value="16:45"><select class="form-select" id="myNotifEveningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
-      <button class="btn btn-primary btn-block btn-sm" id="myNotifSaveBtn">💾 Speichern</button>
     </div>
   </div>
 
@@ -351,6 +343,22 @@
     </div>
   </div>
   <div class="tab-content" id="tab-export"><h2 style="font-size:1.1rem;margin-bottom:16px">Export & Backup</h2><div class="card export-card" id="expWeek"><div class="export-icon">📊</div><div class="export-info"><h3>Diese Woche</h3><p>CSV der aktuellen Woche</p></div></div><div class="card export-card" id="expMonth"><div class="export-icon">📅</div><div class="export-info"><h3>Dieser Monat</h3><p>CSV des aktuellen Monats</p></div></div><div class="card export-card" id="expAll"><div class="export-icon">💾</div><div class="export-info"><h3>Alle Daten</h3><p>Alle Zeiteinträge</p></div></div></div>
+
+  <!-- BENACHRICHTIGUNGEN -->
+  <div class="tab-content" id="tab-notif">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">🔔 Benachrichtigungen</h2>
+    <div class="card">
+      <div class="card-title">Push-Benachrichtigungen</div>
+      <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:12px">Erhalte Erinnerungen für Arbeitsbeginn, Feierabend und mehr direkt auf dein Gerät.</p>
+      <div class="sp-info"><strong>Status:</strong> <span id="myNotifStatus">...</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px"><button class="btn btn-primary btn-sm" id="myNotifEnableBtn">🔔 Aktivieren</button><button class="btn btn-secondary btn-sm" id="myNotifTestBtn">🧪 Test</button></div>
+      <div class="form-group"><label class="form-label">⏰ Morgen-Erinnerung</label><div class="form-row"><input type="time" class="form-input" id="myNotifMorning" value="06:55"><select class="form-select" id="myNotifMorningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🍽️ Mittags-Erinnerung</label><div class="form-row"><input type="time" class="form-input" id="myNotifLunch" value="12:00"><select class="form-select" id="myNotifLunchOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🏠 Feierabend Mo–Do</label><div class="form-row"><input type="time" class="form-input" id="myNotifEvening" value="16:45"><select class="form-select" id="myNotifEveningOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <div class="form-group"><label class="form-label">🏠 Feierabend Fr</label><div class="form-row"><input type="time" class="form-input" id="myNotifFriday" value="13:45"><select class="form-select" id="myNotifFridayOn"><option value="1">An</option><option value="0">Aus</option></select></div></div>
+      <button class="btn btn-primary btn-block btn-sm" id="myNotifSaveBtn">💾 Speichern</button>
+    </div>
+  </div>
 
   <!-- ADMIN -->
   <div class="tab-content" id="tab-admin">
@@ -899,7 +907,7 @@ const SP={
       return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getRawEntries()});
     }
   },
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP();loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP().then(()=>{if(_absNeedsSync)syncAbsToSP()});loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
 };
 let _syncStatus='local';
 let _lastSyncOk=Date.now();
@@ -1877,9 +1885,32 @@ function saveAllAbsences(a){localStorage.setItem(C.LS+'all_absences',JSON.string
 function getAbsences(){return getAllAbsences()}
 
 let absSyncTm=null;
-function queueAbsSync(){if(!accessToken)return;clearTimeout(absSyncTm);absSyncTm=setTimeout(async()=>{
-  try{await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:getAllAbsences()});console.log('[SP] Abwesenheiten gespeichert')}catch(e){console.warn('Abs sync:',e)}
-},2000)}
+let _absNeedsSync=false;
+function queueAbsSync(){_absNeedsSync=true;if(!accessToken)return;clearTimeout(absSyncTm);absSyncTm=setTimeout(syncAbsToSP,2000)}
+async function syncAbsToSP(){
+  if(!accessToken){_absNeedsSync=true;return}
+  try{
+    // Read-merge-write like entries
+    const remote=await SP.readFile('Abwesenheiten/alle.json').catch(()=>null);
+    const local=getAllAbsences();
+    if(remote&&remote.absences){
+      const map=new Map();
+      remote.absences.forEach(a=>{if(a&&a.id)map.set(a.id,{...a})});
+      local.forEach(a=>{
+        if(!a||!a.id)return;
+        const existing=map.get(a.id);
+        if(!existing||((a.lastModified||0)>(existing.lastModified||0)))map.set(a.id,{...a});
+      });
+      const merged=Array.from(map.values());
+      localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
+      await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:merged});
+    }else{
+      await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:local});
+    }
+    _absNeedsSync=false;
+    console.log('[SP] Abwesenheiten gespeichert');
+  }catch(e){_absNeedsSync=true;console.warn('Abs sync:',e)}
+}
 
 function countWorkdays(from,to,empId){
   const empS=empId?getEmpSetting(empId):(user?getEmpSetting(user.id):{...EMP_DEFAULTS});
@@ -1944,9 +1975,9 @@ $('absSaveBtn').onclick=function(){
   if(new Date(to)<new Date(from)){toast('Bis-Datum muss nach Von-Datum liegen','warning');return}
   const workdays=countWorkdays(from,to);
   const days=dur==='full'?workdays:workdays*0.5;
-  const needsApproval=type==='Ferien'||type==='Unbezahlt'||type==='Sonstiges'||type==='Umzug';
+  const needsApproval=type==='Ferien'||type==='Kompensation'||type==='Unbezahlt'||type==='Sonstiges'||type==='Umzug';
   const autoApproved=type==='Krankheit'||type==='Unfall'||type==='Milit\u00e4r/Zivildienst'||type==='Mutterschaft/Vaterschaft';
-  const abs={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:type,from:from,to:to,duration:dur,days:days,note:note,status:autoApproved?'approved':'pending',employeeId:user.id,employeeName:user.name,created:new Date().toISOString(),approvedBy:autoApproved?'Auto':null,approvedAt:autoApproved?new Date().toISOString():null};
+  const abs={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:type,from:from,to:to,duration:dur,days:days,note:note,status:autoApproved?'approved':'pending',employeeId:user.id,employeeName:user.name,created:new Date().toISOString(),lastModified:Date.now(),approvedBy:autoApproved?'Auto':null,approvedAt:autoApproved?new Date().toISOString():null};
   const all=getAllAbsences();all.push(abs);saveAllAbsences(all);
   $('absType').value='';$('absNote').value='';
   toast(needsApproval?'Antrag eingereicht - wartet auf Freigabe':'Abwesenheit gespeichert','success');
@@ -2017,6 +2048,7 @@ function approveAbsence(id,approved){
   a.status=approved?'approved':'rejected';
   a.approvedBy=user.name;
   a.approvedAt=new Date().toISOString();
+  a.lastModified=Date.now();
   saveAllAbsences(glob);
   toast(approved?'Genehmigt \u2713':'Abgelehnt',approved?'success':'warning');
   renderAbsences();
@@ -2050,13 +2082,25 @@ async function loadAbsencesFromSP(){
   try{
     const data=await SP.readFile('Abwesenheiten/alle.json');
     if(data&&data.absences){
-      // Merge with local: keep local entries that aren't in SP, update from SP
       const local=getAllAbsences();
-      const spIds=new Set(data.absences.map(a=>a.id));
-      const localOnly=local.filter(a=>!spIds.has(a.id));
-      const merged=[...data.absences,...localOnly];
+      const remote=data.absences;
+      // Timestamp-based merge like entries
+      const map=new Map();
+      remote.forEach(a=>{if(a&&a.id)map.set(a.id,{...a})});
+      local.forEach(a=>{
+        if(!a||!a.id)return;
+        const existing=map.get(a.id);
+        if(!existing){
+          map.set(a.id,{...a});
+        }else{
+          const localMod=a.lastModified||0;
+          const remoteMod=existing.lastModified||0;
+          if(localMod>remoteMod)map.set(a.id,{...a});
+        }
+      });
+      const merged=Array.from(map.values());
       localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
-      console.log('[SP] Abwesenheiten geladen:',merged.length);
+      console.log('[SP] Abwesenheiten merged:',merged.length);
     }
     renderAbsences();
   }catch(e){console.warn('Abs load:',e)}
@@ -3265,8 +3309,12 @@ function initMyNotif(){
   const s=getMyNotifSettings();
   if($('myNotifMorning'))$('myNotifMorning').value=s.morning||'06:55';
   if($('myNotifMorningOn'))$('myNotifMorningOn').value=s.morningOn!==false?'1':'0';
+  if($('myNotifLunch'))$('myNotifLunch').value=s.lunch||'12:00';
+  if($('myNotifLunchOn'))$('myNotifLunchOn').value=s.lunchOn!==false?'1':'0';
   if($('myNotifEvening'))$('myNotifEvening').value=s.evening||'16:45';
   if($('myNotifEveningOn'))$('myNotifEveningOn').value=s.eveningOn!==false?'1':'0';
+  if($('myNotifFriday'))$('myNotifFriday').value=s.friday||'13:45';
+  if($('myNotifFridayOn'))$('myNotifFridayOn').value=s.fridayOn!==false?'1':'0';
   updateMyNotifStatus();
 }
 
@@ -3289,7 +3337,12 @@ if($('myNotifTestBtn'))$('myNotifTestBtn').onclick=function(){
 };
 
 if($('myNotifSaveBtn'))$('myNotifSaveBtn').onclick=function(){
-  const s={morning:$('myNotifMorning').value,morningOn:$('myNotifMorningOn').value==='1',evening:$('myNotifEvening').value,eveningOn:$('myNotifEveningOn').value==='1'};
+  const s={
+    morning:$('myNotifMorning').value,morningOn:$('myNotifMorningOn').value==='1',
+    lunch:$('myNotifLunch')?$('myNotifLunch').value:'12:00',lunchOn:$('myNotifLunchOn')?$('myNotifLunchOn').value==='1':true,
+    evening:$('myNotifEvening').value,eveningOn:$('myNotifEveningOn').value==='1',
+    friday:$('myNotifFriday')?$('myNotifFriday').value:'13:45',fridayOn:$('myNotifFridayOn')?$('myNotifFridayOn').value==='1':true
+  };
   saveMyNotifSettings(s);
   toast('Benachrichtigungen gespeichert','success');
 };
@@ -3307,7 +3360,13 @@ function checkMyNotifications(){
     const entries=getEntries().filter(e=>e.date===todayKey());
     if(!entries.length&&!timer.on)showNotif('\u23F0 Guten Morgen!','Vergiss nicht den Timer zu starten','morning-'+todayKey());
   }
-  if(s.eveningOn&&hm===s.evening){
+  if(s.lunchOn&&hm===(s.lunch||'12:00')){
+    if(timer.on&&!timer.paused)showNotif('\uD83C\uDF5D Mittagspause?','Timer l\u00e4uft \u2013 Zeit f\u00fcr eine Pause?','lunch-'+todayKey());
+  }
+  const isFri=dow===5;
+  const eveningTime=isFri?(s.friday||'13:45'):(s.evening||'16:45');
+  const eveningOn=isFri?(s.fridayOn!==false):(s.eveningOn!==false);
+  if(eveningOn&&hm===eveningTime){
     if(timer.on)showNotif('\uD83C\uDFE0 Feierabend?','Timer l\u00e4uft noch - nicht vergessen zu stoppen!','evening-'+todayKey());
   }
 }
@@ -3382,7 +3441,7 @@ document.addEventListener('visibilitychange',function(){
       SP.getDriveId().then(driveId=>{
         if(driveId){
           setSyncStatus('syncing');
-          Promise.all([SP.saveEntries(),loadAbsencesFromSP(),loadEmpSettingsFromSP(),loadEmployeesFromSP()]).then(()=>{setSyncStatus('online');refreshView()}).catch(e=>{console.warn('[Sync]',e.message);setSyncStatus('offline')});
+          Promise.all([SP.saveEntries(),loadAbsencesFromSP(),loadEmpSettingsFromSP(),loadEmployeesFromSP()]).then(()=>{if(_absNeedsSync)syncAbsToSP();setSyncStatus('online');refreshView()}).catch(e=>{console.warn('[Sync]',e.message);setSyncStatus('offline')});
         }
       }).catch(()=>{});
     }
