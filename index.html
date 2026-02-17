@@ -728,7 +728,7 @@ const PROJECTS_DATA=[
 // SharePoint Integration + 197 Bexio Projects + Push Notifications
 
 const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
-const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:null,admin:false}];
+const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:'fabienne_schneider23@hotmail.com',admin:false},{id:'HM-009',name:'Luis Silva',email:'x_luissilva@hotmail.com',admin:false}];
 function loadEmployees(){try{const d=JSON.parse(localStorage.getItem(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
 function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(()=>console.log('[SP] employees gespeichert')).catch(e=>console.warn('[SP] employees Fehler:',e))}
 let EMPLOYEES=loadEmployees();
@@ -967,15 +967,21 @@ fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+
 .then(async profile=>{
   console.log('[Auth] Profil:',JSON.stringify({mail:profile.mail,upn:profile.userPrincipalName,name:profile.displayName}));
   const email=(profile.mail||profile.userPrincipalName||'').toLowerCase();
-  // Try to load latest employees from SP first
-  try{
-    const spData=await SP.getDriveId().then(()=>SP.readFile('employees.json'));
-    if(spData&&spData.employees&&spData.employees.length){
-      EMPLOYEES=spData.employees;
-      localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
-      console.log('[Auth] MA-Liste von SP geladen:',EMPLOYEES.length);
+  // Try to load latest employees from SP first (with retry)
+  for(let _attempt=0;_attempt<2;_attempt++){
+    try{
+      const spData=await SP.getDriveId().then(()=>SP.readFile('employees.json'));
+      if(spData&&spData.employees&&spData.employees.length){
+        EMPLOYEES=spData.employees;
+        localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
+        console.log('[Auth] MA-Liste von SP geladen:',EMPLOYEES.length);
+        break;
+      }
+    }catch(e){
+      console.warn('[Auth] SP employees Versuch '+(_attempt+1)+':',e.message);
+      if(_attempt===0)await new Promise(r=>setTimeout(r,1500));
     }
-  }catch(e){console.warn('[Auth] SP employees nicht geladen, nutze lokal:',e.message)}
+  }
   // Match by email (supports both company and personal MS accounts)
   // Microsoft guest accounts often have: x_user_domain.com#EXT#@tenant.onmicrosoft.com
   // or the UPN might differ from the actual email
