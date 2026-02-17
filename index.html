@@ -977,13 +977,26 @@ fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+
     }
   }catch(e){console.warn('[Auth] SP employees nicht geladen, nutze lokal:',e.message)}
   // Match by email (supports both company and personal MS accounts)
-  let emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase()===email);
-  // Fallback: match by display name
+  // Microsoft guest accounts often have: x_user_domain.com#EXT#@tenant.onmicrosoft.com
+  // or the UPN might differ from the actual email
+  const normalizeEmail=e=>{let n=(e||'').toLowerCase().trim();n=n.replace(/#ext#@.*$/i,'');if(!n.includes('@')&&n.includes('_')){const li=n.lastIndexOf('_');n=n.substring(0,li)+'@'+n.substring(li+1)}n=n.replace(/^x_/,'');return n};
+  const extractCore=e=>{let n=normalizeEmail(e);return n.replace(/@.*$/,'').replace(/_/g,'.');};
+  // 1. Exact match
+  let emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase().trim()===email);
+  // 2. Normalized match (strip x_ prefix and #EXT#)
+  if(!emp)emp=getActiveEmployees().find(e=>e.email&&normalizeEmail(e.email)===normalizeEmail(email));
+  // 3. Core local part match (x_luissilva@hotmail.com vs luissilva@hotmail.com)
+  if(!emp)emp=getActiveEmployees().find(e=>e.email&&extractCore(e.email)===extractCore(email));
+  // 4. Match by display name
   if(!emp)emp=getActiveEmployees().find(e=>e.name.toLowerCase()===profile.displayName.toLowerCase());
-  // Fallback: partial email match (before @)
-  if(!emp){const localPart=email.split('@')[0];emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase().split('@')[0]===localPart)}
+  // 5. Partial email match (before @)
+  if(!emp){const localPart=email.split('@')[0].toLowerCase();emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase().split('@')[0]===localPart)}
+  // 6. Contains match (one email contains the other's local part)
+  if(!emp){const lp=extractCore(email);emp=getActiveEmployees().find(e=>{if(!e.email)return false;const elp=extractCore(e.email);return elp.includes(lp)||lp.includes(elp)})}
+  // 7. Domain-ignoring match (same local part, different domain)
+  if(!emp){const lp=email.replace(/@.*$/,'').replace(/^x_/,'').toLowerCase();emp=getActiveEmployees().find(e=>{if(!e.email)return false;const elp=e.email.replace(/@.*$/,'').replace(/^x_/,'').toLowerCase();return lp===elp})}
   if(emp){user={...emp};localStorage.setItem(C.LS+'session',JSON.stringify(user));localStorage.setItem(C.LS+'token',accessToken);setTokenExpiry();console.log('[Auth] Angemeldet als:',emp.name);showApp();syncWithRetry()}
-  else{console.warn('[Auth] Email nicht gefunden:',email,'Bekannte:',getActiveEmployees().map(e=>e.email).filter(Boolean).join(', '));toast('Email nicht registriert: '+email+'. Bitte Admin kontaktieren.','error');$('login-screen').style.display='flex'}
+  else{console.warn('[Auth] Email nicht gefunden:',email,'Name:',profile.displayName,'Bekannte:',getActiveEmployees().map(e=>e.email).filter(Boolean).join(', '));toast('Benutzer nicht gefunden: '+email+' ('+profile.displayName+'). Bitte Admin kontaktieren \u2013 E-Mail in MA-Verwaltung pr\u00fcfen.','error');$('login-screen').style.display='flex'}
 }).catch(e=>{console.error('[Auth]:',e);toast('Login fehlgeschlagen: '+e.message,'error');$('login-screen').style.display='flex'});
 return true}
 
