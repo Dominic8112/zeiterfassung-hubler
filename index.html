@@ -948,8 +948,8 @@ function loginWithMicrosoft(){
 const scope=encodeURIComponent('User.Read Files.ReadWrite.All Sites.ReadWrite.All');
 const redir=encodeURIComponent(window.location.origin+window.location.pathname);
 console.log('[Auth] Redirect:',window.location.origin+window.location.pathname);
-// Use 'common' endpoint for multi-tenant + personal accounts
-window.location.href='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+redir+'&scope='+scope+'&response_mode=fragment&nonce='+Math.random().toString(36).slice(2)+'&prompt=select_account'}
+// Use tenant-specific endpoint so guest accounts get tokens for the Hubler tenant
+window.location.href='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+redir+'&scope='+scope+'&response_mode=fragment&nonce='+Math.random().toString(36).slice(2)+'&prompt=select_account'}
 
 function handleOAuthCallback(){
 const h=window.location.hash;
@@ -3323,7 +3323,7 @@ function isTokenExpired(){return _tokenExpiry&&Date.now()>_tokenExpiry}
 function silentRefreshToken(){
   if(!accessToken)return;
   console.log('[Auth] Token abgelaufen - versuche Erneuerung via Popup...');
-  const authUrl='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
+  const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
   const popup=window.open(authUrl,'tokenRefresh','width=500,height=600');
   if(!popup){
     toast('\u26A0\uFE0F Popup blockiert \u2013 bitte erneut anmelden','warning');
