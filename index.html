@@ -907,7 +907,7 @@ const SP={
       return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getRawEntries()});
     }
   },
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP().then(()=>{if(_absNeedsSync)syncAbsToSP()});loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
+  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP().then(()=>syncAbsToSP());loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
 };
 let _syncStatus='local';
 let _lastSyncOk=Date.now();
@@ -1880,7 +1880,8 @@ async function loadEmpSettingsFromSP(){
 const ABS_TYPES={'Ferien':'🏖\ufe0f','Krankheit':'🤒','Unfall':'🤕','Kompensation':'\u23F0','Milit\u00e4r/Zivildienst':'🎖\ufe0f','Mutterschaft/Vaterschaft':'👶','Umzug':'📦','Unbezahlt':'🚫','Sonstiges':'📋'};
 const ABS_COLORS={'Ferien':'#22c55e','Krankheit':'#ef4444','Unfall':'#f97316','Kompensation':'#0ea5e9','Milit\u00e4r/Zivildienst':'#8b5cf6','Mutterschaft/Vaterschaft':'#ec4899','Umzug':'#06b6d4','Unbezahlt':'#6b7280','Sonstiges':'#a3a3a3'};
 
-function getAllAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'all_absences')||'[]')}catch{return[]}}
+function getRawAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'all_absences')||'[]')}catch{return[]}}
+function getAllAbsences(){return getRawAbsences().filter(a=>!a._deleted)}
 function saveAllAbsences(a){localStorage.setItem(C.LS+'all_absences',JSON.stringify(a));queueAbsSync()}
 function getAbsences(){return getAllAbsences()}
 
@@ -1890,25 +1891,25 @@ function queueAbsSync(){_absNeedsSync=true;if(!accessToken)return;clearTimeout(a
 async function syncAbsToSP(){
   if(!accessToken){_absNeedsSync=true;return}
   try{
-    // Read-merge-write like entries
     const remote=await SP.readFile('Abwesenheiten/alle.json').catch(()=>null);
-    const local=getAllAbsences();
+    const local=getRawAbsences();
+    const map=new Map();
     if(remote&&remote.absences){
-      const map=new Map();
       remote.absences.forEach(a=>{if(a&&a.id)map.set(a.id,{...a})});
-      local.forEach(a=>{
-        if(!a||!a.id)return;
-        const existing=map.get(a.id);
-        if(!existing||((a.lastModified||0)>(existing.lastModified||0)))map.set(a.id,{...a});
-      });
-      const merged=Array.from(map.values());
-      localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
-      await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:merged});
-    }else{
-      await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:local});
     }
+    local.forEach(a=>{
+      if(!a||!a.id)return;
+      const existing=map.get(a.id);
+      if(!existing||((a.lastModified||0)>(existing.lastModified||0)))map.set(a.id,{...a});
+    });
+    const merged=Array.from(map.values());
+    localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
+    // Write to SP, exclude soft-deleted older than 30 days
+    const cutoff=Date.now()-30*86400000;
+    const toWrite=merged.filter(a=>!a._deleted||(a.lastModified&&a.lastModified>cutoff));
+    await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:toWrite});
     _absNeedsSync=false;
-    console.log('[SP] Abwesenheiten gespeichert');
+    console.log('[SP] Abwesenheiten gespeichert:',toWrite.length);
   }catch(e){_absNeedsSync=true;console.warn('Abs sync:',e)}
 }
 
@@ -2037,12 +2038,13 @@ function renderAbsences(){
 
 function deleteAbsence(id){
   if(!confirm('Antrag wirklich l\u00f6schen?'))return;
-  const all=getAllAbsences().filter(a=>a.id!==id);saveAllAbsences(all);
-  toast('Gel\u00f6scht','info');renderAbsences();
+  const all=getRawAbsences();const i=all.findIndex(a=>a.id===id);
+  if(i>=0){all[i]._deleted=true;all[i].lastModified=Date.now()}
+  saveAllAbsences(all);toast('Gel\u00f6scht','info');renderAbsences();
 }
 
 function approveAbsence(id,approved){
-  const glob=getAllAbsences();
+  const glob=getRawAbsences();
   const a=glob.find(x=>x.id===id);
   if(!a)return;
   a.status=approved?'approved':'rejected';
@@ -2082,9 +2084,8 @@ async function loadAbsencesFromSP(){
   try{
     const data=await SP.readFile('Abwesenheiten/alle.json');
     if(data&&data.absences){
-      const local=getAllAbsences();
+      const local=getRawAbsences();
       const remote=data.absences;
-      // Timestamp-based merge like entries
       const map=new Map();
       remote.forEach(a=>{if(a&&a.id)map.set(a.id,{...a})});
       local.forEach(a=>{
@@ -2195,12 +2196,12 @@ function generateReport(){
     if(tpInRange.length>0){html+='<div style="margin-bottom:12px">';tpInRange.forEach(t=>{html+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--danger);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:.8rem">\u26A0\uFE0F <strong>Pensum-Reduktion: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 '+t.grund:'')+'</div>'});const normalSollH=workDays*((s.weekHours||41)/(s.arbeitsTage||[1,2,3,4,5]).length);html+='<div style="font-size:.78rem;color:var(--text-dim);padding:2px 0">Soll ohne Reduktion: <strong>'+Math.round(normalSollH*10)/10+'h</strong></div></div>';}
     if(s.raucher){html+='<div style="font-size:.78rem;color:var(--warning);margin-bottom:8px">\uD83D\uDEAC Raucherabzug: '+Math.round(raucherMin/60*10)/10+'h ('+countUniqueDates(entries)+' Tage \u00d7 15 Min)</div>';}
     // Overtime account
-    const _ot=calcOvertimeAccount(emp.id,range.from.substring(0,4));
+    const _ot=calcOvertimeAccount(emp.id,range.from.substring(0,4),range.from,range.to);
     // Stats grid
     html+='<div class="stat-grid" style="margin-bottom:16px"><div class="stat-box"><div class="stat-num" style="color:var(--primary)">'+totalH+'h</div><div class="stat-label">Ist-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:var(--text-dim)">'+Math.round(sollH*10)/10+'h</div><div class="stat-label">Soll-Stunden</div></div><div class="stat-box"><div class="stat-num" style="color:'+(diffH>=0?'var(--success)':'var(--danger)')+'">'+((diffH>=0?'+':'')+diffH)+'h</div><div class="stat-label">Saldo</div></div><div class="stat-box"><div class="stat-num" style="color:'+(_ot.guthaben>=0?'var(--success)':'var(--danger)')+'">'+(_ot.guthaben>=0?'+':'')+_ot.guthaben+'h</div><div class="stat-label">\u00dc-Stunden Guthaben</div></div><div class="stat-box"><div class="stat-num" style="color:var(--success)">'+ferienBezogen+'/'+ferienTotal+'</div><div class="stat-label">Ferien</div></div><div class="stat-box"><div class="stat-num" style="color:'+(ferienRest>=0?'var(--accent)':'var(--danger)')+'">'+ferienRest+'</div><div class="stat-label">Ferien Rest</div></div>'+(bfDays>0?'<div class="stat-box"><div class="stat-num" style="color:#6366f1">'+bfDays+'</div><div class="stat-label">\uD83C\uDFE2 Betriebsferien</div></div>':'')+'<div class="stat-box"><div class="stat-num" style="color:var(--danger)">'+krankTage+'</div><div class="stat-label">Krankheit</div></div><div class="stat-box"><div class="stat-num">'+entries.length+'</div><div class="stat-label">Eintr\u00e4ge</div></div></div>';
     html+='<div style="background:var(--bg-surface);border-radius:8px;padding:12px;margin-bottom:12px;font-size:.82rem"><div style="font-weight:600;margin-bottom:8px">\u23F0 \u00dcberstunden-Konto</div>';
     html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>\u00dcberstunden Vortrag:</span><strong>+'+_ot.vortrag+'h</strong></div>';
-    html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Saldo laufendes Jahr:</span><strong style="color:'+(_ot.saldoH>=0?'var(--success)':'var(--danger)')+'">'+(_ot.saldoH>=0?'+':'')+_ot.saldoH+'h</strong></div>';
+    html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Saldo ('+fmtDate(_ot.from)+' – '+fmtDate(_ot.bisHeute)+'):</span><strong style="color:'+(_ot.saldoH>=0?'var(--success)':'var(--danger)')+'">'+(_ot.saldoH>=0?'+':'')+_ot.saldoH+'h</strong></div>';
     if(_ot.payoutH>0)html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Auszahlungen:</span><strong style="color:var(--danger)">-'+_ot.payoutH+'h</strong></div>';
     if(_ot.kompH>0)html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Kompensation ('+_ot.kompDays+' Tage):</span><strong style="color:var(--danger)">-'+_ot.kompH+'h</strong></div>';
     html+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700"><span>Guthaben:</span><strong style="color:'+(_ot.guthaben>=0?'var(--success)':'var(--danger)')+'">'+(_ot.guthaben>=0?'+':'')+_ot.guthaben+'h</strong></div>';
@@ -2675,14 +2676,14 @@ function maeSaveAbsEdit(){
   if(!from||!to){toast('Zeitraum ausfüllen','warning');return}
   const workdays=countWorkdays(from,to,_maeEmpId);
   const days=dur==='full'?workdays:workdays*0.5;
-  const allAbs=getAllAbsences();
+  const allAbs=getRawAbsences();
 
   if(_maeAbsEditId){
     const i=allAbs.findIndex(a=>a.id===_maeAbsEditId);
-    if(i>=0){allAbs[i]={...allAbs[i],type,from,to,duration:dur,status,note,days,editedBy:user.name,editedAt:new Date().toISOString()};saveAllAbsences(allAbs);toast('Abwesenheit aktualisiert','success')}
+    if(i>=0){allAbs[i]={...allAbs[i],type,from,to,duration:dur,status,note,days,lastModified:Date.now(),editedBy:user.name,editedAt:new Date().toISOString()};saveAllAbsences(allAbs);toast('Abwesenheit aktualisiert','success')}
   }else{
     const emp=EMPLOYEES.find(e=>e.id===_maeEmpId);
-    allAbs.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),employeeId:_maeEmpId,employeeName:emp?emp.name:'',type,from,to,duration:dur,status,note,days,created:new Date().toISOString(),createdBy:user.name});
+    allAbs.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),employeeId:_maeEmpId,employeeName:emp?emp.name:'',type,from,to,duration:dur,status,note,days,lastModified:Date.now(),created:new Date().toISOString(),createdBy:user.name});
     saveAllAbsences(allAbs);toast('Abwesenheit hinzugefügt','success');
   }
   $('maeAbsEditModal').classList.remove('show');
@@ -2692,8 +2693,9 @@ function maeSaveAbsEdit(){
 
 function maeDeleteAbsence(id){
   if(!confirm('Abwesenheit wirklich löschen?'))return;
-  let allAbs=getAllAbsences();
-  allAbs=allAbs.filter(a=>a.id!==id);
+  const allAbs=getRawAbsences();
+  const i=allAbs.findIndex(a=>a.id===id);
+  if(i>=0){allAbs[i]._deleted=true;allAbs[i].lastModified=Date.now()}
   saveAllAbsences(allAbs);
   toast('Abwesenheit gelöscht','success');
   maeLoad();
@@ -4160,13 +4162,14 @@ function initPayoutUI(){
 }
 
 // Calculate overtime account for an employee
-function calcOvertimeAccount(empId,year){
+function calcOvertimeAccount(empId,year,customFrom,customTo){
   const s=getEmpSetting(empId);
-  const from=year+'-01-01';
-  // Cap to-date at today so Soll doesn't include future days
+  const yearFrom=year+'-01-01';
   const today=dateKey(new Date());
   const yearEnd=year+'-12-31';
-  const to=today<yearEnd?today:yearEnd;
+  const from=customFrom||yearFrom;
+  const toRaw=customTo||yearEnd;
+  const to=today<toRaw?today:toRaw;
   const entries=getEntriesForEmployee(empId,from,to);
   const raucherMin=s.raucher?countUniqueDates(entries)*15:0;
   const istMin=entries.reduce((sum,e)=>sum+(e.durationMin||0),0)-raucherMin;
@@ -4185,11 +4188,12 @@ function calcOvertimeAccount(empId,year){
   const dailyH=(s.weekHours||41)/arbeitsTage.length;
   const kompH=Math.round(kompDays*dailyH*100)/100;
   
+  // Vortrag only for full-year or when starting from Jan 1
   const _vtOt=getVortrag(empId,parseInt(year));
-  const vortrag=_vtOt.ueberstunden;
+  const vortrag=(from===yearFrom)?_vtOt.ueberstunden:0;
   const guthaben=Math.round((vortrag+saldoH-payoutH-kompH)*100)/100;
   
-  return{vortrag,saldoH,payoutH,kompDays,kompH,guthaben,payouts,bisHeute:to};
+  return{vortrag,saldoH,payoutH,kompDays,kompH,guthaben,payouts,bisHeute:to,from,to:to};
 }
 
 </script>
