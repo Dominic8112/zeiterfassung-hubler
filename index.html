@@ -789,9 +789,28 @@ function mergeEntries(localArr,remoteArr){
   if(conflicts>0)console.log('[Merge] '+conflicts+' Konflikte (neuere Version übernommen)');
   return Array.from(map.values());
 }
-function addEntry(e){const a=getRawEntries();e.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);e.created=new Date().toISOString();e.lastModified=Date.now();a.push(e);saveEntries(a);toast('Eintrag gespeichert','success');refreshView()}
-function updateEntry(id,u){const a=getRawEntries(),i=a.findIndex(e=>e.id===id);if(i>=0){a[i]={...a[i],...u,lastModified:Date.now()};saveEntries(a);refreshView();return true}return false}
-function removeEntry(id){const a=getRawEntries(),i=a.findIndex(e=>e.id===id);if(i>=0){a[i]._deleted=true;a[i].lastModified=Date.now()}saveEntries(a);refreshView()}
+// Week lock: normal users can only modify entries in the current week (Mon-Sun)
+function getCurrentWeekRange(){
+  const now=new Date();const day=now.getDay();const diffToMon=day===0?-6:1-day;
+  const mon=new Date(now);mon.setDate(now.getDate()+diffToMon);mon.setHours(0,0,0,0);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+  return{from:dateKey(mon),to:dateKey(sun)};
+}
+function isInCurrentWeek(dt){const w=getCurrentWeekRange();return dt>=w.from&&dt<=w.to}
+function canEditDate(dt){
+  if(!user)return false;
+  if(user.admin||user.approver)return true;
+  return isInCurrentWeek(dt);
+}
+function guardWeekLock(dt){
+  if(canEditDate(dt))return true;
+  toast('Einträge älterer Wochen können nur von einem Admin angepasst werden','warning');
+  return false;
+}
+
+function addEntry(e){if(!guardWeekLock(e.date))return;const a=getRawEntries();e.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);e.created=new Date().toISOString();e.lastModified=Date.now();a.push(e);saveEntries(a);toast('Eintrag gespeichert','success');refreshView()}
+function updateEntry(id,u){const a=getRawEntries(),i=a.findIndex(e=>e.id===id);if(i<0)return false;if(!guardWeekLock(a[i].date))return false;a[i]={...a[i],...u,lastModified:Date.now()};saveEntries(a);refreshView();return true}
+function removeEntry(id){const a=getRawEntries(),i=a.findIndex(e=>e.id===id);if(i<0)return;if(!guardWeekLock(a[i].date))return;a[i]._deleted=true;a[i].lastModified=Date.now();saveEntries(a);refreshView()}
 function dateKey(d){const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
 function todayKey(){return dateKey(new Date())}
 function fmtDate(d){const x=new Date(d);return String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+x.getFullYear()}
@@ -1340,12 +1359,14 @@ function showCalDayDetail(dk){
   }
 
   // Add entry button
-  html+='<button class="btn btn-primary btn-block btn-sm" style="margin-top:12px" onclick="openCalDayEntry(\''+dk+'\')">+ Eintrag hinzuf\u00fcgen</button>';
+  if(canEditDate(dk)){html+='<button class="btn btn-primary btn-block btn-sm" style="margin-top:12px" onclick="openCalDayEntry(\''+dk+'\')">+ Eintrag hinzuf\u00fcgen</button>';}
+  else{html+='<div style="text-align:center;padding:8px;font-size:.78rem;color:var(--text-dim)">🔒 Woche abgeschlossen</div>';}
 
   $('calDayEntries').innerHTML=html;
 }
 
 function openCalDayEntry(dk){
+  if(!guardWeekLock(dk))return;
   editId='__new_'+dk;
   const ksOpts=['B\u00fcro','Zuschnitt','BAZ','Werkstatt','Montage'].map(k=>'<option'+(k==='B\u00fcro'?' selected':'')+'>'+k+'</option>').join('');
   $('editBody').innerHTML='<div class="form-group"><label class="form-label">Datum</label><input type="date" class="form-input" id="edNewDate" value="'+dk+'"></div><div class="form-row"><div class="form-group"><label class="form-label">Startzeit</label><input type="time" class="form-input" id="edStart" value="07:00"></div><div class="form-group"><label class="form-label">Endzeit</label><input type="time" class="form-input" id="edEnd" value="16:45"></div></div><div class="form-group autocomplete-wrapper"><label class="form-label">Projekt</label><input type="text" class="form-input" id="edProject" value="" autocomplete="off"><div class="autocomplete-list" id="edProjectAC"></div></div><div class="form-group"><label class="form-label">Kostenstelle</label><select class="form-select" id="edKS"><option value="">\u2014</option>'+ksOpts+'</select></div><div class="form-group"><label class="form-label">Pausen</label><div style="display:flex;flex-direction:column;gap:8px"><label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer"><input type="checkbox" id="edZnueni" checked onchange="edUpdatePause()"> \u2615 Zn\u00fcni (15 Min)</label><div style="display:flex;align-items:center;gap:8px;font-size:.85rem"><span>\uD83C\uDF5D Mittag:</span><select class="form-select" id="edMittag" style="width:auto;padding:4px 8px" onchange="edUpdatePause()"><option value="none">Durchgearbeitet</option><option value="30min">30 Min</option><option value="60min" selected>1 Stunde</option><option value="custom">Benutzerdefiniert</option></select></div><div id="edMittagCustomWrap" style="display:none"><input type="number" class="form-input" id="edMittagCustom" value="0" min="0" max="120" placeholder="Minuten" onchange="edUpdatePause()" style="width:100px"></div><div style="font-size:.8rem;color:var(--text-dim)">Total Pause: <strong id="edPauseTotal">75 Min</strong></div></div></div><div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="edNote" value=""></div>';
