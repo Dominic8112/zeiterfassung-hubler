@@ -1070,7 +1070,18 @@ function setupAC(iid,lid){const inp=$(iid),list=$(lid);let hl=-1;inp.addEventLis
 
 // TIMER
 function updateTimerDate(){const n=new Date(),hol=getHolidays(n.getFullYear())[todayKey()];let s=DAYS_L[n.getDay()]+', '+n.getDate()+'. '+MO[n.getMonth()]+' '+n.getFullYear();if(hol)s+=' \u00b7 '+hol;$('timerDate').textContent=s}
-$('btnStart').onclick=function(){const proj=$('timerProject').value.trim(),ks=$('timerKS').value;if(!proj){toast('Bitte Projekt w\u00e4hlen','warning');return}if(!validateProjectOrWarn(proj))return;if(!ks){toast('Bitte Kostenstelle w\u00e4hlen','warning');return}if(timer.paused){timer.totalPaused+=Date.now()-timer.pauseAt;timer.paused=false;timer.pauseAt=null}else{timer.start=Date.now();timer.totalPaused=0;timer.paused=false;timer.segments=[]}timer.on=true;timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=ks+' \u00b7 '+proj};
+$('btnStart').onclick=function(){if(timer.paused){
+  // Resume from pause - keep current project, just unpause
+  timer.totalPaused+=Date.now()-timer.pauseAt;timer.paused=false;timer.pauseAt=null;timer.on=true;
+  // Restore form fields to current timer project (don't overwrite timer from form)
+  $('timerProject').value=timer.project||'';$('timerKS').value=timer.ks||'';$('timerNote').value=timer.note||'';
+  localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);
+  $('timerIndicator').classList.add('on');$('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;
+  toast('Timer fortgesetzt','success');return;
+}
+// New timer start
+const proj=$('timerProject').value.trim(),ks=$('timerKS').value;if(!proj){toast('Bitte Projekt w\u00e4hlen','warning');return}if(!validateProjectOrWarn(proj))return;if(!ks){toast('Bitte Kostenstelle w\u00e4hlen','warning');return}
+timer.start=Date.now();timer.totalPaused=0;timer.paused=false;timer.segments=[];timer.on=true;timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=ks+' \u00b7 '+proj};
 $('btnPause').onclick=function(){if(!timer.on||timer.paused)return;timer.paused=true;timer.pauseAt=Date.now();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI()};
 $('btnStop').onclick=function(){if(!timer.on)return;clearInterval(timerIv);if(timer.paused)timer.totalPaused+=Date.now()-timer.pauseAt;
   if(timer.segments&&timer.segments.length>0){
@@ -1113,7 +1124,10 @@ $('pauseDiscard').onclick=function(){
   if(accessToken&&user)SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).catch(()=>{});
   toast('Timer verworfen','info');
 };
-$('pauseConfirm').onclick=function(){let p=0;const z=$('pZn');const hasZnueni=z&&z.checked;if(hasZnueni)p+=15;const l=document.querySelector('input[name=lunch]:checked');const lunchVal=l?parseInt(l.value):0;p+=lunchVal;const lunchType=lunchVal===60?'60min':lunchVal===30?'30min':'none';const e=pendingEntry;addEntry({date:e.date,startTime:e.startTime,endTime:e.endTime,start:e.startTime,end:e.endTime,pauseMin:p,durationMin:timeToMin(e.endTime)-timeToMin(e.startTime)-p,project:e.project,projectName:e.project,kostenstelle:e.kostenstelle,costCenter:e.kostenstelle,bemerkung:e.bemerkung,note:e.bemerkung,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:lunchType,mittagsPause:lunchType});resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null};
+$('pauseConfirm').onclick=function(){let p=0;const z=$('pZn');const hasZnueni=z&&z.checked;if(hasZnueni)p+=15;const l=document.querySelector('input[name=lunch]:checked');const lunchVal=l?parseInt(l.value):0;p+=lunchVal;const lunchType=lunchVal===60?'60min':lunchVal===30?'30min':'none';const e=pendingEntry;addEntry({date:e.date,startTime:e.startTime,endTime:e.endTime,start:e.startTime,end:e.endTime,pauseMin:p,durationMin:timeToMin(e.endTime)-timeToMin(e.startTime)-p,project:e.project,projectName:e.project,kostenstelle:e.kostenstelle,costCenter:e.kostenstelle,bemerkung:e.bemerkung,note:e.bemerkung,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:lunchType,mittagsPause:lunchType});resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null;
+  // Auto-logout if triggered by 23:00 auto-logout
+  if(_autoLogoutDone){toast('Eintrag gespeichert \u2013 Abmeldung...','info');setTimeout(()=>logout(),2000)}
+};
 
 // RECOVERY
 function checkRecovery(){const s=localStorage.getItem(lk('timer'));if(!s)return;try{const st=JSON.parse(s);if(!st.on||!st.start)return;const el=Date.now()-st.start-(st.totalPaused||0),h=Math.floor(el/1000/3600),m=Math.floor((el/1000%3600)/60);$('recoveryBody').innerHTML='<p style="margin-bottom:12px">Ein Timer war noch aktiv:</p><div class="pause-summary"><div class="pause-row"><span>Projekt:</span><span>'+(st.project||'\u2014')+'</span></div><div class="pause-row"><span>Kostenstelle:</span><span>'+(st.ks||'\u2014')+'</span></div><div class="pause-row"><span>Verstrichene Zeit:</span><span style="font-family:var(--font-mono);color:var(--primary)">'+h+'h '+m+'min</span></div></div>';$('recoveryModal').classList.add('show')}catch{localStorage.removeItem(lk('timer'))}}
@@ -1396,6 +1410,35 @@ setInterval(()=>{if(!timer.on||!user)return;
     showPauseDialog(pendingEntry);
     toast('Timer um '+endStr+' gestoppt','warning');
   }
+},60000);
+
+// AUTO-LOGOUT at 23:00 daily
+let _autoLogoutDone=false;
+setInterval(()=>{
+  if(!user||_autoLogoutDone)return;
+  const now=new Date();
+  if(now.getHours()===23&&now.getMinutes()===0){
+    _autoLogoutDone=true;
+    if(timer.on){
+      // Stop timer first so work isn't lost
+      clearInterval(timerIv);
+      if(timer.paused)timer.totalPaused+=Date.now()-timer.pauseAt;
+      const sd=new Date(timer.start),ed=new Date();
+      pendingEntry={date:dateKey(sd),startTime:String(sd.getHours()).padStart(2,'0')+':'+String(sd.getMinutes()).padStart(2,'0'),endTime:String(ed.getHours()).padStart(2,'0')+':'+String(ed.getMinutes()).padStart(2,'0'),project:timer.project,kostenstelle:timer.ks,bemerkung:timer.note||''};
+      showPauseDialog(pendingEntry);
+      toast('Timer gestoppt \u2013 automatische Abmeldung um 23:00','warning');
+      // Auto-logout after 60s delay to allow saving
+      setTimeout(()=>{
+        if($('pauseModal').classList.contains('show'))return; // Wait if dialog still open
+        logout();
+      },60000);
+    }else{
+      toast('Automatische Abmeldung (23:00)','info');
+      setTimeout(()=>logout(),3000);
+    }
+  }
+  // Reset flag at midnight
+  if(now.getHours()===0)_autoLogoutDone=false;
 },60000);
 
 // PUSH NOTIFICATIONS
