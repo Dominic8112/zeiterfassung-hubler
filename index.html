@@ -971,8 +971,9 @@ async function syncWithRetry(attempt){
 }
 
 // OAUTH
+const AUTH_SCOPE=encodeURIComponent('User.Read Files.ReadWrite.All Sites.ReadWrite.All');
 function loginWithMicrosoft(){
-const scope=encodeURIComponent('User.Read Files.ReadWrite.All Sites.ReadWrite.All');
+const scope=AUTH_SCOPE;
 const redir=encodeURIComponent(window.location.origin+window.location.pathname);
 console.log('[Auth] Redirect:',window.location.origin+window.location.pathname);
 // Use tenant-specific endpoint so guest accounts get tokens for the Hubler tenant
@@ -3460,7 +3461,7 @@ function silentRefreshToken(){
   _refreshing=true;
   _refreshPromise=new Promise((resolve,reject)=>{
     console.log('[Auth] Silent refresh via iframe...');
-    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
+    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+AUTH_SCOPE+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
     const iframe=document.createElement('iframe');
     iframe.style.cssText='display:none;width:0;height:0;border:0';
     iframe.id='authRefreshFrame';
@@ -3504,7 +3505,7 @@ function silentRefreshToken(){
 // Popup fallback if iframe fails
 function popupRefreshFallback(){
   return new Promise((resolve,reject)=>{
-    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
+    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+AUTH_SCOPE+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
     const popup=window.open(authUrl,'tokenRefresh','width=500,height=600');
     if(!popup){
       console.warn('[Auth] Popup blocked - auto redirect');
@@ -3535,7 +3536,7 @@ function forceRelogin(){
   console.log('[Auth] Force re-login via redirect');
   // Save current state so we can restore after login
   localStorage.setItem(C.LS+'pre_login_path',window.location.pathname);
-  const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=login&login_hint='+(user&&user.email?user.email:'');
+  const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+AUTH_SCOPE+'&prompt=login&login_hint='+(user&&user.email?user.email:'');
   window.location.href=authUrl;
 }
 
