@@ -953,7 +953,7 @@ function setSyncStatus(s){
   else{stxt.textContent='Lokaler Modus (Demo)'}
 }
 // Update sync age display every minute - only auto-offline after first successful sync
-setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min'}}},60000);
+setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min';showOfflineBanner('Keine Verbindung seit '+ago+' Min');if(ago%5===0)refreshTokenChain().then(ok=>{if(ok)SP.fullSync()}).catch(()=>{})}}},60000);
 let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||localStorage.getItem(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
 
 async function syncWithRetry(attempt){
@@ -1074,7 +1074,14 @@ if(urlHash&&urlHash.includes('access_token')){handleOAuthCallback();return}
 if(urlHash&&urlHash.includes('error')){const ep=new URLSearchParams(urlHash.slice(1));const errMsg=decodeURIComponent(ep.get('error_description')||ep.get('error')||'');toast('Microsoft Fehler: '+errMsg.split('.')[0],'error');
 const dbg=$('authDebug');if(dbg){dbg.style.display='block';dbg.innerHTML='<strong>OAuth Debug:</strong><br>Fehler: '+errMsg+'<br><br>Bitte pr\u00fcfen:<br>1. Azure: Authentication > SPA Platform<br>2. Implicit grant: Access+ID tokens<br>3. Redirect URI: '+window.location.origin+window.location.pathname}}
 const st=localStorage.getItem(C.LS+'token');if(st)accessToken=st;
-const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);showApp();if(accessToken)syncWithRetry()}catch{}}
+const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);showApp();if(accessToken){
+  // Validate token on startup with a lightweight API call
+  setTokenExpiry(); // Assume valid for now, will be corrected
+  SP.getDriveId().then(d=>{if(d){setSyncStatus('online');syncWithRetry()}else{setSyncStatus('offline');refreshTokenChain().then(ok=>{if(ok)syncWithRetry()})}}).catch(()=>{
+    console.warn('[Auth] Token ungültig beim Start - erneuere...');
+    refreshTokenChain().then(ok=>{if(ok)syncWithRetry();else showOfflineBanner('Bitte neu anmelden')});
+  });
+}else{setSyncStatus('local')}}catch{}}
 const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
@@ -3442,58 +3449,159 @@ setInterval(checkMyNotifications,60000);
 // TOKEN REFRESH + AUTO-SYNC ON TAB FOCUS
 // ============================================================
 let _tokenExpiry=null;
+let _refreshing=false;
+let _refreshPromise=null;
 function setTokenExpiry(){_tokenExpiry=Date.now()+3300000} // 55 min (tokens last ~60min)
 function isTokenExpired(){return _tokenExpiry&&Date.now()>_tokenExpiry}
 
+// iframe-based silent token refresh (works on mobile, no popup blocker)
 function silentRefreshToken(){
-  if(!accessToken)return;
-  console.log('[Auth] Token abgelaufen - versuche Erneuerung via Popup...');
-  const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
-  const popup=window.open(authUrl,'tokenRefresh','width=500,height=600');
-  if(!popup){
-    toast('\u26A0\uFE0F Popup blockiert \u2013 bitte erneut anmelden','warning');
-    setSyncStatus('offline');
-    return;
-  }
-  const checkInterval=setInterval(()=>{
-    try{
-      if(!popup||popup.closed){clearInterval(checkInterval);return}
-      const hash=popup.location.hash;
-      if(hash&&hash.includes('access_token')){
-        const p=new URLSearchParams(hash.slice(1));
-        accessToken=p.get('access_token');
-        localStorage.setItem(C.LS+'token',accessToken);
-        setTokenExpiry();
-        setSyncStatus('online');
-        console.log('[Auth] Token erneuert via Popup');
-        toast('\u2705 Verbindung erneuert','success');
-        popup.close();
-        clearInterval(checkInterval);
-        // Re-sync after refresh
-        SP.fullSync();
-      }
-    }catch(e){
-      // Cross-origin error expected until redirect completes
-    }
-  },500);
-  // Timeout after 30s
-  setTimeout(()=>{clearInterval(checkInterval);if(popup&&!popup.closed){popup.close();toast('\u26A0\uFE0F Sitzung abgelaufen \u2013 bitte erneut anmelden','warning');setSyncStatus('offline')}},30000);
+  if(_refreshing&&_refreshPromise)return _refreshPromise;
+  _refreshing=true;
+  _refreshPromise=new Promise((resolve,reject)=>{
+    console.log('[Auth] Silent refresh via iframe...');
+    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
+    const iframe=document.createElement('iframe');
+    iframe.style.cssText='display:none;width:0;height:0;border:0';
+    iframe.id='authRefreshFrame';
+    const old=document.getElementById('authRefreshFrame');
+    if(old)old.remove();
+    document.body.appendChild(iframe);
+    let resolved=false;
+    const cleanup=()=>{_refreshing=false;_refreshPromise=null;try{iframe.remove()}catch{}};
+    const check=setInterval(()=>{
+      try{
+        const hash=iframe.contentWindow.location.hash;
+        if(hash&&hash.includes('access_token')){
+          clearInterval(check);
+          const p=new URLSearchParams(hash.slice(1));
+          accessToken=p.get('access_token');
+          localStorage.setItem(C.LS+'token',accessToken);
+          setTokenExpiry();
+          setSyncStatus('online');
+          hideOfflineBanner();
+          console.log('[Auth] Token erneuert via iframe');
+          resolved=true;cleanup();resolve(true);
+        }else if(hash&&(hash.includes('error'))){
+          clearInterval(check);
+          console.warn('[Auth] iframe refresh fehler:',hash);
+          resolved=true;cleanup();reject(new Error('iframe_refresh_failed'));
+        }
+      }catch(e){/* cross-origin expected */}
+    },300);
+    // Timeout: if iframe doesn't resolve in 15s, try popup fallback, then redirect
+    setTimeout(()=>{
+      if(resolved)return;
+      clearInterval(check);cleanup();
+      console.warn('[Auth] iframe timeout - trying popup fallback...');
+      popupRefreshFallback().then(resolve).catch(reject);
+    },15000);
+    iframe.src=authUrl;
+  });
+  return _refreshPromise;
 }
 
-// Token refresh: check every 5 minutes, refresh at 50 min
-setInterval(()=>{
-  if(accessToken&&isTokenExpired()){
-    silentRefreshToken();
-  }
-},300000);
+// Popup fallback if iframe fails
+function popupRefreshFallback(){
+  return new Promise((resolve,reject)=>{
+    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
+    const popup=window.open(authUrl,'tokenRefresh','width=500,height=600');
+    if(!popup){
+      console.warn('[Auth] Popup blocked - auto redirect');
+      reject(new Error('popup_blocked'));return;
+    }
+    let done=false;
+    const iv=setInterval(()=>{
+      try{
+        if(!popup||popup.closed){clearInterval(iv);if(!done)reject(new Error('popup_closed'));return}
+        const hash=popup.location.hash;
+        if(hash&&hash.includes('access_token')){
+          done=true;clearInterval(iv);
+          const p=new URLSearchParams(hash.slice(1));
+          accessToken=p.get('access_token');
+          localStorage.setItem(C.LS+'token',accessToken);
+          setTokenExpiry();setSyncStatus('online');hideOfflineBanner();
+          console.log('[Auth] Token erneuert via popup');
+          popup.close();resolve(true);
+        }
+      }catch(e){}
+    },500);
+    setTimeout(()=>{clearInterval(iv);if(!done){try{popup.close()}catch{}reject(new Error('popup_timeout'))}},20000);
+  });
+}
 
-// Also refresh proactively at 50 min mark
-setInterval(()=>{
-  if(accessToken&&_tokenExpiry&&(Date.now()>_tokenExpiry-600000)&&(Date.now()<_tokenExpiry)){
-    console.log('[Auth] Proaktive Token-Erneuerung...');
-    silentRefreshToken();
+// Auto-redirect to Microsoft login (last resort)
+function forceRelogin(){
+  console.log('[Auth] Force re-login via redirect');
+  // Save current state so we can restore after login
+  localStorage.setItem(C.LS+'pre_login_path',window.location.pathname);
+  const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+scope+'&prompt=login&login_hint='+(user&&user.email?user.email:'');
+  window.location.href=authUrl;
+}
+
+// Full refresh chain: iframe → popup → redirect
+let _refreshAttempts=0;
+async function refreshTokenChain(){
+  if(_refreshAttempts>2){
+    _refreshAttempts=0;
+    showOfflineBanner('Sitzung abgelaufen');
+    return false;
   }
-},600000);
+  _refreshAttempts++;
+  try{
+    await silentRefreshToken();
+    _refreshAttempts=0;
+    return true;
+  }catch(e){
+    console.warn('[Auth] Refresh chain stufe',_refreshAttempts,'fehlgeschlagen:',e.message);
+    if(_refreshAttempts>=2){
+      // Last resort: show banner with reconnect button
+      showOfflineBanner('Verbindung verloren');
+      return false;
+    }
+    return refreshTokenChain();
+  }
+}
+
+// Offline banner
+function showOfflineBanner(reason){
+  let b=$('offlineBanner');
+  if(!b){
+    b=document.createElement('div');b.id='offlineBanner';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:10000;background:#dc2626;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:.85rem;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    document.body.appendChild(b);
+  }
+  b.innerHTML='<span>\u26A0\uFE0F '+(reason||'Offline')+' \u2013 Daten werden lokal gespeichert</span><button onclick="reconnectNow()" style="background:#fff;color:#dc2626;border:none;padding:6px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:.82rem">\uD83D\uDD04 Neu verbinden</button><button onclick="forceRelogin()" style="background:transparent;color:#fff;border:1px solid #fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.82rem">\uD83D\uDD11 Neu anmelden</button>';
+  b.style.display='flex';
+}
+function hideOfflineBanner(){
+  const b=$('offlineBanner');if(b)b.style.display='none';
+}
+
+// Reconnect button handler
+async function reconnectNow(){
+  const b=$('offlineBanner');
+  if(b)b.querySelector('span').textContent='\u23F3 Verbinde...';
+  _refreshAttempts=0;
+  const ok=await refreshTokenChain();
+  if(ok){
+    hideOfflineBanner();
+    toast('\u2705 Verbindung wiederhergestellt','success');
+    SP.fullSync();
+  }
+}
+
+// Proactive token refresh: every 3 minutes check, refresh at ~50 min mark
+setInterval(()=>{
+  if(!accessToken||!user)return;
+  if(isTokenExpired()){
+    refreshTokenChain();
+  }else if(_tokenExpiry&&(Date.now()>_tokenExpiry-600000)){
+    // Proactive: 10 min before expiry
+    console.log('[Auth] Proaktive Token-Erneuerung...');
+    silentRefreshToken().catch(()=>{});
+  }
+},180000);
 
 // On tab focus: check token + sync
 let _lastVisCheck=0;
@@ -3503,7 +3611,7 @@ document.addEventListener('visibilitychange',function(){
     _lastVisCheck=Date.now();
     console.log('[Sync] Tab aktiv');
     if(accessToken){
-      if(isTokenExpired())silentRefreshToken();
+      if(isTokenExpired()){refreshTokenChain().then(ok=>{if(ok)SP.fullSync()});return}
       SP.getDriveId().then(driveId=>{
         if(driveId){
           setSyncStatus('syncing');
@@ -3515,25 +3623,43 @@ document.addEventListener('visibilitychange',function(){
   }
 });
 
-// Wrap gf to handle 401 with push notification
+// Wrap gf to handle 401 with automatic token refresh + retry
 const _origGf=SP.gf;
-// _lastSyncOk defined in setSyncStatus section
+let _retrying401=false;
 SP.gf=async function(ep,opts){
   try{
     const result=await _origGf.call(SP,ep,opts);
     _lastSyncOk=Date.now();
+    hideOfflineBanner();
     return result;
   }catch(e){
     const msg=e.message||'';
-    if(msg.includes('401')||msg.includes('403')){
+    if((msg.includes('401')||msg.includes('403'))&&!_retrying401){
+      _retrying401=true;
+      console.warn('[SP] Auth-Fehler - versuche Token-Refresh + Retry...');
       setSyncStatus('offline');
-      console.warn('[SP] Auth-Fehler:',msg);
-      if(typeof silentRefreshToken==='function')silentRefreshToken();
+      try{
+        const ok=await refreshTokenChain();
+        _retrying401=false;
+        if(ok){
+          // Retry the original call with fresh token
+          const result=await _origGf.call(SP,ep,opts);
+          _lastSyncOk=Date.now();
+          setSyncStatus('online');
+          hideOfflineBanner();
+          return result;
+        }
+      }catch(retryErr){
+        _retrying401=false;
+        console.warn('[SP] Retry nach Refresh fehlgeschlagen:',retryErr.message);
+      }
+      showOfflineBanner('Authentifizierung fehlgeschlagen');
+      throw e;
     }else if(msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('net::')){
       setSyncStatus('offline');
+      showOfflineBanner('Keine Internetverbindung');
       console.warn('[SP] Netzwerk-Fehler:',msg);
     }else{
-      // 404 or other non-critical errors - don't change status
       console.warn('[SP] API:',msg);
     }
     throw e;
@@ -3546,9 +3672,18 @@ setInterval(async()=>{
   if(Date.now()-_lastSyncOk>600000){
     try{
       const driveId=await SP.getDriveId();
-      if(driveId){setSyncStatus('online');_lastSyncOk=Date.now()}
-      else setSyncStatus('offline');
-    }catch(e){setSyncStatus('offline')}
+      if(driveId){setSyncStatus('online');_lastSyncOk=Date.now();hideOfflineBanner()}
+      else{setSyncStatus('offline');showOfflineBanner('SharePoint nicht erreichbar')}
+    }catch(e){
+      setSyncStatus('offline');
+      // Try refresh if auth error
+      const msg=e.message||'';
+      if(msg.includes('401')||msg.includes('403')){
+        refreshTokenChain().then(ok=>{if(ok){SP.fullSync();hideOfflineBanner()}});
+      }else{
+        showOfflineBanner('Keine Verbindung');
+      }
+    }
   }
 },300000);
 
