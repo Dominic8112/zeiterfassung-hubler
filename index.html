@@ -3490,12 +3490,12 @@ function silentRefreshToken(){
         }
       }catch(e){/* cross-origin expected */}
     },300);
-    // Timeout: if iframe doesn't resolve in 15s, try popup fallback, then redirect
+    // Timeout: if iframe doesn't resolve in 15s, reject silently
     setTimeout(()=>{
       if(resolved)return;
       clearInterval(check);cleanup();
-      console.warn('[Auth] iframe timeout - trying popup fallback...');
-      popupRefreshFallback().then(resolve).catch(reject);
+      console.warn('[Auth] iframe timeout');
+      reject(new Error('iframe_timeout'));
     },15000);
     iframe.src=authUrl;
   });
@@ -3543,9 +3543,9 @@ function forceRelogin(){
 // Full refresh chain: iframe → popup → redirect
 let _refreshAttempts=0;
 async function refreshTokenChain(){
-  if(_refreshAttempts>2){
+  if(_refreshAttempts>3){
     _refreshAttempts=0;
-    showOfflineBanner('Sitzung abgelaufen');
+    showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden und neu anmelden');
     return false;
   }
   _refreshAttempts++;
@@ -3554,12 +3554,13 @@ async function refreshTokenChain(){
     _refreshAttempts=0;
     return true;
   }catch(e){
-    console.warn('[Auth] Refresh chain stufe',_refreshAttempts,'fehlgeschlagen:',e.message);
-    if(_refreshAttempts>=2){
-      // Last resort: show banner with reconnect button
-      showOfflineBanner('Verbindung verloren');
+    console.warn('[Auth] Refresh Versuch',_refreshAttempts,'fehlgeschlagen:',e.message);
+    if(_refreshAttempts>=3){
+      showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden und neu anmelden');
       return false;
     }
+    // Wait 2s before retry
+    await new Promise(r=>setTimeout(r,2000));
     return refreshTokenChain();
   }
 }
@@ -3569,20 +3570,19 @@ function showOfflineBanner(reason){
   let b=$('offlineBanner');
   if(!b){
     b=document.createElement('div');b.id='offlineBanner';
-    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:10000;background:#dc2626;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:.85rem;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    b.style.cssText='position:fixed;top:48px;left:0;right:0;z-index:9999;background:#f59e0b;color:#78350f;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:.78rem;box-shadow:0 1px 4px rgba(0,0,0,.15)';
     document.body.appendChild(b);
   }
-  b.innerHTML='<span>\u26A0\uFE0F '+(reason||'Offline')+' \u2013 Daten werden lokal gespeichert</span><button onclick="reconnectNow()" style="background:#fff;color:#dc2626;border:none;padding:6px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:.82rem">\uD83D\uDD04 Neu verbinden</button><button onclick="forceRelogin()" style="background:transparent;color:#fff;border:1px solid #fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.82rem">\uD83D\uDD11 Neu anmelden</button>';
+  b.innerHTML='\u26A0\uFE0F '+(reason||'Offline')+' <button onclick="reconnectNow()" style="background:#78350f;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:.75rem;cursor:pointer;margin-left:4px">\uD83D\uDD04 Verbinden</button>';
   b.style.display='flex';
 }
 function hideOfflineBanner(){
   const b=$('offlineBanner');if(b)b.style.display='none';
 }
 
-// Reconnect button handler
 async function reconnectNow(){
   const b=$('offlineBanner');
-  if(b)b.querySelector('span').textContent='\u23F3 Verbinde...';
+  if(b)b.innerHTML='\u23F3 Verbinde...';
   _refreshAttempts=0;
   const ok=await refreshTokenChain();
   if(ok){
