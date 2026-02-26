@@ -901,8 +901,9 @@ const SP={
   async getToken(){
     if(!msalApp||!msalAccount)return null;
     try{const r=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});accessToken=r.accessToken;return r.accessToken}catch(e){
-      try{if(isMobile){await msalApp.acquireTokenRedirect({scopes:GRAPH_SCOPES});return null}
-        const r=await msalApp.acquireTokenPopup({scopes:GRAPH_SCOPES});msalAccount=r.account;accessToken=r.accessToken;return r.accessToken;
+      try{
+        await msalApp.acquireTokenRedirect({scopes:GRAPH_SCOPES});
+        return null; // will redirect
       }catch(e2){console.warn('[Auth] Token-Beschaffung fehlgeschlagen:',e2.message);showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden');return null}
     }
   },
@@ -1047,13 +1048,9 @@ async function msLogin(){
   if(!msalApp){if(err){err.textContent='Microsoft Login-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.';err.style.display='block'}return}
   btn.disabled=true;btn.textContent='Anmelden...';if(err)err.style.display='none';
   try{
-    if(isMobile){
-      await msalApp.loginRedirect({scopes:GRAPH_SCOPES,prompt:'select_account'});
-    }else{
-      const resp=await msalApp.loginPopup({scopes:GRAPH_SCOPES,prompt:'select_account'});
-      msalAccount=resp.account;
-      await afterMsalLogin();
-    }
+    // Always use redirect flow (popup gets blocked in nested windows)
+    await msalApp.loginRedirect({scopes:GRAPH_SCOPES,prompt:'select_account'});
+    // Page will redirect - execution stops here
   }catch(e){
     btn.disabled=false;
     btn.innerHTML='<svg viewBox="0 0 23 23" width="20" height="20"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg> Mit Microsoft anmelden';
@@ -1063,8 +1060,7 @@ async function msLogin(){
 
 function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');
   if(msalApp&&msalAccount){
-    if(isMobile){msalApp.logoutRedirect({account:msalAccount}).catch(()=>{})}
-    else{msalApp.logoutPopup({account:msalAccount}).catch(()=>{})}
+    msalApp.logoutRedirect({account:msalAccount}).catch(()=>{});
   }
   msalAccount=null;
   $('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local');hideOfflineBanner();
