@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#0a1628">
 <title>Zeiterfassung - Hubler Metallbau</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js'"></script>
 <style>
 :root{--primary:#FF6B35;--primary-glow:rgba(255,107,53,.25);--primary-dim:rgba(255,107,53,.08);--secondary:#004E89;--accent:#F7B801;--bg-deep:#0a1628;--bg-card:#111d33;--bg-card-hover:#162440;--bg-input:#0d1a2e;--bg-surface:#1a2a45;--border:rgba(255,255,255,.06);--border-active:rgba(255,107,53,.3);--text:#e8edf5;--text-dim:#7a8ba8;--text-muted:#4a5a75;--success:#22c55e;--success-glow:rgba(34,197,94,.2);--danger:#ef4444;--danger-glow:rgba(239,68,68,.15);--warning:#F7B801;--radius:12px;--radius-sm:8px;--radius-lg:16px;--shadow:0 4px 24px rgba(0,0,0,.3);--shadow-lg:0 8px 40px rgba(0,0,0,.4);--transition:.2s cubic-bezier(.4,0,.2,1);--font-ui:'DM Sans',sans-serif;--font-mono:'JetBrains Mono',monospace}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{font-size:16px;scroll-behavior:smooth}body{font-family:var(--font-ui);background:var(--bg-deep);color:var(--text);min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased}body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 20% 20%,rgba(0,78,137,.15) 0%,transparent 50%),radial-gradient(ellipse at 80% 80%,rgba(255,107,53,.08) 0%,transparent 50%);pointer-events:none;z-index:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:var(--text-muted);border-radius:3px}
@@ -108,6 +109,7 @@
   <div class="login-card">
     <div class="login-logo">⏱️</div><h1 class="login-title">Zeiterfassung</h1><p class="login-subtitle">Hubler Metallbau AG</p>
     <button class="ms-login-btn" id="msLoginBtn"><svg viewBox="0 0 23 23"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg>Mit Microsoft anmelden</button>
+    <div id="msLoginErr" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin:10px 0;font-size:.8rem;color:#f87171"></div>
     <div id="authDebug" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px;margin:12px 0;text-align:left;font-size:.75rem;color:#f87171;font-family:var(--font-mono);word-break:break-all;max-height:120px;overflow-y:auto"></div>
     <div class="login-divider">Demo-Modus</div>
     <div class="demo-section">
@@ -757,6 +759,11 @@ function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
 const KS_COLORS={"Büro":'#3b82f6',Zuschnitt:'#8b5cf6',BAZ:'#06b6d4',Werkstatt:'#22c55e',Montage:'#FF6B35'};
 const DAYS_S=['So','Mo','Di','Mi','Do','Fr','Sa'],DAYS_L=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],MO=['Januar','Februar','M\u00e4rz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 let user=null,accessToken=null,projects=[...PROJECTS_DATA];
+// MSAL Auth
+const MSAL_CFG={auth:{clientId:C.CLIENT_ID,authority:'https://login.microsoftonline.com/'+C.TENANT_ID,redirectUri:window.location.origin+window.location.pathname},cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}};
+const GRAPH_SCOPES=['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All'];
+let msalApp=null,msalAccount=null;
+const isMobile=/iPhone|iPod|Android/i.test(navigator.userAgent)||(/iPad/i.test(navigator.userAgent))||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,project:'',ks:'',note:'',segments:[]};
 let timerIv=null,calOff=0,editId=null,pendingEntry=null;
 const $=s=>document.getElementById(s);const lk=k=>C.LS+(user?user.id+'_':'')+k;
@@ -891,9 +898,17 @@ const SP={
       return null;
     }catch(e){console.error('[SP] getDriveId:',e);setSyncStatus('offline');return null}
   },
-  async gf(ep,opts){if(!accessToken)return null;const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+accessToken,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){console.warn('[SP] Zugriff verweigert ('+resp.status+') f\u00fcr:',ep);throw new Error('Kein Zugriff ('+resp.status+')')}throw new Error('Graph '+resp.status)}return resp.json()},
+  async getToken(){
+    if(!msalApp||!msalAccount)return null;
+    try{const r=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});accessToken=r.accessToken;return r.accessToken}catch(e){
+      try{if(isMobile){await msalApp.acquireTokenRedirect({scopes:GRAPH_SCOPES});return null}
+        const r=await msalApp.acquireTokenPopup({scopes:GRAPH_SCOPES});msalAccount=r.account;accessToken=r.accessToken;return r.accessToken;
+      }catch(e2){console.warn('[Auth] Token-Beschaffung fehlgeschlagen:',e2.message);showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden');return null}
+    }
+  },
+  async gf(ep,opts){const token=await this.getToken();if(!token)return null;const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){console.warn('[SP] Zugriff verweigert ('+resp.status+') f\u00fcr:',ep);throw new Error('Kein Zugriff ('+resp.status+')')}throw new Error('Graph '+resp.status)}return resp.json()},
   async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){console.warn('SP read:',e);return null}},
-  async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){console.warn('SP write:',e);return false}},
+  async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const token=await this.getToken();if(!token)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){console.warn('SP write:',e);return false}},
   async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){
@@ -926,7 +941,7 @@ const SP={
       return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getRawEntries()});
     }
   },
-  async fullSync(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP().then(()=>syncAbsToSP());loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
+  async fullSync(){if(!msalAccount&&!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP().then(()=>syncAbsToSP());loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
 };
 let _syncStatus='local';
 let _lastSyncOk=Date.now();
@@ -953,7 +968,7 @@ function setSyncStatus(s){
   else{stxt.textContent='Lokaler Modus (Demo)'}
 }
 // Update sync age display every minute - only auto-offline after first successful sync
-setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min';showOfflineBanner('Keine Verbindung seit '+ago+' Min');if(ago%5===0)refreshTokenChain().then(ok=>{if(ok)SP.fullSync()}).catch(()=>{})}}},60000);
+setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min';showOfflineBanner('Keine Verbindung seit '+ago+' Min');if(ago%5===0)reconnectNow()}}},60000);
 let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||localStorage.getItem(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
 
 async function syncWithRetry(attempt){
@@ -970,122 +985,150 @@ async function syncWithRetry(attempt){
   }
 }
 
-// OAUTH
-const AUTH_SCOPE=encodeURIComponent('User.Read Files.ReadWrite.All Sites.ReadWrite.All');
-function loginWithMicrosoft(){
-const scope=AUTH_SCOPE;
-const redir=encodeURIComponent(window.location.origin+window.location.pathname);
-console.log('[Auth] Redirect:',window.location.origin+window.location.pathname);
-// Use tenant-specific endpoint so guest accounts get tokens for the Hubler tenant
-window.location.href='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+redir+'&scope='+scope+'&response_mode=fragment&nonce='+Math.random().toString(36).slice(2)+'&prompt=select_account'}
+// ═══ MSAL AUTH ═══
+// Email matching logic (supports guest accounts with #EXT#, x_ prefix, etc.)
+const normalizeEmail=e=>{let n=(e||'').toLowerCase().trim();n=n.replace(/#ext#@.*$/i,'');if(!n.includes('@')&&n.includes('_')){const li=n.lastIndexOf('_');n=n.substring(0,li)+'@'+n.substring(li+1)}n=n.replace(/^x_/,'');return n};
+const extractCore=e=>{let n=normalizeEmail(e);return n.replace(/@.*$/,'').replace(/_/g,'.');};
 
-function handleOAuthCallback(){
-const h=window.location.hash;
-console.log('[Auth] Hash:',!!h);
-if(!h||!h.includes('access_token')){
-  if(h&&h.includes('error')){const p=new URLSearchParams(h.slice(1));console.error('[Auth] Error:',p.get('error_description'));toast('Login-Fehler: '+(decodeURIComponent(p.get('error_description')||p.get('error')||'')).split('.')[0],'error')}
-  return false;
+function matchEmployee(email,displayName){
+  const e=email.toLowerCase();
+  // 1. Exact
+  let emp=getActiveEmployees().find(x=>x.email&&x.email.toLowerCase().trim()===e);
+  // 2. Normalized (strip x_ and #EXT#)
+  if(!emp)emp=getActiveEmployees().find(x=>x.email&&normalizeEmail(x.email)===normalizeEmail(e));
+  // 3. Core local part
+  if(!emp)emp=getActiveEmployees().find(x=>x.email&&extractCore(x.email)===extractCore(e));
+  // 4. Display name
+  if(!emp)emp=getActiveEmployees().find(x=>x.name.toLowerCase()===displayName.toLowerCase());
+  // 5. Partial (before @)
+  if(!emp){const lp=e.split('@')[0];emp=getActiveEmployees().find(x=>x.email&&x.email.toLowerCase().split('@')[0]===lp)}
+  // 6. Contains
+  if(!emp){const lp=extractCore(e);emp=getActiveEmployees().find(x=>{if(!x.email)return false;const elp=extractCore(x.email);return elp.includes(lp)||lp.includes(elp)})}
+  // 7. Domain-ignoring
+  if(!emp){const lp=e.replace(/@.*$/,'').replace(/^x_/,'');emp=getActiveEmployees().find(x=>{if(!x.email)return false;const elp=x.email.replace(/@.*$/,'').replace(/^x_/,'').toLowerCase();return lp===elp})}
+  return emp;
 }
-const p=new URLSearchParams(h.slice(1));accessToken=p.get('access_token');
-if(!accessToken)return false;
-console.log('[Auth] Token erhalten, l\u00e4nge:',accessToken.length);
-history.replaceState(null,'',window.location.pathname);
-fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+accessToken}})
-.then(r=>{console.log('[Auth] Graph /me:',r.status);if(!r.ok)throw new Error('Graph '+r.status);return r.json()})
-.then(async profile=>{
-  console.log('[Auth] Profil:',JSON.stringify({mail:profile.mail,upn:profile.userPrincipalName,name:profile.displayName}));
-  const email=(profile.mail||profile.userPrincipalName||'').toLowerCase();
-  // Try to load latest employees from SP first (with retry)
-  for(let _attempt=0;_attempt<2;_attempt++){
-    try{
-      const spData=await SP.getDriveId().then(()=>SP.readFile('employees.json'));
-      if(spData&&spData.employees&&spData.employees.length){
-        EMPLOYEES=spData.employees;
-        localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
-        console.log('[Auth] MA-Liste von SP geladen:',EMPLOYEES.length);
-        break;
-      }
-    }catch(e){
-      console.warn('[Auth] SP employees Versuch '+(_attempt+1)+':',e.message);
-      if(_attempt===0)await new Promise(r=>setTimeout(r,1500));
+
+async function afterMsalLogin(){
+  const token=await SP.getToken();
+  if(!token){$('login-screen').style.display='flex';toast('Token konnte nicht abgerufen werden','error');return}
+  try{
+    const profile=await SP.gf('/me');
+    if(!profile)throw new Error('Profil nicht geladen');
+    const email=(profile.mail||profile.userPrincipalName||'').toLowerCase();
+    console.log('[Auth] Profil:',JSON.stringify({mail:profile.mail,upn:profile.userPrincipalName,name:profile.displayName}));
+    // Load employees from SP
+    for(let _attempt=0;_attempt<2;_attempt++){
+      try{
+        const spData=await SP.readFile('employees.json');
+        if(spData&&spData.employees&&spData.employees.length){
+          EMPLOYEES=spData.employees;
+          localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
+          console.log('[Auth] MA-Liste von SP:',EMPLOYEES.length);break;
+        }
+      }catch(e){console.warn('[Auth] SP employees Versuch '+(_attempt+1)+':',e.message);if(_attempt===0)await new Promise(r=>setTimeout(r,1500))}
     }
-  }
-  // Match by email (supports both company and personal MS accounts)
-  // Microsoft guest accounts often have: x_user_domain.com#EXT#@tenant.onmicrosoft.com
-  // or the UPN might differ from the actual email
-  const normalizeEmail=e=>{let n=(e||'').toLowerCase().trim();n=n.replace(/#ext#@.*$/i,'');if(!n.includes('@')&&n.includes('_')){const li=n.lastIndexOf('_');n=n.substring(0,li)+'@'+n.substring(li+1)}n=n.replace(/^x_/,'');return n};
-  const extractCore=e=>{let n=normalizeEmail(e);return n.replace(/@.*$/,'').replace(/_/g,'.');};
-  // 1. Exact match
-  let emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase().trim()===email);
-  // 2. Normalized match (strip x_ prefix and #EXT#)
-  if(!emp)emp=getActiveEmployees().find(e=>e.email&&normalizeEmail(e.email)===normalizeEmail(email));
-  // 3. Core local part match (x_luissilva@hotmail.com vs luissilva@hotmail.com)
-  if(!emp)emp=getActiveEmployees().find(e=>e.email&&extractCore(e.email)===extractCore(email));
-  // 4. Match by display name
-  if(!emp)emp=getActiveEmployees().find(e=>e.name.toLowerCase()===profile.displayName.toLowerCase());
-  // 5. Partial email match (before @)
-  if(!emp){const localPart=email.split('@')[0].toLowerCase();emp=getActiveEmployees().find(e=>e.email&&e.email.toLowerCase().split('@')[0]===localPart)}
-  // 6. Contains match (one email contains the other's local part)
-  if(!emp){const lp=extractCore(email);emp=getActiveEmployees().find(e=>{if(!e.email)return false;const elp=extractCore(e.email);return elp.includes(lp)||lp.includes(elp)})}
-  // 7. Domain-ignoring match (same local part, different domain)
-  if(!emp){const lp=email.replace(/@.*$/,'').replace(/^x_/,'').toLowerCase();emp=getActiveEmployees().find(e=>{if(!e.email)return false;const elp=e.email.replace(/@.*$/,'').replace(/^x_/,'').toLowerCase();return lp===elp})}
-  if(emp){user={...emp};localStorage.setItem(C.LS+'session',JSON.stringify(user));localStorage.setItem(C.LS+'token',accessToken);setTokenExpiry();console.log('[Auth] Angemeldet als:',emp.name);showApp();syncWithRetry()}
-  else{console.warn('[Auth] Email nicht gefunden:',email,'Name:',profile.displayName,'Bekannte:',getActiveEmployees().map(e=>e.email).filter(Boolean).join(', '));toast('Benutzer nicht gefunden: '+email+' ('+profile.displayName+'). Bitte Admin kontaktieren \u2013 E-Mail in MA-Verwaltung pr\u00fcfen.','error');$('login-screen').style.display='flex'}
-}).catch(e=>{console.error('[Auth]:',e);toast('Login fehlgeschlagen: '+e.message,'error');$('login-screen').style.display='flex'});
-return true}
+    const emp=matchEmployee(email,profile.displayName);
+    if(emp){
+      user={...emp};
+      localStorage.setItem(C.LS+'session',JSON.stringify(user));
+      console.log('[Auth] Angemeldet als:',emp.name);
+      showApp();syncWithRetry();
+    }else{
+      console.warn('[Auth] Email nicht gefunden:',email,'Name:',profile.displayName);
+      toast('Benutzer nicht gefunden: '+email+' ('+profile.displayName+'). Bitte Admin kontaktieren.','error');
+      $('login-screen').style.display='flex';
+    }
+  }catch(e){console.error('[Auth]:',e);toast('Login fehlgeschlagen: '+e.message,'error');$('login-screen').style.display='flex'}
+}
 
-// AUTH
-function initLogin(){
-// PIN-protected demo mode
-const demoDiv=$('demoUsers');
-if(demoDiv){
-  EMPLOYEES.forEach(emp=>{
-    const b=document.createElement('button');b.className='demo-user-btn';
-    b.innerHTML='<span class="uid">'+emp.id+'</span>'+emp.name+(emp.admin?' \ud83d\udc51':'')+(emp.approver&&!emp.admin?' \u2705':'');
-    b.onclick=()=>loginAs(emp);demoDiv.appendChild(b);
-  });
-}
-// PIN input handling
-const DEMO_PIN='47635';
-function setupPinInputs(){
-  for(let i=1;i<=5;i++){
-    const inp=$('pin'+i);
-    if(!inp)continue;
-    inp.addEventListener('input',function(){
-      if(this.value.length===1&&i<5)$('pin'+(i+1)).focus();
-      checkPin();
-    });
-    inp.addEventListener('keydown',function(e){
-      if(e.key==='Backspace'&&!this.value&&i>1)$('pin'+(i-1)).focus();
-    });
+async function msLogin(){
+  const btn=$('msLoginBtn');const err=$('msLoginErr');
+  if(!msalApp){if(err){err.textContent='Microsoft Login-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.';err.style.display='block'}return}
+  btn.disabled=true;btn.textContent='Anmelden...';if(err)err.style.display='none';
+  try{
+    if(isMobile){
+      await msalApp.loginRedirect({scopes:GRAPH_SCOPES,prompt:'select_account'});
+    }else{
+      const resp=await msalApp.loginPopup({scopes:GRAPH_SCOPES,prompt:'select_account'});
+      msalAccount=resp.account;
+      await afterMsalLogin();
+    }
+  }catch(e){
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 23 23" width="20" height="20"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg> Mit Microsoft anmelden';
+    if(err){err.textContent=e.message||'Anmeldung fehlgeschlagen';err.style.display='block'}
   }
 }
-function checkPin(){
-  let pin='';
-  for(let i=1;i<=5;i++){const v=$('pin'+i);if(v)pin+=v.value}
-  const dv=$('demoUsers');
-  if(pin===DEMO_PIN){if(dv)dv.classList.add('show')}
-  else{if(dv)dv.classList.remove('show')}
+
+function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');
+  if(msalApp&&msalAccount){
+    if(isMobile){msalApp.logoutRedirect({account:msalAccount}).catch(()=>{})}
+    else{msalApp.logoutPopup({account:msalAccount}).catch(()=>{})}
+  }
+  msalAccount=null;
+  $('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local');hideOfflineBanner();
 }
-setupPinInputs();
-$('msLoginBtn').onclick=loginWithMicrosoft;
-const urlHash=window.location.hash;
-console.log('[Auth] Page loaded. Hash:',urlHash?'yes':'none');
-if(urlHash&&urlHash.includes('access_token')){handleOAuthCallback();return}
-if(urlHash&&urlHash.includes('error')){const ep=new URLSearchParams(urlHash.slice(1));const errMsg=decodeURIComponent(ep.get('error_description')||ep.get('error')||'');toast('Microsoft Fehler: '+errMsg.split('.')[0],'error');
-const dbg=$('authDebug');if(dbg){dbg.style.display='block';dbg.innerHTML='<strong>OAuth Debug:</strong><br>Fehler: '+errMsg+'<br><br>Bitte pr\u00fcfen:<br>1. Azure: Authentication > SPA Platform<br>2. Implicit grant: Access+ID tokens<br>3. Redirect URI: '+window.location.origin+window.location.pathname}}
-const st=localStorage.getItem(C.LS+'token');if(st)accessToken=st;
-const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);showApp();if(accessToken){
-  // Validate token on startup with a lightweight API call
-  setTokenExpiry(); // Assume valid for now, will be corrected
-  SP.getDriveId().then(d=>{if(d){setSyncStatus('online');syncWithRetry()}else{setSyncStatus('offline');refreshTokenChain().then(ok=>{if(ok)syncWithRetry()})}}).catch(()=>{
-    console.warn('[Auth] Token ungültig beim Start - erneuere...');
-    refreshTokenChain().then(ok=>{if(ok)syncWithRetry();else showOfflineBanner('Bitte neu anmelden')});
-  });
-}else{setSyncStatus('local')}}catch{}}
-const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}}
+
+// Offline banner (slim, below topbar)
+function showOfflineBanner(reason){
+  let b=$('offlineBanner');
+  if(!b){b=document.createElement('div');b.id='offlineBanner';b.style.cssText='position:fixed;top:48px;left:0;right:0;z-index:9999;background:#f59e0b;color:#78350f;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:.78rem;box-shadow:0 1px 4px rgba(0,0,0,.15)';document.body.appendChild(b)}
+  b.innerHTML='\u26A0\uFE0F '+(reason||'Offline')+' <button onclick="reconnectNow()" style="background:#78350f;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:.75rem;cursor:pointer;margin-left:4px">\uD83D\uDD04 Verbinden</button>';
+  b.style.display='flex';
+}
+function hideOfflineBanner(){const b=$('offlineBanner');if(b)b.style.display='none'}
+async function reconnectNow(){
+  const b=$('offlineBanner');if(b)b.innerHTML='\u23F3 Verbinde...';
+  try{const token=await SP.getToken();if(token){hideOfflineBanner();toast('\u2705 Verbindung wiederhergestellt','success');SP.fullSync()}}catch(e){if(b)b.innerHTML='\u26A0\uFE0F Verbindung fehlgeschlagen <button onclick="reconnectNow()" style="background:#78350f;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:.75rem;cursor:pointer;margin-left:4px">\uD83D\uDD04 Nochmal</button>'}
+}
+
+// AUTH INIT
+function initLogin(){
+  // Demo mode
+  const demoDiv=$('demoUsers');
+  if(demoDiv){EMPLOYEES.forEach(emp=>{const b=document.createElement('button');b.className='demo-user-btn';b.innerHTML='<span class="uid">'+emp.id+'</span>'+emp.name+(emp.admin?' \ud83d\udc51':'')+(emp.approver&&!emp.admin?' \u2705':'');b.onclick=()=>loginAs(emp);demoDiv.appendChild(b)})}
+  const DEMO_PIN='47635';
+  function setupPinInputs(){for(let i=1;i<=5;i++){const inp=$('pin'+i);if(!inp)continue;inp.addEventListener('input',function(){if(this.value.length===1&&i<5)$('pin'+(i+1)).focus();checkPin()});inp.addEventListener('keydown',function(e){if(e.key==='Backspace'&&!this.value&&i>1)$('pin'+(i-1)).focus()})}}
+  function checkPin(){let pin='';for(let i=1;i<=5;i++){const v=$('pin'+i);if(v)pin+=v.value}const dv=$('demoUsers');if(pin===DEMO_PIN){if(dv)dv.classList.add('show')}else{if(dv)dv.classList.remove('show')}}
+  setupPinInputs();
+  $('msLoginBtn').onclick=msLogin;
+
+  // MSAL init
+  (async function(){
+    let msalWait=0;
+    while(typeof msal==='undefined'&&msalWait<50){await new Promise(r=>setTimeout(r,100));msalWait++}
+    if(typeof msal==='undefined'){console.warn('[Auth] MSAL nicht geladen');
+      // Fallback: try session restore without MSAL
+      const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);showApp();setSyncStatus('offline');showOfflineBanner('MSAL nicht geladen \u2013 bitte Seite neu laden')}catch{}}
+      return;
+    }
+    msalApp=new msal.PublicClientApplication(MSAL_CFG);
+    await msalApp.initialize();
+    // Handle redirect response (mobile login returns here)
+    const redirectResp=await msalApp.handleRedirectPromise().catch(e=>{console.warn('[Auth] redirect:',e);return null});
+    if(redirectResp&&redirectResp.account){msalAccount=redirectResp.account;await afterMsalLogin();return}
+    // Check existing session
+    const accounts=msalApp.getAllAccounts();
+    if(accounts&&accounts.length>0){
+      msalAccount=accounts[0];
+      try{
+        await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});
+        // Restore user from localStorage if available
+        const saved=localStorage.getItem(C.LS+'session');
+        if(saved){try{user=JSON.parse(saved);showApp();syncWithRetry()}catch{await afterMsalLogin()}}
+        else{await afterMsalLogin()}
+      }catch(e){
+        console.warn('[Auth] Silent token fehlgeschlagen:',e.message);
+        msalAccount=null;$('login-screen').style.display='flex';
+      }
+    }else{
+      $('login-screen').style.display='flex';
+    }
+  })();
+  const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
+}
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
-function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');localStorage.removeItem(C.LS+'token');$('app').style.display='none';$('login-screen').style.display='flex';setSyncStatus('local')}
 function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
 
 // TABS
@@ -3447,162 +3490,9 @@ function checkMyNotifications(){
 setInterval(checkMyNotifications,60000);
 
 // ============================================================
-// TOKEN REFRESH + AUTO-SYNC ON TAB FOCUS
 // ============================================================
-let _tokenExpiry=null;
-let _refreshing=false;
-let _refreshPromise=null;
-function setTokenExpiry(){_tokenExpiry=Date.now()+3300000} // 55 min (tokens last ~60min)
-function isTokenExpired(){return _tokenExpiry&&Date.now()>_tokenExpiry}
-
-// iframe-based silent token refresh (works on mobile, no popup blocker)
-function silentRefreshToken(){
-  if(_refreshing&&_refreshPromise)return _refreshPromise;
-  _refreshing=true;
-  _refreshPromise=new Promise((resolve,reject)=>{
-    console.log('[Auth] Silent refresh via iframe...');
-    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+AUTH_SCOPE+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
-    const iframe=document.createElement('iframe');
-    iframe.style.cssText='display:none;width:0;height:0;border:0';
-    iframe.id='authRefreshFrame';
-    const old=document.getElementById('authRefreshFrame');
-    if(old)old.remove();
-    document.body.appendChild(iframe);
-    let resolved=false;
-    const cleanup=()=>{_refreshing=false;_refreshPromise=null;try{iframe.remove()}catch{}};
-    const check=setInterval(()=>{
-      try{
-        const hash=iframe.contentWindow.location.hash;
-        if(hash&&hash.includes('access_token')){
-          clearInterval(check);
-          const p=new URLSearchParams(hash.slice(1));
-          accessToken=p.get('access_token');
-          localStorage.setItem(C.LS+'token',accessToken);
-          setTokenExpiry();
-          setSyncStatus('online');
-          hideOfflineBanner();
-          console.log('[Auth] Token erneuert via iframe');
-          resolved=true;cleanup();resolve(true);
-        }else if(hash&&(hash.includes('error'))){
-          clearInterval(check);
-          console.warn('[Auth] iframe refresh fehler:',hash);
-          resolved=true;cleanup();reject(new Error('iframe_refresh_failed'));
-        }
-      }catch(e){/* cross-origin expected */}
-    },300);
-    // Timeout: if iframe doesn't resolve in 15s, reject silently
-    setTimeout(()=>{
-      if(resolved)return;
-      clearInterval(check);cleanup();
-      console.warn('[Auth] iframe timeout');
-      reject(new Error('iframe_timeout'));
-    },15000);
-    iframe.src=authUrl;
-  });
-  return _refreshPromise;
-}
-
-// Popup fallback if iframe fails
-function popupRefreshFallback(){
-  return new Promise((resolve,reject)=>{
-    const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+AUTH_SCOPE+'&prompt=none&login_hint='+(user&&user.email?user.email:'');
-    const popup=window.open(authUrl,'tokenRefresh','width=500,height=600');
-    if(!popup){
-      console.warn('[Auth] Popup blocked - auto redirect');
-      reject(new Error('popup_blocked'));return;
-    }
-    let done=false;
-    const iv=setInterval(()=>{
-      try{
-        if(!popup||popup.closed){clearInterval(iv);if(!done)reject(new Error('popup_closed'));return}
-        const hash=popup.location.hash;
-        if(hash&&hash.includes('access_token')){
-          done=true;clearInterval(iv);
-          const p=new URLSearchParams(hash.slice(1));
-          accessToken=p.get('access_token');
-          localStorage.setItem(C.LS+'token',accessToken);
-          setTokenExpiry();setSyncStatus('online');hideOfflineBanner();
-          console.log('[Auth] Token erneuert via popup');
-          popup.close();resolve(true);
-        }
-      }catch(e){}
-    },500);
-    setTimeout(()=>{clearInterval(iv);if(!done){try{popup.close()}catch{}reject(new Error('popup_timeout'))}},20000);
-  });
-}
-
-// Auto-redirect to Microsoft login (last resort)
-function forceRelogin(){
-  console.log('[Auth] Force re-login via redirect');
-  // Save current state so we can restore after login
-  localStorage.setItem(C.LS+'pre_login_path',window.location.pathname);
-  const authUrl='https://login.microsoftonline.com/'+C.TENANT_ID+'/oauth2/v2.0/authorize?client_id='+C.CLIENT_ID+'&response_type=token&redirect_uri='+encodeURIComponent(C.REDIRECT)+'&scope='+AUTH_SCOPE+'&prompt=login&login_hint='+(user&&user.email?user.email:'');
-  window.location.href=authUrl;
-}
-
-// Full refresh chain: iframe → popup → redirect
-let _refreshAttempts=0;
-async function refreshTokenChain(){
-  if(_refreshAttempts>3){
-    _refreshAttempts=0;
-    showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden und neu anmelden');
-    return false;
-  }
-  _refreshAttempts++;
-  try{
-    await silentRefreshToken();
-    _refreshAttempts=0;
-    return true;
-  }catch(e){
-    console.warn('[Auth] Refresh Versuch',_refreshAttempts,'fehlgeschlagen:',e.message);
-    if(_refreshAttempts>=3){
-      showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden und neu anmelden');
-      return false;
-    }
-    // Wait 2s before retry
-    await new Promise(r=>setTimeout(r,2000));
-    return refreshTokenChain();
-  }
-}
-
-// Offline banner
-function showOfflineBanner(reason){
-  let b=$('offlineBanner');
-  if(!b){
-    b=document.createElement('div');b.id='offlineBanner';
-    b.style.cssText='position:fixed;top:48px;left:0;right:0;z-index:9999;background:#f59e0b;color:#78350f;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:.78rem;box-shadow:0 1px 4px rgba(0,0,0,.15)';
-    document.body.appendChild(b);
-  }
-  b.innerHTML='\u26A0\uFE0F '+(reason||'Offline')+' <button onclick="reconnectNow()" style="background:#78350f;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:.75rem;cursor:pointer;margin-left:4px">\uD83D\uDD04 Verbinden</button>';
-  b.style.display='flex';
-}
-function hideOfflineBanner(){
-  const b=$('offlineBanner');if(b)b.style.display='none';
-}
-
-async function reconnectNow(){
-  const b=$('offlineBanner');
-  if(b)b.innerHTML='\u23F3 Verbinde...';
-  _refreshAttempts=0;
-  const ok=await refreshTokenChain();
-  if(ok){
-    hideOfflineBanner();
-    toast('\u2705 Verbindung wiederhergestellt','success');
-    SP.fullSync();
-  }
-}
-
-// Proactive token refresh: every 3 minutes check, refresh at ~50 min mark
-setInterval(()=>{
-  if(!accessToken||!user)return;
-  if(isTokenExpired()){
-    refreshTokenChain();
-  }else if(_tokenExpiry&&(Date.now()>_tokenExpiry-600000)){
-    // Proactive: 10 min before expiry
-    console.log('[Auth] Proaktive Token-Erneuerung...');
-    silentRefreshToken().catch(()=>{});
-  }
-},180000);
+// MSAL AUTO-SYNC ON TAB FOCUS
+// ============================================================
 
 // On tab focus: check token + sync
 let _lastVisCheck=0;
@@ -3611,80 +3501,33 @@ document.addEventListener('visibilitychange',function(){
     if(Date.now()-_lastVisCheck<60000)return;
     _lastVisCheck=Date.now();
     console.log('[Sync] Tab aktiv');
-    if(accessToken){
-      if(isTokenExpired()){refreshTokenChain().then(ok=>{if(ok)SP.fullSync()});return}
-      SP.getDriveId().then(driveId=>{
-        if(driveId){
+    if(msalApp&&msalAccount){
+      SP.getToken().then(token=>{
+        if(token){
+          hideOfflineBanner();
           setSyncStatus('syncing');
           Promise.all([SP.saveEntries(),loadAbsencesFromSP(),loadEmpSettingsFromSP(),loadEmployeesFromSP()]).then(()=>{if(_absNeedsSync)syncAbsToSP();setSyncStatus('online');refreshView()}).catch(e=>{console.warn('[Sync]',e.message);setSyncStatus('offline')});
+        }else{
+          showOfflineBanner('Token abgelaufen');
         }
-      }).catch(()=>{});
+      }).catch(()=>{setSyncStatus('offline')});
     }
     if(!timer.on&&typeof checkRemoteTimer==='function')checkRemoteTimer();
   }
 });
 
-// Wrap gf to handle 401 with automatic token refresh + retry
-const _origGf=SP.gf;
-let _retrying401=false;
-SP.gf=async function(ep,opts){
-  try{
-    const result=await _origGf.call(SP,ep,opts);
-    _lastSyncOk=Date.now();
-    hideOfflineBanner();
-    return result;
-  }catch(e){
-    const msg=e.message||'';
-    if((msg.includes('401')||msg.includes('403'))&&!_retrying401){
-      _retrying401=true;
-      console.warn('[SP] Auth-Fehler - versuche Token-Refresh + Retry...');
-      setSyncStatus('offline');
-      try{
-        const ok=await refreshTokenChain();
-        _retrying401=false;
-        if(ok){
-          // Retry the original call with fresh token
-          const result=await _origGf.call(SP,ep,opts);
-          _lastSyncOk=Date.now();
-          setSyncStatus('online');
-          hideOfflineBanner();
-          return result;
-        }
-      }catch(retryErr){
-        _retrying401=false;
-        console.warn('[SP] Retry nach Refresh fehlgeschlagen:',retryErr.message);
-      }
-      showOfflineBanner('Authentifizierung fehlgeschlagen');
-      throw e;
-    }else if(msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('net::')){
-      setSyncStatus('offline');
-      showOfflineBanner('Keine Internetverbindung');
-      console.warn('[SP] Netzwerk-Fehler:',msg);
-    }else{
-      console.warn('[SP] API:',msg);
-    }
-    throw e;
-  }
-};
-
 // Periodic SP health check every 5 minutes
 setInterval(async()=>{
-  if(!accessToken||!user)return;
+  if(!msalApp||!msalAccount||!user)return;
   if(Date.now()-_lastSyncOk>600000){
     try{
-      const driveId=await SP.getDriveId();
-      if(driveId){setSyncStatus('online');_lastSyncOk=Date.now();hideOfflineBanner()}
-      else{setSyncStatus('offline');showOfflineBanner('SharePoint nicht erreichbar')}
-    }catch(e){
-      setSyncStatus('offline');
-      // Try refresh if auth error
-      const msg=e.message||'';
-      if(msg.includes('401')||msg.includes('403')){
-        refreshTokenChain().then(ok=>{if(ok){SP.fullSync();hideOfflineBanner()}});
-      }else{
-        showOfflineBanner('Keine Verbindung');
-      }
-    }
+      const token=await SP.getToken();
+      if(token){
+        const driveId=await SP.getDriveId();
+        if(driveId){setSyncStatus('online');_lastSyncOk=Date.now();hideOfflineBanner()}
+        else{setSyncStatus('offline');showOfflineBanner('SharePoint nicht erreichbar')}
+      }else{showOfflineBanner('Sitzung abgelaufen')}
+    }catch(e){setSyncStatus('offline');showOfflineBanner('Keine Verbindung')}
   }
 },300000);
 
