@@ -2633,27 +2633,42 @@ function generateMonatsrapport(){
   const empId=$('mrEmp').value;
   if(!empId){toast('Mitarbeiter wählen','warning');return}
   const mv=$('mrMonth').value;if(!mv){toast('Monat wählen','warning');return}
-  const html=buildMonatsrapportHTML(empId,mv);
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const emp=EMPLOYEES.find(e=>e.id===empId);
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='Monatsrapport_'+(emp?emp.name.replace(/\s/g,'_'):empId)+'_'+mv+'.html';
-  a.click();toast('Monatsrapport heruntergeladen – im Browser öffnen und drucken/PDF','success');
+  try{
+    const html=buildMonatsrapportHTML(empId,mv);
+    const w=window.open('','_blank');
+    if(w){w.document.write(html);w.document.close()}
+    else{
+      // Fallback: blob download
+      const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+      const emp=EMPLOYEES.find(e=>e.id===empId);
+      a.download='Monatsrapport_'+(emp?emp.name.replace(/\s/g,'_'):empId)+'_'+mv+'.html';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      toast('Monatsrapport heruntergeladen','success');
+    }
+  }catch(e){toast('Fehler: '+e.message,'error');console.error('[Monatsrapport]',e)}
 }
 
 function generateMonatsrapportAll(){
   const mv=$('mrMonth').value;if(!mv){toast('Monat wählen','warning');return}
-  const emps=getActiveEmployees();
-  let allPages='';
-  emps.forEach((emp,i)=>{
-    allPages+=buildMonatsrapportPage(emp.id,mv);
-    if(i<emps.length-1)allPages+='<div style="page-break-after:always"></div>';
-  });
-  const html=buildMonatsrapportShell(allPages,'Alle Mitarbeiter',mv);
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='Monatsrapport_Alle_'+mv+'.html';
-  a.click();toast(emps.length+' Rapporte heruntergeladen','success');
+  try{
+    const emps=getActiveEmployees();
+    let allPages='';
+    emps.forEach((emp,i)=>{
+      allPages+=buildMonatsrapportPage(emp.id,mv);
+      if(i<emps.length-1)allPages+='<div style="page-break-after:always"></div>';
+    });
+    const html=buildMonatsrapportShell(allPages,'Alle Mitarbeiter',mv);
+    const w=window.open('','_blank');
+    if(w){w.document.write(html);w.document.close()}
+    else{
+      const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+      a.download='Monatsrapport_Alle_'+mv+'.html';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+    }
+    toast(emps.length+' Rapporte erstellt','success');
+  }catch(e){toast('Fehler: '+e.message,'error');console.error('[Monatsrapport]',e)}
 }
 
 function buildMonatsrapportHTML(empId,monthStr){
