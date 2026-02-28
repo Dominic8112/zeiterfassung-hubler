@@ -328,6 +328,20 @@
 
     <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Mitarbeiter-Report</h2>
 
+<!-- MONATSRAPPORT (Lohnabrechnung) -->
+<div class="card">
+  <h3 style="margin-bottom:8px">📄 Monatsrapport</h3>
+  <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">Druckfertiger Monatsrapport pro Mitarbeiter für die Lohnabrechnung. Enthält Tagesübersicht, Stunden, Projekte, Überstunden- und Ferienkonto.</p>
+  <div class="form-row" style="margin-bottom:12px">
+    <div class="form-group"><label class="form-label">Mitarbeiter</label><select class="form-select" id="mrEmp"></select></div>
+    <div class="form-group"><label class="form-label">Monat</label><input type="month" class="form-input" id="mrMonth"></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-primary btn-sm" onclick="generateMonatsrapport()">📄 Rapport erstellen</button>
+    <button class="btn btn-secondary btn-sm" onclick="generateMonatsrapportAll()">👥 Alle MA auf einmal</button>
+  </div>
+</div>
+
 <!-- ABWESENHEITSKALENDER (Jahresansicht) -->
 <div class="card">
   <h3 style="margin-bottom:8px">📅 Abwesenheitskalender</h3>
@@ -1125,7 +1139,7 @@ function initLogin(){
   const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
 }
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();if(canViewReports())initMonatsrapport();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -2607,6 +2621,267 @@ function exportWeeklyReportPrint(){
   a.click();toast('Druckversion heruntergeladen','success');
 }
 
+
+// ═══ MONATSRAPPORT (Lohnabrechnung) ═══
+function initMonatsrapport(){
+  const sel=$('mrEmp');if(!sel)return;
+  sel.innerHTML='<option value="">— Mitarbeiter wählen —</option>'+getActiveEmployees().map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('');
+  const mi=$('mrMonth');if(mi&&!mi.value){const now=new Date();mi.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')}
+}
+
+function generateMonatsrapport(){
+  const empId=$('mrEmp').value;
+  if(!empId){toast('Mitarbeiter wählen','warning');return}
+  const mv=$('mrMonth').value;if(!mv){toast('Monat wählen','warning');return}
+  const html=buildMonatsrapportHTML(empId,mv);
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const emp=EMPLOYEES.find(e=>e.id===empId);
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='Monatsrapport_'+(emp?emp.name.replace(/\s/g,'_'):empId)+'_'+mv+'.html';
+  a.click();toast('Monatsrapport heruntergeladen – im Browser öffnen und drucken/PDF','success');
+}
+
+function generateMonatsrapportAll(){
+  const mv=$('mrMonth').value;if(!mv){toast('Monat wählen','warning');return}
+  const emps=getActiveEmployees();
+  let allPages='';
+  emps.forEach((emp,i)=>{
+    allPages+=buildMonatsrapportPage(emp.id,mv);
+    if(i<emps.length-1)allPages+='<div style="page-break-after:always"></div>';
+  });
+  const html=buildMonatsrapportShell(allPages,'Alle Mitarbeiter',mv);
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='Monatsrapport_Alle_'+mv+'.html';
+  a.click();toast(emps.length+' Rapporte heruntergeladen','success');
+}
+
+function buildMonatsrapportHTML(empId,monthStr){
+  return buildMonatsrapportShell(buildMonatsrapportPage(empId,monthStr),EMPLOYEES.find(e=>e.id===empId)?.name||empId,monthStr);
+}
+
+function buildMonatsrapportShell(content,title,monthStr){
+  const [yr,mo]=monthStr.split('-');
+  const moNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  return '<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monatsrapport '+title+' – '+moNames[parseInt(mo)-1]+' '+yr+'</title>'+
+  '<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">'+
+  '<style>'+getMRStyles()+'</style></head><body>'+
+  '<div class="no-print" style="text-align:center;padding:16px;background:#1a1a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">'+
+  '<span style="font-weight:600">Monatsrapport – '+moNames[parseInt(mo)-1]+' '+yr+'</span>'+
+  '<button onclick="window.print()" style="padding:6px 20px;border-radius:6px;border:none;background:#FF6B35;color:#fff;font-weight:600;cursor:pointer">🖨️ Drucken / PDF</button></div>'+
+  content+'</body></html>';
+}
+
+function getMRStyles(){
+  return '@media print{@page{size:A4 portrait;margin:10mm 12mm}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}.page{box-shadow:none!important;margin:0!important;padding:20px 0!important;min-height:auto!important}}'+
+  '*{margin:0;padding:0;box-sizing:border-box}body{font-family:"DM Sans",sans-serif;background:#e8eaf0;color:#1a1a2e;line-height:1.4}'+
+  '.page{max-width:210mm;min-height:297mm;margin:16px auto;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.12);padding:28px 32px;position:relative}'+
+  '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #FF6B35}'+
+  '.header h1{font-size:1.35rem;font-weight:700;letter-spacing:-.02em}.header .sub{font-size:.78rem;color:#8888a0;margin-top:2px}'+
+  '.header .period{font-size:1.2rem;font-weight:700;color:#FF6B35;text-align:right}.header .year{font-size:.82rem;color:#8888a0;text-align:right}'+
+  '.emp-info{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:#f6f7fb;border:1px solid #e2e4ec;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:.78rem}'+
+  '.emp-info .lbl{color:#8888a0;font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600}.emp-info .val{font-weight:600}'+
+  '.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}'+
+  '.summary .sc{background:#f6f7fb;border:1px solid #e2e4ec;border-radius:8px;padding:10px;text-align:center}'+
+  '.summary .sc .n{font-family:"JetBrains Mono",monospace;font-size:1.2rem;font-weight:700;line-height:1.2}'+
+  '.summary .sc .l{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:#8888a0;font-weight:600;margin-top:2px}'+
+  '.pos{color:#16a34a}.neg{color:#dc2626}'+
+  'table{width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:14px}'+
+  'thead th{background:#1a1a2e;color:#fff;padding:6px 8px;font-weight:600;font-size:.65rem;text-transform:uppercase;letter-spacing:.04em;text-align:left;white-space:nowrap}'+
+  'thead th:first-child{border-radius:6px 0 0 0}thead th:last-child{border-radius:0 6px 0 0}'+
+  'tbody td{padding:4px 8px;border-bottom:1px solid #e2e4ec}'+
+  'tr.we{background:#f8f0f0;color:#8888a0;font-style:italic}tr.we td{padding:3px 8px}'+
+  'tr.hol{background:#eff6ff}tr.abs{background:#fefce8}'+
+  '.dn{font-weight:600;width:24px;text-align:center}.dd{font-family:"JetBrains Mono",monospace;font-weight:500;width:22px;text-align:center}'+
+  '.tm{font-family:"JetBrains Mono",monospace;font-size:.7rem}.hrs{font-family:"JetBrains Mono",monospace;font-weight:600;text-align:right}'+
+  '.prj{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+  '.badge{display:inline-block;font-size:.6rem;font-weight:600;padding:2px 6px;border-radius:3px;letter-spacing:.02em}'+
+  '.b-hol{background:#dbeafe;color:#1d4ed8}.b-vac{background:#fef3c7;color:#92400e}.b-sick{background:#fee2e2;color:#991b1b}.b-comp{background:#e0e7ff;color:#3730a3}.b-mil{background:#d1fae5;color:#065f46}.b-other{background:#f3e8ff;color:#6b21a8}'+
+  '.mp{font-size:.65rem;color:#8888a0;background:#f0f1f5;padding:1px 5px;border-radius:3px;margin-left:4px;white-space:nowrap}'+
+  '.info-box{background:#f6f7fb;border:1px solid #e2e4ec;border-radius:8px;padding:12px 16px;margin-bottom:14px}'+
+  '.info-box h3{font-size:.78rem;font-weight:700;margin-bottom:8px}'+
+  '.ig{display:grid;grid-template-columns:1fr auto;gap:3px 16px;font-size:.75rem}'+
+  '.ig .il{color:#4a4a6a}.ig .iv{text-align:right;font-family:"JetBrains Mono",monospace;font-weight:600}'+
+  '.ig .tot{border-top:2px solid #1a1a2e;padding-top:5px;margin-top:3px;font-weight:700;color:#1a1a2e}'+
+  '.proj-table{margin-bottom:14px}.proj-table td{padding:4px 8px;font-size:.72rem}'+
+  '.footer{display:flex;justify-content:space-between;font-size:.6rem;color:#8888a0;border-top:1px solid #e2e4ec;padding-top:6px;margin-top:auto}'+
+  '.footer .logo{font-weight:700;color:#FF6B35}';
+}
+
+function buildMonatsrapportPage(empId,monthStr){
+  const [yr,moStr]=monthStr.split('-');
+  const year=parseInt(yr),mo=parseInt(moStr);
+  const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return'<p>MA nicht gefunden</p>';
+  const s=getEmpSetting(empId);
+  const moNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const dayNames=['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const daysInMonth=new Date(year,mo,0).getDate();
+  const from=yr+'-'+moStr+'-01';
+  const to=yr+'-'+moStr+'-'+String(daysInMonth).padStart(2,'0');
+  
+  // Get entries
+  const entries=getEntriesForEmployee(empId,from,to);
+  const absences=getAllAbsences().filter(a=>a.employeeId===empId&&a.from<=to&&a.to>=from&&a.status==='approved');
+  const holidays=getHolidays(year);
+  const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
+  const dailyH=(s.weekHours||41)/arbeitsTage.length;
+  const frH=s.freitagStunden||dailyH;
+  
+  // Group entries by date
+  const byDate={};
+  entries.forEach(e=>{
+    if(!byDate[e.date])byDate[e.date]=[];
+    byDate[e.date].push(e);
+  });
+  
+  // Absence type map
+  const absTypeMap={'Ferien':'b-vac','Krankheit':'b-sick','Kompensation':'b-comp','Militär':'b-mil','Unfall':'b-sick','Unbezahlt':'b-other','Sonstiges':'b-other'};
+  
+  // Build day rows
+  let rows='';
+  let totalIstMin=0,totalSollH=0;
+  const projHours={};
+  
+  for(let d=1;d<=daysInMonth;d++){
+    const dk=yr+'-'+moStr+'-'+String(d).padStart(2,'0');
+    const dt=new Date(year,mo-1,d);
+    const dow=dt.getDay();
+    const dn=dayNames[dow];
+    const isWE=!arbeitsTage.includes(dow);
+    const hol=holidays.find(h=>h.date===dk);
+    const dayAbs=absences.filter(a=>a.from<=dk&&a.to>=dk);
+    const dayEntries=byDate[dk]||[];
+    
+    // Soll for this day
+    let daySollH=0;
+    if(!isWE&&!hol){
+      daySollH=dow===5?frH:dailyH;
+      daySollH=Math.round(daySollH*100)/100;
+    }
+    
+    if(isWE){
+      // Weekend row
+      if(dayEntries.length>0){
+        // Worked on weekend
+        const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+        totalIstMin+=istMin;
+        const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
+        dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
+        rows+='<tr style="background:#fff8f0"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td>';
+        rows+='<td class="tm">'+(mainProj.startTime||mainProj.start||'')+'</td><td class="tm">'+(mainProj.endTime||mainProj.end||'')+'</td>';
+        rows+='<td class="tm">'+fmtPauseShort(mainProj.pauseMin||mainProj.breakMinutes||0)+'</td>';
+        rows+='<td class="hrs">'+(istMin/60).toFixed(2)+'</td>';
+        rows+='<td class="prj">'+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+( dayEntries.length-1)+'</span>':'')+'</td>';
+        rows+='<td>'+(mainProj.kostenstelle||mainProj.costCenter||'')+'</td><td></td></tr>';
+      }else{
+        rows+='<tr class="we"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7">—</td></tr>';
+      }
+    }else if(hol){
+      // Holiday
+      totalSollH+=0; // No soll on holidays
+      rows+='<tr class="hol"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7"><span class="badge b-hol">'+hol.name+'</span></td></tr>';
+    }else if(dayAbs.length>0&&dayEntries.length===0){
+      // Absence (full day)
+      totalSollH+=daySollH;
+      const abs=dayAbs[0];
+      const cls=absTypeMap[abs.type]||'b-other';
+      totalIstMin+=daySollH*60; // Absences count as worked
+      rows+='<tr class="abs"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="5"><span class="badge '+cls+'">'+abs.type+'</span></td><td class="hrs" colspan="2">'+daySollH.toFixed(2)+'</td></tr>';
+    }else if(dayEntries.length>0){
+      // Normal work day
+      totalSollH+=daySollH;
+      const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+      totalIstMin+=istMin;
+      dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
+      const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
+      const totalPause=dayEntries.reduce((s,e)=>s+(e.pauseMin||e.breakMinutes||0),0);
+      // Earliest start / latest end across entries
+      const starts=dayEntries.map(e=>e.startTime||e.start||'').filter(Boolean).sort();
+      const ends=dayEntries.map(e=>e.endTime||e.end||'').filter(Boolean).sort();
+      rows+='<tr><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td>';
+      rows+='<td class="tm">'+(starts[0]||'')+'</td><td class="tm">'+(ends[ends.length-1]||'')+'</td>';
+      rows+='<td class="tm">'+fmtPauseShort(totalPause)+'</td>';
+      rows+='<td class="hrs">'+(istMin/60).toFixed(2)+'</td>';
+      rows+='<td class="prj">'+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+( dayEntries.length-1)+'</span>':'')+'</td>';
+      rows+='<td>'+(mainProj.kostenstelle||mainProj.costCenter||'')+'</td>';
+      rows+='<td style="color:#8888a0;font-size:.65rem;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(mainProj.bemerkung||mainProj.note||'')+'</td></tr>';
+    }else{
+      // Empty workday (no entry, no absence)
+      totalSollH+=daySollH;
+      rows+='<tr><td class="dn">'+dn+'</td><td class="dd" style="color:#dc2626">'+String(d).padStart(2,'0')+'</td><td colspan="5" style="color:#dc2626;font-size:.7rem">⚠ Kein Eintrag</td><td class="hrs" colspan="2" style="color:#dc2626">0.00</td></tr>';
+    }
+  }
+  
+  // Overtime account
+  const ot=calcOvertimeAccount(empId,yr,yr+'-01-01',to);
+  
+  // Ferien account
+  const vt=getVortrag(empId,year);
+  const ferienAnspruch=calcFerienAnspruch(empId,year);
+  const ferienBezogen=getAllAbsences().filter(a=>a.employeeId===empId&&a.type==='Ferien'&&a.status==='approved'&&a.from>=yr+'-01-01'&&a.from<=to).reduce((s,a)=>s+(a.days||0),0);
+  const ferienRest=Math.round((vt.ferien+ferienAnspruch-ferienBezogen)*10)/10;
+  
+  // Saldo this month
+  const istH=Math.round(totalIstMin/60*100)/100;
+  const sollH=Math.round(totalSollH*100)/100;
+  const saldoM=Math.round((istH-sollH)*100)/100;
+  
+  // Project breakdown (sorted by hours)
+  const projSorted=Object.entries(projHours).sort((a,b)=>b[1]-a[1]);
+  let projRows='';
+  projSorted.forEach(([name,hrs])=>{
+    const pct=istH>0?Math.round(hrs/istH*100):0;
+    projRows+='<tr><td class="prj" style="max-width:200px">'+name+'</td><td class="hrs">'+hrs.toFixed(2)+' h</td><td style="font-size:.65rem;color:#8888a0;text-align:right">'+pct+'%</td></tr>';
+  });
+  
+  // Build page
+  let h='<div class="page">';
+  // Header
+  h+='<div class="header"><div><h1>⏱️ Monatsrapport</h1><div class="sub">Hubler Metallbau AG · Zeiterfassung</div></div>';
+  h+='<div><div class="period">'+moNames[mo-1]+'</div><div class="year">'+yr+'</div></div></div>';
+  // Employee info
+  h+='<div class="emp-info"><div><div class="lbl">Mitarbeiter</div><div class="val">'+emp.name+'</div></div>';
+  h+='<div><div class="lbl">Personal-Nr.</div><div class="val">'+emp.id+'</div></div>';
+  h+='<div><div class="lbl">Pensum</div><div class="val">'+(s.pensum||100)+'%</div></div>';
+  h+='<div><div class="lbl">Soll / Tag</div><div class="val">'+dailyH.toFixed(2)+' h'+(frH!==dailyH?' (Fr '+frH.toFixed(2)+')':'')+'</div></div></div>';
+  // Summary cards
+  h+='<div class="summary">';
+  h+='<div class="sc"><div class="n">'+istH.toFixed(2)+'</div><div class="l">Ist-Stunden</div></div>';
+  h+='<div class="sc"><div class="n">'+sollH.toFixed(2)+'</div><div class="l">Soll-Stunden</div></div>';
+  h+='<div class="sc"><div class="n '+(saldoM>=0?'pos':'neg')+'">'+(saldoM>=0?'+':'')+saldoM.toFixed(2)+'</div><div class="l">Saldo Monat</div></div>';
+  h+='<div class="sc"><div class="n '+(ot.guthaben>=0?'pos':'neg')+'">'+(ot.guthaben>=0?'+':'')+ot.guthaben.toFixed(2)+'</div><div class="l">ÜS-Konto</div></div>';
+  h+='</div>';
+  // Table
+  h+='<table><thead><tr><th>Tag</th><th></th><th>Von</th><th>Bis</th><th>Pause</th><th>Netto</th><th>Projekt</th><th>KST</th><th>Bemerkung</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  // Project breakdown
+  if(projSorted.length>1){
+    h+='<div class="info-box"><h3>📋 Projektaufschlüsselung</h3><table class="proj-table"><tbody>'+projRows+'</tbody></table></div>';
+  }
+  // Two columns: Overtime + Vacation
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  // Overtime
+  h+='<div class="info-box"><h3>📊 Überstundenkonto</h3><div class="ig">';
+  h+='<div class="il">Vortrag Vorjahr</div><div class="iv">'+(ot.vortrag>=0?'+':'')+ot.vortrag.toFixed(2)+' h</div>';
+  h+='<div class="il">Saldo lfd. Jahr</div><div class="iv">'+(ot.saldoH>=0?'+':'')+ot.saldoH.toFixed(2)+' h</div>';
+  if(ot.payoutH>0)h+='<div class="il">Auszahlungen</div><div class="iv">−'+ot.payoutH.toFixed(2)+' h</div>';
+  if(ot.kompH>0)h+='<div class="il">Kompensation</div><div class="iv">−'+ot.kompH.toFixed(2)+' h</div>';
+  h+='<div class="il tot">Stand Konto</div><div class="iv tot '+(ot.guthaben>=0?'pos':'neg')+'">'+(ot.guthaben>=0?'+':'')+ot.guthaben.toFixed(2)+' h</div>';
+  h+='</div></div>';
+  // Vacation
+  h+='<div class="info-box"><h3>🏖️ Ferienkonto</h3><div class="ig">';
+  h+='<div class="il">Anspruch '+yr+'</div><div class="iv">'+ferienAnspruch.toFixed(1)+' Tage</div>';
+  if(vt.ferien>0)h+='<div class="il">Übertrag Vorjahr</div><div class="iv">+'+vt.ferien.toFixed(1)+' Tage</div>';
+  h+='<div class="il">Bezogen (bis '+moNames[mo-1]+')</div><div class="iv">−'+ferienBezogen.toFixed(1)+' Tage</div>';
+  h+='<div class="il tot">Restguthaben</div><div class="iv tot '+(ferienRest>=0?'pos':'neg')+'">'+ferienRest.toFixed(1)+' Tage</div>';
+  h+='</div></div>';
+  h+='</div>';
+  // Footer
+  h+='<div class="footer" style="margin-top:20px"><span><span class="logo">Hubler Metallbau AG</span> · Zeiterfassung</span><span>Erstellt: '+fmtDate(dateKey(new Date()))+'</span></div>';
+  h+='</div>';
+  return h;
+}
+
+function fmtPauseShort(min){if(!min)return'0:00';return Math.floor(min/60)+':'+String(min%60).padStart(2,'0')}
 
 function exportReportHTML(){
   const output=$('reportOutput');if(!output||!output.innerHTML){toast('Zuerst Report anzeigen','warning');return}
