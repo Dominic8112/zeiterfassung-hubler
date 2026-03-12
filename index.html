@@ -2554,13 +2554,15 @@ function showWeeklyReports() {
     html += tpBanner;
 
     Object.values(days).forEach(day => {
-      if(day.dow === 0 || day.dow === 6) return;
+      const isWeekend = day.dow === 0 || day.dow === 6;
+      // Skip empty weekends
+      if(isWeekend && day.entries.length === 0) return;
       totalWeekH += day.totalHours;
       totalWarn += day.warnings.filter(w=>w.type==='warn').length;
       const dayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][day.dow] + ' ' + day.date.substring(8,10) + '.' + day.date.substring(5,7) + '.';
       const dayTpActive = tp.find(t=>day.date>=t.von&&day.date<=t.bis);
-      html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + '">';
-      html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + (dayTpActive?' <span style="color:var(--danger);font-size:.72rem;font-weight:400">(reduziert '+dayTpActive.pensum+'%)</span>':'') + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
+      html += '<div class="report-day' + (day.warnings.some(w=>w.type==='warn')?' has-warning':'') + (isWeekend?' weekend':'') + '">';
+      html += '<div class="report-day-header"><span class="report-day-name">' + dayLabel + (isWeekend?' <span style="color:var(--warning);font-size:.72rem;font-weight:400">(Wochenende)</span>':'') + (dayTpActive?' <span style="color:var(--danger);font-size:.72rem;font-weight:400">(reduziert '+dayTpActive.pensum+'%)</span>':'') + '</span><span class="report-day-hours">' + fmtH(day.totalHours) + '</span></div>';
 
       if(day.entries.length > 0) {
         day.entries.sort((a,b)=>(a.startTime||a.start||'').localeCompare(b.startTime||b.start||'')).forEach(e => {
@@ -2734,27 +2736,24 @@ function buildMonatsrapportPage(empId,monthStr){
   const from=yr+'-'+moStr+'-01';
   const to=yr+'-'+moStr+'-'+String(daysInMonth).padStart(2,'0');
   
-  // Get entries
   const entries=getEntriesForEmployee(empId,from,to);
   const absences=getAllAbsences().filter(a=>a.employeeId===empId&&a.from<=to&&a.to>=from&&a.status==='approved');
   const holidays=getHolidays(year);
   const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
   const dailyH=(s.weekHours||41)/arbeitsTage.length;
-  const frH=s.freitagStunden||dailyH;
+  
+  // Use calcOvertimeAccount for accurate totals (handles Raucher, TempPensum, BF, etc.)
+  const ot=calcOvertimeAccount(empId,yr,from,to);
   
   // Group entries by date
   const byDate={};
-  entries.forEach(e=>{
-    if(!byDate[e.date])byDate[e.date]=[];
-    byDate[e.date].push(e);
-  });
+  entries.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e)});
   
-  // Absence type map
   const absTypeMap={'Ferien':'b-vac','Krankheit':'b-sick','Kompensation':'b-comp','Militär':'b-mil','Unfall':'b-sick','Unbezahlt':'b-other','Sonstiges':'b-other'};
   
-  // Build day rows
+  // Build day rows + project breakdown (display only, not for totals)
   let rows='';
-  let totalIstMin=0,totalSollH=0;
+  let displayIstMin=0; // Only actual work (no absences)
   const projHours={};
   
   for(let d=1;d<=daysInMonth;d++){
@@ -2767,68 +2766,76 @@ function buildMonatsrapportPage(empId,monthStr){
     const dayAbs=absences.filter(a=>a.from<=dk&&a.to>=dk);
     const dayEntries=byDate[dk]||[];
     
-    // Soll for this day
-    let daySollH=0;
-    if(!isWE&&!hol){
-      daySollH=dow===5?frH:dailyH;
-      daySollH=Math.round(daySollH*100)/100;
-    }
-    
     if(isWE){
-      // Weekend row
       if(dayEntries.length>0){
-        // Worked on weekend
         const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
-        totalIstMin+=istMin;
+        displayIstMin+=istMin;
         const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
         dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
         rows+='<tr style="background:#fff8f0"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td>';
         rows+='<td class="tm">'+(mainProj.startTime||mainProj.start||'')+'</td><td class="tm">'+(mainProj.endTime||mainProj.end||'')+'</td>';
         rows+='<td class="tm">'+fmtPauseShort(mainProj.pauseMin||mainProj.breakMinutes||0)+'</td>';
         rows+='<td class="hrs">'+(istMin/60).toFixed(2)+'</td>';
-        rows+='<td class="prj">'+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+( dayEntries.length-1)+'</span>':'')+'</td>';
+        rows+='<td class="prj">'+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+(dayEntries.length-1)+'</span>':'')+'</td>';
         rows+='<td>'+(mainProj.kostenstelle||mainProj.costCenter||'')+'</td><td></td></tr>';
       }else{
-        rows+='<tr class="we"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7">—</td></tr>';
+        rows+='<tr class="we"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7">\u2014</td></tr>';
       }
     }else if(hol){
-      // Holiday
-      totalSollH+=0; // No soll on holidays
-      rows+='<tr class="hol"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7"><span class="badge b-hol">'+hol.name+'</span></td></tr>';
+      if(dayEntries.length>0){
+        // Worked on holiday
+        const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+        displayIstMin+=istMin;
+        const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
+        dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
+        rows+='<tr class="hol"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td>';
+        rows+='<td class="tm">'+(mainProj.startTime||mainProj.start||'')+'</td><td class="tm">'+(mainProj.endTime||mainProj.end||'')+'</td>';
+        rows+='<td class="tm">'+fmtPauseShort(mainProj.pauseMin||mainProj.breakMinutes||0)+'</td>';
+        rows+='<td class="hrs">'+(istMin/60).toFixed(2)+'</td>';
+        rows+='<td class="prj"><span class="badge b-hol">'+hol.name+'</span> '+(mainProj.project||'')+'</td>';
+        rows+='<td>'+(mainProj.kostenstelle||mainProj.costCenter||'')+'</td><td></td></tr>';
+      }else{
+        rows+='<tr class="hol"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7"><span class="badge b-hol">'+hol.name+'</span></td></tr>';
+      }
     }else if(dayAbs.length>0&&dayEntries.length===0){
-      // Absence (full day)
-      totalSollH+=daySollH;
+      // Absence (full day) – show but do NOT count as Ist
       const abs=dayAbs[0];
       const cls=absTypeMap[abs.type]||'b-other';
-      totalIstMin+=daySollH*60; // Absences count as worked
-      rows+='<tr class="abs"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="5"><span class="badge '+cls+'">'+abs.type+'</span></td><td class="hrs" colspan="2">'+daySollH.toFixed(2)+'</td></tr>';
+      rows+='<tr class="abs"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="5"><span class="badge '+cls+'">'+abs.type+'</span></td><td class="hrs" colspan="2" style="color:#8888a0">\u2014</td></tr>';
     }else if(dayEntries.length>0){
       // Normal work day
-      totalSollH+=daySollH;
       const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
-      totalIstMin+=istMin;
+      displayIstMin+=istMin;
       dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
       const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
       const totalPause=dayEntries.reduce((s,e)=>s+(e.pauseMin||e.breakMinutes||0),0);
-      // Earliest start / latest end across entries
       const starts=dayEntries.map(e=>e.startTime||e.start||'').filter(Boolean).sort();
       const ends=dayEntries.map(e=>e.endTime||e.end||'').filter(Boolean).sort();
+      // Check if also has absence (half day)
+      const halfAbs=dayAbs.length>0?dayAbs[0]:null;
       rows+='<tr><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td>';
       rows+='<td class="tm">'+(starts[0]||'')+'</td><td class="tm">'+(ends[ends.length-1]||'')+'</td>';
       rows+='<td class="tm">'+fmtPauseShort(totalPause)+'</td>';
       rows+='<td class="hrs">'+(istMin/60).toFixed(2)+'</td>';
-      rows+='<td class="prj">'+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+( dayEntries.length-1)+'</span>':'')+'</td>';
+      rows+='<td class="prj">'+(halfAbs?'<span class="badge '+(absTypeMap[halfAbs.type]||'b-other')+'" style="margin-right:4px">'+halfAbs.type+'</span>':'')+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+(dayEntries.length-1)+'</span>':'')+'</td>';
       rows+='<td>'+(mainProj.kostenstelle||mainProj.costCenter||'')+'</td>';
       rows+='<td style="color:#8888a0;font-size:.65rem;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(mainProj.bemerkung||mainProj.note||'')+'</td></tr>';
     }else{
-      // Empty workday (no entry, no absence)
-      totalSollH+=daySollH;
-      rows+='<tr><td class="dn">'+dn+'</td><td class="dd" style="color:#dc2626">'+String(d).padStart(2,'0')+'</td><td colspan="5" style="color:#dc2626;font-size:.7rem">⚠ Kein Eintrag</td><td class="hrs" colspan="2" style="color:#dc2626">0.00</td></tr>';
+      // Empty workday
+      rows+='<tr><td class="dn">'+dn+'</td><td class="dd" style="color:#dc2626">'+String(d).padStart(2,'0')+'</td><td colspan="5" style="color:#dc2626;font-size:.7rem">\u26A0 Kein Eintrag</td><td class="hrs" colspan="2" style="color:#dc2626">0.00</td></tr>';
     }
   }
   
-  // Overtime account
-  const ot=calcOvertimeAccount(empId,yr,yr+'-01-01',to);
+  // Use calcOvertimeAccount values (accurate, handles Raucher/TempPensum/BF)
+  // For display: Ist from entries only, Soll from calcSollHours, Saldo from OT
+  const sollMonth=calcSollHours(empId,from,to,s,countWorkdays(from,to,empId));
+  const raucherMin=s.raucher?entries.reduce((dates,e)=>{dates.add(e.date);return dates},new Set()).size*15:0;
+  const istH=Math.round((displayIstMin-raucherMin)/60*100)/100;
+  const sollH=Math.round(sollMonth*100)/100;
+  const saldoM=Math.round((istH-sollH)*100)/100;
+  
+  // Full-year overtime account
+  const otYear=calcOvertimeAccount(empId,yr,yr+'-01-01',to);
   
   // Ferien account
   const vt=getVortrag(empId,year);
@@ -2836,62 +2843,54 @@ function buildMonatsrapportPage(empId,monthStr){
   const ferienBezogen=getAllAbsences().filter(a=>a.employeeId===empId&&a.type==='Ferien'&&a.status==='approved'&&a.from>=yr+'-01-01'&&a.from<=to).reduce((s,a)=>s+(a.days||0),0);
   const ferienRest=Math.round((vt.ferien+ferienAnspruch-ferienBezogen)*10)/10;
   
-  // Saldo this month
-  const istH=Math.round(totalIstMin/60*100)/100;
-  const sollH=Math.round(totalSollH*100)/100;
-  const saldoM=Math.round((istH-sollH)*100)/100;
-  
-  // Project breakdown (sorted by hours)
+  // Project breakdown
   const projSorted=Object.entries(projHours).sort((a,b)=>b[1]-a[1]);
   let projRows='';
+  const totalProjH=projSorted.reduce((s,p)=>s+p[1],0);
   projSorted.forEach(([name,hrs])=>{
-    const pct=istH>0?Math.round(hrs/istH*100):0;
+    const pct=totalProjH>0?Math.round(hrs/totalProjH*100):0;
     projRows+='<tr><td class="prj" style="max-width:200px">'+name+'</td><td class="hrs">'+hrs.toFixed(2)+' h</td><td style="font-size:.65rem;color:#8888a0;text-align:right">'+pct+'%</td></tr>';
   });
   
   // Build page
   let h='<div class="page">';
-  // Header
-  h+='<div class="header"><div><h1>⏱️ Monatsrapport</h1><div class="sub">Hubler Metallbau AG · Zeiterfassung</div></div>';
+  h+='<div class="header"><div><h1>\u23F1\uFE0F Monatsrapport</h1><div class="sub">Hubler Metallbau AG \u00b7 Zeiterfassung</div></div>';
   h+='<div><div class="period">'+moNames[mo-1]+'</div><div class="year">'+yr+'</div></div></div>';
-  // Employee info
   h+='<div class="emp-info"><div><div class="lbl">Mitarbeiter</div><div class="val">'+emp.name+'</div></div>';
   h+='<div><div class="lbl">Personal-Nr.</div><div class="val">'+emp.id+'</div></div>';
   h+='<div><div class="lbl">Pensum</div><div class="val">'+(s.pensum||100)+'%</div></div>';
-  h+='<div><div class="lbl">Soll / Tag</div><div class="val">'+dailyH.toFixed(2)+' h'+(frH!==dailyH?' (Fr '+frH.toFixed(2)+')':'')+'</div></div></div>';
+  h+='<div><div class="lbl">Soll / Tag</div><div class="val">'+dailyH.toFixed(2)+' h</div></div></div>';
+  if(s.raucher)h+='<div style="font-size:.7rem;color:#92400e;background:#fef3c7;padding:4px 12px;border-radius:6px;margin-bottom:12px">\uD83D\uDEAC Raucher \u2013 15 Min/Tag Abzug ber\u00fccksichtigt</div>';
   // Summary cards
   h+='<div class="summary">';
   h+='<div class="sc"><div class="n">'+istH.toFixed(2)+'</div><div class="l">Ist-Stunden</div></div>';
   h+='<div class="sc"><div class="n">'+sollH.toFixed(2)+'</div><div class="l">Soll-Stunden</div></div>';
   h+='<div class="sc"><div class="n '+(saldoM>=0?'pos':'neg')+'">'+(saldoM>=0?'+':'')+saldoM.toFixed(2)+'</div><div class="l">Saldo Monat</div></div>';
-  h+='<div class="sc"><div class="n '+(ot.guthaben>=0?'pos':'neg')+'">'+(ot.guthaben>=0?'+':'')+ot.guthaben.toFixed(2)+'</div><div class="l">ÜS-Konto</div></div>';
+  h+='<div class="sc"><div class="n '+(otYear.guthaben>=0?'pos':'neg')+'">'+(otYear.guthaben>=0?'+':'')+otYear.guthaben.toFixed(2)+'</div><div class="l">\u00dcS-Konto</div></div>';
   h+='</div>';
   // Table
   h+='<table><thead><tr><th>Tag</th><th></th><th>Von</th><th>Bis</th><th>Pause</th><th>Netto</th><th>Projekt</th><th>KST</th><th>Bemerkung</th></tr></thead><tbody>'+rows+'</tbody></table>';
   // Project breakdown
   if(projSorted.length>1){
-    h+='<div class="info-box"><h3>📋 Projektaufschlüsselung</h3><table class="proj-table"><tbody>'+projRows+'</tbody></table></div>';
+    h+='<div class="info-box"><h3>\uD83D\uDCCB Projektaufschl\u00fcsselung</h3><table class="proj-table"><tbody>'+projRows+'</tbody></table></div>';
   }
   // Two columns: Overtime + Vacation
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
-  // Overtime
-  h+='<div class="info-box"><h3>📊 Überstundenkonto</h3><div class="ig">';
-  h+='<div class="il">Vortrag Vorjahr</div><div class="iv">'+(ot.vortrag>=0?'+':'')+ot.vortrag.toFixed(2)+' h</div>';
-  h+='<div class="il">Saldo lfd. Jahr</div><div class="iv">'+(ot.saldoH>=0?'+':'')+ot.saldoH.toFixed(2)+' h</div>';
-  if(ot.payoutH>0)h+='<div class="il">Auszahlungen</div><div class="iv">−'+ot.payoutH.toFixed(2)+' h</div>';
-  if(ot.kompH>0)h+='<div class="il">Kompensation</div><div class="iv">−'+ot.kompH.toFixed(2)+' h</div>';
-  h+='<div class="il tot">Stand Konto</div><div class="iv tot '+(ot.guthaben>=0?'pos':'neg')+'">'+(ot.guthaben>=0?'+':'')+ot.guthaben.toFixed(2)+' h</div>';
+  h+='<div class="info-box"><h3>\uD83D\uDCCA \u00dcberstundenkonto</h3><div class="ig">';
+  h+='<div class="il">Vortrag Vorjahr</div><div class="iv">'+(otYear.vortrag>=0?'+':'')+otYear.vortrag.toFixed(2)+' h</div>';
+  h+='<div class="il">Saldo lfd. Jahr (bis '+moNames[mo-1]+')</div><div class="iv">'+(otYear.saldoH>=0?'+':'')+otYear.saldoH.toFixed(2)+' h</div>';
+  if(otYear.payoutH>0)h+='<div class="il">Auszahlungen</div><div class="iv">\u2212'+otYear.payoutH.toFixed(2)+' h</div>';
+  if(otYear.kompH>0)h+='<div class="il">Kompensation</div><div class="iv">\u2212'+otYear.kompH.toFixed(2)+' h</div>';
+  h+='<div class="il tot">Stand Konto</div><div class="iv tot '+(otYear.guthaben>=0?'pos':'neg')+'">'+(otYear.guthaben>=0?'+':'')+otYear.guthaben.toFixed(2)+' h</div>';
   h+='</div></div>';
-  // Vacation
-  h+='<div class="info-box"><h3>🏖️ Ferienkonto</h3><div class="ig">';
+  h+='<div class="info-box"><h3>\uD83C\uDFD6\uFE0F Ferienkonto (per Ende '+moNames[mo-1]+')</h3><div class="ig">';
   h+='<div class="il">Anspruch '+yr+'</div><div class="iv">'+ferienAnspruch.toFixed(1)+' Tage</div>';
-  if(vt.ferien>0)h+='<div class="il">Übertrag Vorjahr</div><div class="iv">+'+vt.ferien.toFixed(1)+' Tage</div>';
-  h+='<div class="il">Bezogen (bis '+moNames[mo-1]+')</div><div class="iv">−'+ferienBezogen.toFixed(1)+' Tage</div>';
+  if(vt.ferien>0)h+='<div class="il">\u00dcbertrag Vorjahr</div><div class="iv">+'+vt.ferien.toFixed(1)+' Tage</div>';
+  h+='<div class="il">Bezogen</div><div class="iv">\u2212'+ferienBezogen.toFixed(1)+' Tage</div>';
   h+='<div class="il tot">Restguthaben</div><div class="iv tot '+(ferienRest>=0?'pos':'neg')+'">'+ferienRest.toFixed(1)+' Tage</div>';
   h+='</div></div>';
   h+='</div>';
-  // Footer
-  h+='<div class="footer" style="margin-top:20px"><span><span class="logo">Hubler Metallbau AG</span> · Zeiterfassung</span><span>Erstellt: '+fmtDate(dateKey(new Date()))+'</span></div>';
+  h+='<div class="footer" style="margin-top:20px"><span><span class="logo">Hubler Metallbau AG</span> \u00b7 Zeiterfassung</span><span>Erstellt: '+fmtDate(dateKey(new Date()))+'</span></div>';
   h+='</div>';
   return h;
 }
