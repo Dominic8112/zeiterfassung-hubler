@@ -342,6 +342,19 @@
   </div>
 </div>
 
+<!-- PRODUKTIVITÄT -->
+<div class="card">
+  <h3 style="margin-bottom:8px">📈 Produktivität</h3>
+  <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">Produktive vs. unproduktive Stunden pro Mitarbeiter und Firma. Projekte können im Admin-Tab als unproduktiv markiert werden.</p>
+  <div class="form-row" style="margin-bottom:12px">
+    <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="prodPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Aktuelles Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="custom">Benutzerdefiniert</option></select></div>
+    <div class="form-group" id="prodCustomWrap" style="display:none"><label class="form-label">Von</label><input type="date" class="form-input" id="prodFrom"></div>
+    <div class="form-group" id="prodCustomWrap2" style="display:none"><label class="form-label">Bis</label><input type="date" class="form-input" id="prodTo"></div>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="renderProduktivitaet()">📈 Auswerten</button>
+  <div id="prodResult" style="margin-top:16px"></div>
+</div>
+
 <!-- ABWESENHEITSKALENDER (Jahresansicht) -->
 <div class="card">
   <h3 style="margin-bottom:8px">📅 Abwesenheitskalender</h3>
@@ -1139,7 +1152,7 @@ function initLogin(){
   const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
 }
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();if(canViewReports())initMonatsrapport();checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();if(canViewReports())initMonatsrapport();if(canViewReports()){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'}}checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -1459,9 +1472,10 @@ function bindEditSave(){
   $('editDelete').style.display='';
 }
 // ADMIN
-function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>').join('')}
+function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>{const isProd=p.produktiv!==false;return'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><span class="proj-badge" style="cursor:pointer;'+(isProd?'background:var(--success-glow);color:var(--success)':'background:var(--danger-glow);color:var(--danger)')+'" onclick="toggleProjProduktiv(\''+p.id+'\')">'+(isProd?'\u2705 produktiv':'\u274C unproduktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>'}).join('')}
 $('projSearch').oninput=function(){renderProjectList(this.value)};
 function toggleProjActive(id){const p=projects.find(x=>x.id===id);if(!p)return;p.aktiv=!p.aktiv;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList($('projSearch').value);toast('Projekt '+id+' '+(p.aktiv?'aktiviert':'deaktiviert'),'info');if(accessToken)SP.saveProjects()}
+function toggleProjProduktiv(id){const p=projects.find(x=>x.id===id);if(!p)return;p.produktiv=p.produktiv===false?true:false;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList($('projSearch').value);toast('Projekt '+id+': '+(p.produktiv!==false?'produktiv':'unproduktiv'),'info');if(accessToken)SP.saveProjects()}
 $('addProjBtn').onclick=function(){const maxId=Math.max(...projects.map(p=>parseInt(p.id)||0));$('newProjId').value=String(maxId+1);$('newProjName').value='';$('addProjModal').classList.add('show')};
 $('addProjCancel').onclick=function(){$('addProjModal').classList.remove('show')};
 $('addProjSave').onclick=function(){const id=$('newProjId').value.trim(),name=$('newProjName').value.trim();if(!id||!name){toast('ID und Name erforderlich','warning');return}if(projects.find(p=>p.id===id)){toast('Nr. existiert bereits','warning');return}projects.unshift({id:id,name:name,aktiv:true});localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList();$('addProjModal').classList.remove('show');toast('Projekt '+id+' hinzugef\u00fcgt','success');if(accessToken)SP.saveProjects()};
@@ -2698,7 +2712,7 @@ function getMRStyles(){
   '.header .period{font-size:1.2rem;font-weight:700;color:#FF6B35;text-align:right}.header .year{font-size:.82rem;color:#8888a0;text-align:right}'+
   '.emp-info{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:#f6f7fb;border:1px solid #e2e4ec;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:.78rem}'+
   '.emp-info .lbl{color:#8888a0;font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600}.emp-info .val{font-weight:600}'+
-  '.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}'+
+  '.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}'+
   '.summary .sc{background:#f6f7fb;border:1px solid #e2e4ec;border-radius:8px;padding:10px;text-align:center}'+
   '.summary .sc .n{font-family:"JetBrains Mono",monospace;font-size:1.2rem;font-weight:700;line-height:1.2}'+
   '.summary .sc .l{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:#8888a0;font-weight:600;margin-top:2px}'+
@@ -2754,6 +2768,7 @@ function buildMonatsrapportPage(empId,monthStr){
   // Build day rows + project breakdown (display only, not for totals)
   let rows='';
   let displayIstMin=0; // Only actual work (no absences)
+  let prodMin=0,unprodMin=0;
   const projHours={};
   
   for(let d=1;d<=daysInMonth;d++){
@@ -2845,6 +2860,9 @@ function buildMonatsrapportPage(empId,monthStr){
   
   // Project breakdown
   const projSorted=Object.entries(projHours).sort((a,b)=>b[1]-a[1]);
+  // Productivity from project data
+  projSorted.forEach(([name,hrs])=>{if(isProduktiv(name))prodMin+=hrs*60;else unprodMin+=hrs*60});
+  const prodPct=(prodMin+unprodMin)>0?Math.round(prodMin/(prodMin+unprodMin)*100):100;
   let projRows='';
   const totalProjH=projSorted.reduce((s,p)=>s+p[1],0);
   projSorted.forEach(([name,hrs])=>{
@@ -2867,6 +2885,7 @@ function buildMonatsrapportPage(empId,monthStr){
   h+='<div class="sc"><div class="n">'+sollH.toFixed(2)+'</div><div class="l">Soll-Stunden</div></div>';
   h+='<div class="sc"><div class="n '+(saldoM>=0?'pos':'neg')+'">'+(saldoM>=0?'+':'')+saldoM.toFixed(2)+'</div><div class="l">Saldo Monat</div></div>';
   h+='<div class="sc"><div class="n '+(otYear.guthaben>=0?'pos':'neg')+'">'+(otYear.guthaben>=0?'+':'')+otYear.guthaben.toFixed(2)+'</div><div class="l">\u00dcS-Konto</div></div>';
+  h+='<div class="sc"><div class="n" style="color:'+(prodPct>=80?'#16a34a':prodPct>=60?'#d97706':'#dc2626')+'">'+prodPct+'%</div><div class="l">Produktivit\u00e4t</div></div>';
   h+='</div>';
   // Table
   h+='<table><thead><tr><th>Tag</th><th></th><th>Von</th><th>Bis</th><th>Pause</th><th>Netto</th><th>Projekt</th><th>KST</th><th>Bemerkung</th></tr></thead><tbody>'+rows+'</tbody></table>';
@@ -2893,6 +2912,119 @@ function buildMonatsrapportPage(empId,monthStr){
   h+='<div class="footer" style="margin-top:20px"><span><span class="logo">Hubler Metallbau AG</span> \u00b7 Zeiterfassung</span><span>Erstellt: '+fmtDate(dateKey(new Date()))+'</span></div>';
   h+='</div>';
   return h;
+}
+
+// ═══ PRODUKTIVITÄT ═══
+function isProduktiv(projectName){
+  const p=projects.find(x=>x.id===projectName||x.name===projectName);
+  return p?p.produktiv!==false:true;
+}
+
+function getProdDateRange(){
+  const period=$('prodPeriod').value;
+  const now=new Date();const y=now.getFullYear();const m=now.getMonth();
+  let from,to;
+  if(period==='month'){from=new Date(y,m,1);to=new Date(y,m+1,0)}
+  else if(period==='quarter'){const q=Math.floor(m/3)*3;from=new Date(y,q,1);to=new Date(y,q+3,0)}
+  else if(period==='year'){from=new Date(y,0,1);to=new Date(y,11,31)}
+  else{from=new Date($('prodFrom').value||dateKey(new Date(y,0,1)));to=new Date($('prodTo').value||dateKey(now))}
+  const today=dateKey(now);const toStr=dateKey(to);
+  return{from:dateKey(from),to:today<toStr?today:toStr};
+}
+
+function renderProduktivitaet(){
+  const range=getProdDateRange();
+  const emps=getActiveEmployees();
+  const unproduktivCount=projects.filter(p=>p.produktiv===false).length;
+  
+  if(unproduktivCount===0){
+    $('prodResult').innerHTML='<div style="padding:16px;background:var(--bg-surface);border-radius:8px;border:1px solid var(--border)"><p style="color:var(--warning);font-weight:600">\u26A0\uFE0F Keine Projekte als unproduktiv markiert</p><p style="color:var(--text-dim);font-size:.82rem;margin-top:4px">Gehe zu Admin \u2192 Projekte und markiere die unproduktiven Projekte (z.B. Intern, Aufr\u00e4umen, Ausbildung).</p></div>';
+    return;
+  }
+  
+  let totalProdH=0,totalUnprodH=0;
+  const empData=[];
+  
+  emps.forEach(emp=>{
+    const entries=getEntriesForEmployee(emp.id,range.from,range.to);
+    let prodMin=0,unprodMin=0;
+    const unprodProjects={};
+    entries.forEach(e=>{
+      const pn=e.project||e.projectName||'';
+      const dur=e.durationMin||0;
+      if(isProduktiv(pn)){
+        prodMin+=dur;
+      }else{
+        unprodMin+=dur;
+        unprodProjects[pn]=(unprodProjects[pn]||0)+dur;
+      }
+    });
+    const totalMin=prodMin+unprodMin;
+    const prodH=Math.round(prodMin/60*100)/100;
+    const unprodH=Math.round(unprodMin/60*100)/100;
+    const pct=totalMin>0?Math.round(prodMin/totalMin*100):0;
+    totalProdH+=prodH;
+    totalUnprodH+=unprodH;
+    if(totalMin>0)empData.push({name:emp.name,id:emp.id,prodH,unprodH,pct,totalH:prodH+unprodH,unprodProjects});
+  });
+  
+  empData.sort((a,b)=>b.totalH-a.totalH);
+  const firmaPct=(totalProdH+totalUnprodH)>0?Math.round(totalProdH/(totalProdH+totalUnprodH)*100):0;
+  
+  let html='';
+  // Firma total
+  html+='<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h4 style="font-size:.95rem">\uD83C\uDFE2 Firma gesamt</h4>';
+  html+='<span style="font-size:1.3rem;font-weight:700;color:'+(firmaPct>=80?'var(--success)':firmaPct>=60?'var(--warning)':'var(--danger)')+'">'+firmaPct+'%</span></div>';
+  html+='<div style="display:flex;gap:16px;font-size:.82rem;color:var(--text-dim);margin-bottom:8px">';
+  html+='<span>\u2705 Produktiv: <strong style="color:var(--success)">'+totalProdH.toFixed(1)+' h</strong></span>';
+  html+='<span>\u274C Unproduktiv: <strong style="color:var(--danger)">'+totalUnprodH.toFixed(1)+' h</strong></span>';
+  html+='<span>Total: <strong style="color:var(--text)">'+(totalProdH+totalUnprodH).toFixed(1)+' h</strong></span></div>';
+  html+=renderProdBar(firmaPct);
+  html+='</div>';
+  
+  // Per employee
+  html+='<div style="display:flex;flex-direction:column;gap:8px">';
+  empData.forEach(d=>{
+    const color=d.pct>=80?'var(--success)':d.pct>=60?'var(--warning)':'var(--danger)';
+    html+='<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+    html+='<span style="font-weight:600;font-size:.85rem">'+d.name+'</span>';
+    html+='<span style="font-weight:700;color:'+color+';font-size:.95rem">'+d.pct+'%</span></div>';
+    html+=renderProdBar(d.pct);
+    html+='<div style="display:flex;gap:12px;font-size:.75rem;color:var(--text-dim);margin-top:6px">';
+    html+='<span>\u2705 '+d.prodH.toFixed(1)+'h</span><span>\u274C '+d.unprodH.toFixed(1)+'h</span><span>Total: '+d.totalH.toFixed(1)+'h</span></div>';
+    // Show top unproductive projects
+    const unprodList=Object.entries(d.unprodProjects).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    if(unprodList.length>0){
+      html+='<div style="margin-top:6px;font-size:.72rem;color:var(--text-muted)">Unproduktiv: '+unprodList.map(([n,m])=>n+' ('+Math.round(m/60*10)/10+'h)').join(', ')+'</div>';
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+  
+  // Unproductive projects summary
+  const unprodProjTotals={};
+  empData.forEach(d=>{Object.entries(d.unprodProjects).forEach(([n,m])=>{unprodProjTotals[n]=(unprodProjTotals[n]||0)+m})});
+  const unprodProjSorted=Object.entries(unprodProjTotals).sort((a,b)=>b[1]-a[1]);
+  if(unprodProjSorted.length>0){
+    html+='<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:12px">';
+    html+='<h4 style="font-size:.85rem;margin-bottom:8px">\u274C Unproduktive Projekte</h4>';
+    unprodProjSorted.forEach(([name,min])=>{
+      const h=Math.round(min/60*10)/10;
+      const pct=(totalProdH+totalUnprodH)>0?Math.round(min/60/(totalProdH+totalUnprodH)*100):0;
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:.8rem;border-bottom:1px solid var(--border)">';
+      html+='<span>'+name+'</span><span style="font-family:var(--font-mono);font-weight:600">'+h.toFixed(1)+' h <span style="color:var(--text-muted);font-weight:400">('+pct+'%)</span></span></div>';
+    });
+    html+='</div>';
+  }
+  
+  $('prodResult').innerHTML=html;
+}
+
+function renderProdBar(pct){
+  const color=pct>=80?'var(--success)':pct>=60?'var(--warning)':'var(--danger)';
+  return '<div style="height:8px;background:var(--bg-input);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:4px;transition:width .3s"></div></div>';
 }
 
 function fmtPauseShort(min){if(!min)return'0:00';return Math.floor(min/60)+':'+String(min%60).padStart(2,'0')}
