@@ -2916,7 +2916,17 @@ function buildMonatsrapportPage(empId,monthStr){
 
 // ═══ PRODUKTIVITÄT ═══
 function isProduktiv(projectName){
-  const p=projects.find(x=>x.id===projectName||x.name===projectName);
+  if(!projectName)return true;
+  const pn=projectName.toLowerCase().trim();
+  const p=projects.find(x=>{
+    if(x.id===projectName||x.name===projectName)return true;
+    // Match "ID - Name" format from projLabel
+    const label=(x.id+' - '+x.name).toLowerCase();
+    if(label===pn)return true;
+    // Match if entry starts with project ID
+    if(pn.startsWith(x.id.toLowerCase()))return true;
+    return false;
+  });
   return p?p.produktiv!==false:true;
 }
 
