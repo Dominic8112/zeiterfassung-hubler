@@ -351,6 +351,7 @@
     <div class="form-group" id="prodCustomWrap" style="display:none"><label class="form-label">Von</label><input type="date" class="form-input" id="prodFrom"></div>
     <div class="form-group" id="prodCustomWrap2" style="display:none"><label class="form-label">Bis</label><input type="date" class="form-input" id="prodTo"></div>
   </div>
+  <div class="form-group" style="margin-bottom:12px"><label class="form-label">Mitarbeiter</label><div id="prodEmpFilter" style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;font-size:.8rem"></div></div>
   <button class="btn btn-primary btn-sm" onclick="renderProduktivitaet()">📈 Auswerten</button>
   <div id="prodResult" style="margin-top:16px"></div>
 </div>
@@ -1152,7 +1153,7 @@ function initLogin(){
   const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
 }
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();if(canViewReports())initMonatsrapport();if(canViewReports()){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'}}checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();if(canViewReports())initMonatsrapport();if(canViewReports()){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'};initProdEmpFilter()}checkNotifications();renderAbsences();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -2915,6 +2916,15 @@ function buildMonatsrapportPage(empId,monthStr){
 }
 
 // ═══ PRODUKTIVITÄT ═══
+function initProdEmpFilter(){
+  const container=$('prodEmpFilter');if(!container)return;
+  let html='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="prodAllCB" checked onchange="document.querySelectorAll(\'.prodEmpCB\').forEach(c=>c.checked=this.checked)"> Alle</label>';
+  getActiveEmployees().forEach(e=>{
+    html+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="prodEmpCB" value="'+e.id+'" checked> '+e.name+'</label>';
+  });
+  container.innerHTML=html;
+}
+
 function isProduktiv(projectName){
   if(!projectName)return true;
   const pn=projectName.toLowerCase().trim();
@@ -2944,7 +2954,10 @@ function getProdDateRange(){
 
 function renderProduktivitaet(){
   const range=getProdDateRange();
-  const emps=getActiveEmployees();
+  const selEmpIds=new Set();
+  document.querySelectorAll('.prodEmpCB:checked').forEach(cb=>selEmpIds.add(cb.value));
+  const emps=getActiveEmployees().filter(e=>selEmpIds.has(e.id));
+  if(!emps.length){$('prodResult').innerHTML='<p style="color:var(--warning)">Mindestens einen Mitarbeiter w\u00e4hlen</p>';return}
   const unproduktivCount=projects.filter(p=>p.produktiv===false).length;
   
   if(unproduktivCount===0){
