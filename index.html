@@ -207,7 +207,7 @@
     <h2 style="font-size:1.1rem;margin-bottom:16px">📊 Firmen-Dashboard</h2>
     <div class="card">
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="dashPeriod"><option value="month">Aktueller Monat</option><option value="quarter">Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="all">Gesamter Zeitraum</option><option value="custom">Benutzerdefiniert</option></select></div>
+        <div class="form-group"><label class="form-label">Zeitraum</label><select class="form-select" id="dashPeriod" onchange="document.getElementById('dashCustomRange').style.display=this.value==='custom'?'grid':'none'"><option value="month">Aktueller Monat</option><option value="quarter">Quartal</option><option value="year" selected>Ganzes Jahr</option><option value="all">Gesamter Zeitraum</option><option value="custom">Benutzerdefiniert</option></select></div>
         <div class="form-group" style="flex:2"><label class="form-label">Projekte filtern</label><input type="text" class="form-input" id="dashProjSearch" placeholder="🔍 Suchen..." oninput="dashFilterProjects()"></div>
       </div>
       <div id="dashProjPicker" style="max-height:180px;overflow-y:auto;padding:8px;margin:8px 0;border:1px solid var(--border);border-radius:8px">
@@ -832,14 +832,20 @@ function getCurrentWeekRange(){
   return{from:dateKey(mon),to:dateKey(sun)};
 }
 function isInCurrentWeek(dt){const w=getCurrentWeekRange();return dt>=w.from&&dt<=w.to}
+function getEditWindowRange(){
+  const now=new Date();now.setHours(0,0,0,0);
+  const from=new Date(now);from.setDate(now.getDate()-7);
+  return{from:dateKey(from),to:dateKey(now)};
+}
+function isInEditWindow(dt){const w=getEditWindowRange();return dt>=w.from&&dt<=w.to}
 function canEditDate(dt){
   if(!user)return false;
   if(user.admin||user.approver)return true;
-  return isInCurrentWeek(dt);
+  return isInEditWindow(dt);
 }
 function guardWeekLock(dt){
   if(canEditDate(dt))return true;
-  toast('Einträge älterer Wochen können nur von einem Admin angepasst werden','warning');
+  toast('Einträge älter als 7 Tage können nur von einem Admin angepasst werden','warning');
   return false;
 }
 
@@ -1435,7 +1441,7 @@ function showCalDayDetail(dk){
 
   // Add entry button
   if(canEditDate(dk)){html+='<button class="btn btn-primary btn-block btn-sm" style="margin-top:12px" onclick="openCalDayEntry(\''+dk+'\')">+ Eintrag hinzuf\u00fcgen</button>';}
-  else{html+='<div style="text-align:center;padding:8px;font-size:.78rem;color:var(--text-dim)">🔒 Woche abgeschlossen</div>';}
+  else{html+='<div style="text-align:center;padding:8px;font-size:.78rem;color:var(--text-dim)">🔒 Älter als 7 Tage</div>';}
 
   $('calDayEntries').innerHTML=html;
 }
@@ -3697,8 +3703,6 @@ function loadDashboard(){
 
   // Render with current selection
   renderDashboard();
-
-  $('dashPeriod').onchange=function(){$('dashCustomRange').style.display=this.value==='custom'?'grid':'none'};
 }
 
 function renderDashProjPicker(){
