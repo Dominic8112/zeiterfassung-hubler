@@ -2816,11 +2816,15 @@ function showWeeklyReports() {
       const bf=isBetriebsferien(day.date);
       const hol=getHolidays(parseInt(day.date.substring(0,4)))[day.date];
       const absDay=allAbs.find(a=>day.date>=a.from&&day.date<=a.to);
+      const isArbeitstag=getArbeitsTageFor(empSettings,day.date).includes(day.dow);
       if(day.entries.length === 0) {
         if(hol){
           // Feiertag zuerst pruefen - sonst meldet der Report faelschlich "Kein Eintrag (Arbeitstag)"
           day.warnings.push({type:'info', msg:'🎉 '+hol+' – Feiertag'});
           day._isHoliday=true;
+        } else if(!isArbeitstag){
+          // Teilzeit: an regulaer freien Tagen keine Ferien/Absenz ausweisen - es wird kein Tag abgezogen
+          if(bf||absDay) day.warnings.push({type:'info', msg:'ℹ️ Regulär frei – kein Abzug'});
         } else if(bf){
           day.warnings.push({type:'info', msg:'\uD83C\uDFE2 '+bf.label+' ('+bf.type+') \u2013 Ferientag'});
           day._isBF=true;
@@ -2828,7 +2832,7 @@ function showWeeklyReports() {
           const icon=ABS_TYPES[absDay.type]||'\uD83D\uDCCB';
           day.warnings.push({type:'info', msg:icon+' '+absDay.type+(absDay.duration!=='full'?' (halber Tag)':'')+' \u2013 Genehmigt'});
           day._isAbsence=true;
-        } else if(getArbeitsTageFor(empSettings,day.date).includes(day.dow)){
+        } else {
           day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
         }
         return;
