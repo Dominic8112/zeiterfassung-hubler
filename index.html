@@ -520,7 +520,18 @@
   <div class="form-row"><div class="form-group"><label class="form-label">Eintrittsdatum</label><input type="date" class="form-input" id="empEintritt" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Austrittsdatum</label><input type="date" class="form-input" id="empAustritt" oninput="calcEmpPreview()"></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Pensum %</label><input type="number" class="form-input" id="empPensum" value="100" min="10" max="100" step="5" oninput="calcEmpPreview()"></div><div class="form-group"><label class="form-label">Soll-h/Woche</label><input type="number" class="form-input" id="empWeekH" value="41" min="4" max="50" step="0.5" oninput="calcEmpPreview()"></div></div>
   <div class="form-group"><label class="form-label">Ferientage/Jahr (bei 100%)</label><input type="number" class="form-input" id="empFerien" value="23" min="10" max="40" oninput="calcEmpPreview()"></div>
-  <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div></div>
+  <div class="form-group"><label class="form-label">Arbeitstage</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="empTag1" checked onchange="calcEmpPreview()">Mo</label><label class="day-check"><input type="checkbox" id="empTag2" checked onchange="calcEmpPreview()">Di</label><label class="day-check"><input type="checkbox" id="empTag3" checked onchange="calcEmpPreview()">Mi</label><label class="day-check"><input type="checkbox" id="empTag4" checked onchange="calcEmpPreview()">Do</label><label class="day-check"><input type="checkbox" id="empTag5" checked onchange="calcEmpPreview()">Fr</label></div>
+    <div style="margin-top:14px;padding:10px;border:1px dashed var(--border);border-radius:6px">
+      <div style="font-weight:600;font-size:.82rem;margin-bottom:4px">📆 Arbeitstage-Wechsel</div>
+      <p style="font-size:.72rem;color:var(--text-dim);margin-bottom:8px">Zeitlich abgegrenzte Arbeitstage – z.B. wenn ein 80%-MA den freien Tag wechselt. Ohne Eintrag gelten die Arbeitstage oben (auch rückwirkend).</p>
+      <div id="empArbTageHistList"></div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div class="form-group" style="margin:0;flex:0 0 150px"><label class="form-label" style="font-size:.72rem">Gültig ab</label><input type="date" class="form-input" id="arbTageVon" style="font-size:.8rem"></div>
+        <div class="form-group" style="margin:0;flex:1"><label class="form-label" style="font-size:.72rem">Arbeitstage ab diesem Datum</label><div style="display:flex;gap:6px;flex-wrap:wrap"><label class="day-check"><input type="checkbox" id="arbTageTag1">Mo</label><label class="day-check"><input type="checkbox" id="arbTageTag2">Di</label><label class="day-check"><input type="checkbox" id="arbTageTag3">Mi</label><label class="day-check"><input type="checkbox" id="arbTageTag4">Do</label><label class="day-check"><input type="checkbox" id="arbTageTag5">Fr</label><label class="day-check"><input type="checkbox" id="arbTageTag6">Sa</label></div></div>
+        <button class="btn btn-primary btn-sm" onclick="addArbTageHist()">+ Wechsel speichern</button>
+      </div>
+    </div>
+  </div>
   <div style="margin:16px 0;border-top:1px solid var(--border);padding-top:16px"><div style="font-weight:600;font-size:.85rem;margin-bottom:12px">🚬 Raucherpause</div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem"><input type="checkbox" id="empRaucher" onchange="calcEmpPreview()"> Raucher (−15 Min/Tag automatisch abziehen)</label>
   </div>
@@ -1400,7 +1411,7 @@ function showCalDayDetail(dk){
   // Soll/Ist for this day
   if(user){
     const empS=getEmpSetting(user.id);
-    const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
+    const arbeitsTage=getArbeitsTageFor(empS,dk);
     // Check employment period
     const beforeEintritt=empS.eintritt&&dk<empS.eintritt;
     const afterAustritt=empS.austritt&&dk>empS.austritt;
@@ -1785,7 +1796,22 @@ function saveSplitEntries(){
 
 
 // EMPLOYEE SETTINGS (Admin only)
-const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],vortraege:[],year:new Date().getFullYear(),eintritt:null,austritt:null,timerEndzeit:'18:00'};
+const EMP_DEFAULTS={pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],arbeitsTageHistory:[],ferienUebertrag:0,ueberstundenUebertrag:0,raucher:false,tempPensum:[],vortraege:[],year:new Date().getFullYear(),eintritt:null,austritt:null,timerEndzeit:'18:00'};
+
+// ARBEITSTAGE-HISTORY (zeitlich abgegrenzte Arbeitstage, analog tempPensum)
+// arbeitsTageHistory:[{von:'2026-01-01',bis:'2026-08-17',tage:[1,2,3,4]},...]
+// Optional – ueberschreibt s.arbeitsTage nur innerhalb des definierten Zeitraums.
+const ARB_HIST_MIN='2000-01-01',ARB_HIST_MAX='2099-12-31';
+function prevDayKey(dk){const p=String(dk).split('-');const d=new Date(+p[0],+p[1]-1,+p[2]);d.setDate(d.getDate()-1);return dateKey(d)}
+// Liefert die gueltigen Arbeitstage fuer ein Datum. Bei Ueberlappung gewinnt der spaeter beginnende Eintrag.
+function getArbeitsTageFor(s,dk){
+  const h=(s&&s.arbeitsTageHistory)||[];
+  if(h.length){
+    const valid=h.filter(e=>e&&Array.isArray(e.tage)&&e.tage.length&&e.von).slice().sort((a,b)=>a.von<b.von?1:a.von>b.von?-1:0);
+    for(const e of valid){if(dk>=e.von&&dk<=(e.bis||ARB_HIST_MAX))return e.tage}
+  }
+  return (s&&s.arbeitsTage)||[1,2,3,4,5];
+}
 
 // Get Vortrag for a specific year (year-based or legacy fallback)
 function getVortrag(empId,year){
@@ -1824,22 +1850,24 @@ function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.string
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
 function setEmpSetting(empId,data){const all=getEmpSettings();all[empId]={...EMP_DEFAULTS,...(all[empId]||{}),...data};saveEmpSettings(all)}
 
-const DAY_LABELS={1:'Mo',2:'Di',3:'Mi',4:'Do',5:'Fr'};
+const DAY_LABELS={1:'Mo',2:'Di',3:'Mi',4:'Do',5:'Fr',6:'Sa'};
 
 function renderEmpSettings(){
   const el=$('empSettingsList');if(!el)return;
   const settings=getEmpSettings();
   el.innerHTML=EMPLOYEES.map(emp=>{
     const s=settings[emp.id]||{...EMP_DEFAULTS};
-    const tageStr=(s.arbeitsTage||[1,2,3,4,5]).map(d=>DAY_LABELS[d]||d).join(', ');
+    const today=todayKey();
+    const tageStr=getArbeitsTageFor(s,today).map(d=>DAY_LABELS[d]||d).join(', ');
     const ferienAnspruch=calcFerienAnspruch(emp.id,s.year||new Date().getFullYear());
     const tp=s.tempPensum||[];
-    const today=todayKey();
     const activeTp=tp.find(t=>today>=t.von&&today<=t.bis);
     let badges='';
     if(s.raucher)badges+='<span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">🚬 Raucher</span>';
     if(activeTp)badges+='<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:4px;font-size:.7rem">\u26A0 '+activeTp.pensum+'% bis '+new Date(activeTp.bis).toLocaleDateString('de-CH')+(activeTp.grund?' ('+activeTp.grund+')':'')+'</span>';
     if(tp.length>0&&!activeTp){const future=tp.filter(t=>today<t.von);if(future.length)badges+='<span style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:.7rem">\u23F1 Geplant: '+future[0].pensum+'% ab '+new Date(future[0].von).toLocaleDateString('de-CH')+'</span>';}
+    const ath=(s.arbeitsTageHistory||[]).filter(e=>e&&e.von&&e.tage&&e.tage.length);
+    if(ath.length>1)badges+='<span style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDCC6 '+(ath.length-1)+' Arbeitstage-Wechsel</span>';
     return '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>'+emp.name+'</strong><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)"><span>'+s.pensum+'%</span><span>'+s.weekHours+'h/Wo</span><span>'+tageStr+'</span><span>'+ferienAnspruch+' Ferientage</span>'+function(){var _v=getVortrag(emp.id,new Date().getFullYear());return(_v.ferien?'<span style="color:var(--success)">+'+_v.ferien+' FU</span>':'')+(_v.ueberstunden?'<span style="color:var(--accent)">+'+_v.ueberstunden+'h \u00dc</span>':'')}()+'</div>'+(badges?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+badges+'</div>':'')+'<button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="openEmpEdit(\''+emp.id+'\')">Bearbeiten</button></div>'
   }).join('');
 }
@@ -1849,6 +1877,7 @@ function openEmpEdit(empId){
   const tage=s.arbeitsTage||[1,2,3,4,5];
   window._editEmpId=empId;
   window._editTempPensum=(s.tempPensum||[]).map(t=>({...t}));
+  window._editArbTageHist=(s.arbeitsTageHistory||[]).map(e=>({...e,tage:[...(e.tage||[])]}));
   window._editVortraege=(s.vortraege||[]).map(v=>({...v}));
   // Migrate legacy fields if no vortraege exist yet
   if(!window._editVortraege.length&&(s.ferienUebertrag||s.ueberstundenUebertrag)){
@@ -1867,6 +1896,10 @@ function openEmpEdit(empId){
   $('vtYear').value=new Date().getFullYear();
   // Set checkboxes
   [1,2,3,4,5].forEach(d=>{const cb=$('empTag'+d);if(cb)cb.checked=tage.includes(d)});
+  if($('arbTageVon'))$('arbTageVon').value='';
+  [1,2,3,4,5,6].forEach(d=>{const cb=$('arbTageTag'+d);if(cb)cb.checked=false});
+  normalizeArbTageHist();
+  renderArbTageHistList();
   renderTempPensumList();
   renderVortraege();
   calcEmpPreview();
@@ -1944,6 +1977,7 @@ function saveEmpEdit(){
   if(!tage.length){toast('Mindestens 1 Arbeitstag','warning');return}
   // Validate temp pensum entries
   const tp=(window._editTempPensum||[]).filter(t=>t.von&&t.bis&&t.pensum);
+  const ath=normalizeArbTageHist();
   const vt=(window._editVortraege||[]);
   // Compute legacy fields from vortraege for backward compat
   const curYr=parseInt($('empYear').value)||new Date().getFullYear();
@@ -1953,6 +1987,7 @@ function saveEmpEdit(){
     weekHours:parseFloat($('empWeekH').value)||41,
     ferienTage:parseInt($('empFerien').value)||25,
     arbeitsTage:tage,
+    arbeitsTageHistory:ath,
     vortraege:vt,
     ferienUebertrag:curVt?curVt.ferien:0,
     ueberstundenUebertrag:curVt?curVt.ueberstunden:0,
@@ -1990,6 +2025,61 @@ function removeTempPensum(i){
   if(!window._editTempPensum)return;
   window._editTempPensum.splice(i,1);
   renderTempPensumList();
+}
+
+// Arbeitstage-Wechsel UI
+// Haelt die History luekenlos: sortiert nach "von", jedes "bis" = Vortag des naechsten "von", letzter Eintrag offen.
+function normalizeArbTageHist(){
+  const h=(window._editArbTageHist||[]).filter(e=>e&&e.von&&Array.isArray(e.tage)&&e.tage.length);
+  h.sort((a,b)=>a.von<b.von?-1:a.von>b.von?1:0);
+  h.forEach((e,i)=>{e.bis=i<h.length-1?prevDayKey(h[i+1].von):ARB_HIST_MAX});
+  window._editArbTageHist=h;
+  return h;
+}
+function renderArbTageHistList(){
+  const list=$('empArbTageHistList');if(!list)return;
+  const h=window._editArbTageHist||[];
+  if(!h.length){list.innerHTML='<div style="font-size:.78rem;color:var(--text-dim);font-style:italic">Kein Wechsel erfasst – es gelten durchgehend die Arbeitstage oben</div>';return}
+  const today=todayKey();
+  list.innerHTML=h.map((e,i)=>{
+    const badges=e.tage.map(d=>'<span style="background:var(--bg-hover);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-size:.72rem">'+(DAY_LABELS[d]||d)+'</span>').join(' ');
+    const vonTxt=e.von<=ARB_HIST_MIN?'Beginn':fmtDate(e.von);
+    const bisTxt=e.bis>=ARB_HIST_MAX?'offen':fmtDate(e.bis);
+    const isNow=today>=e.von&&today<=(e.bis||ARB_HIST_MAX);
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-family:var(--font-mono);font-size:.76rem;min-width:160px">'+vonTxt+' – '+bisTxt+'</span>'
+      +'<span style="display:flex;gap:4px;flex-wrap:wrap;flex:1">'+badges+'</span>'
+      +(isNow?'<span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:4px;font-size:.68rem">aktuell</span>':'')
+      +'<button class="btn btn-secondary" style="padding:2px 8px;font-size:.8rem" onclick="removeArbTageHist('+i+')">✕</button></div>';
+  }).join('');
+}
+function addArbTageHist(){
+  const von=$('arbTageVon').value;
+  if(!von){toast('Bitte "Gültig ab"-Datum wählen','warning');return}
+  const tage=[1,2,3,4,5,6].filter(d=>{const cb=$('arbTageTag'+d);return cb&&cb.checked});
+  if(!tage.length){toast('Mindestens 1 Arbeitstag wählen','warning');return}
+  if(!window._editArbTageHist)window._editArbTageHist=[];
+  if(window._editArbTageHist.some(e=>e.von===von)){toast('Für dieses Datum existiert bereits ein Wechsel','warning');return}
+  // Erster Wechsel: bisherige Arbeitstage als vorangehenden Zeitraum sichern, damit die Vergangenheit stimmt
+  if(!window._editArbTageHist.length){
+    const baseTage=[1,2,3,4,5].filter(d=>{const cb=$('empTag'+d);return cb&&cb.checked});
+    if(baseTage.length)window._editArbTageHist.push({von:ARB_HIST_MIN,bis:prevDayKey(von),tage:baseTage});
+  }
+  window._editArbTageHist.push({von:von,bis:ARB_HIST_MAX,tage:tage});
+  normalizeArbTageHist();
+  renderArbTageHistList();
+  [1,2,3,4,5,6].forEach(d=>{const cb=$('arbTageTag'+d);if(cb)cb.checked=false});
+  $('arbTageVon').value='';
+  toast('Arbeitstage-Wechsel ab '+fmtDate(von)+' erfasst','success');
+}
+function removeArbTageHist(i){
+  if(!window._editArbTageHist||!window._editArbTageHist[i])return;
+  const e=window._editArbTageHist[i];
+  if(!confirm('Arbeitstage-Wechsel ab '+(e.von<=ARB_HIST_MIN?'Beginn':fmtDate(e.von))+' löschen?'))return;
+  window._editArbTageHist.splice(i,1);
+  normalizeArbTageHist();
+  renderArbTageHistList();
+  toast('Wechsel gelöscht','info');
 }
 
 // Get effective pensum/weekHours for a specific date (considers temp pensum)
@@ -2066,9 +2156,8 @@ async function syncAbsToSP(){
 
 function countWorkdays(from,to,empId){
   const empS=empId?getEmpSetting(empId):(user?getEmpSetting(user.id):{...EMP_DEFAULTS});
-  const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
   let count=0;const d=new Date(from);const end=new Date(to);
-  while(d<=end){const day=d.getDay();if(arbeitsTage.includes(day)){const dk=dateKey(d);const hol=getHolidays(d.getFullYear());if(!hol[dk])count++}d.setDate(d.getDate()+1)}
+  while(d<=end){const day=d.getDay();const dk=dateKey(d);if(getArbeitsTageFor(empS,dk).includes(day)){const hol=getHolidays(d.getFullYear());if(!hol[dk])count++}d.setDate(d.getDate()+1)}
   return count}
 
 function countUniqueDates(entries){
@@ -2082,8 +2171,6 @@ function calcSollHours(empId,from,to,s,workDays){
   const entries=getEntriesForEmployee(empId,from,to);
   const entryDates=new Set(entries.map(e=>e.date));
   const allAbs=getAllAbsences().filter(a=>a.employeeId===empId&&a.status==='approved'&&a.from<=to&&a.to>=from);
-  const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
-  const normalH=(s.weekHours||41)/arbeitsTage.length;
   const eintritt=s.eintritt||null;
   const austritt=s.austritt||null;
   let total=0;
@@ -2094,6 +2181,9 @@ function calcSollHours(empId,from,to,s,workDays){
     // Skip days outside employment period
     if(eintritt&&dk<eintritt){d.setDate(d.getDate()+1);continue}
     if(austritt&&dk>austritt){d.setDate(d.getDate()+1);continue}
+    // Arbeitstage pro Tag ermitteln (arbeitsTageHistory kann sie zeitlich abgegrenzt ueberschreiben)
+    const arbeitsTage=getArbeitsTageFor(s,dk);
+    const normalH=(s.weekHours||41)/arbeitsTage.length;
     if(arbeitsTage.includes(day)){
       const hol=getHolidays(d.getFullYear());
       if(!hol[dk]){
@@ -2491,7 +2581,6 @@ function showWeeklyReports() {
   emps.forEach(emp => {
     const entries = getEntriesForEmployee(emp.id, fromStr, toStr);
     const empSettings = getEmpSetting(emp.id) || {pensum:100, sollStunden:41, weekHours:41, arbeitsTage:[1,2,3,4,5]};
-    const workDays = empSettings.arbeitsTage || [1,2,3,4,5];
     const isRaucher = !!empSettings.raucher;
     // Calculate Soll considering temp pensum
     const sollWeek = calcSollHours(emp.id, fromStr, toStr, empSettings, countWorkdays(fromStr, toStr, emp.id));
@@ -2532,7 +2621,7 @@ function showWeeklyReports() {
           const icon=ABS_TYPES[absDay.type]||'\uD83D\uDCCB';
           day.warnings.push({type:'info', msg:icon+' '+absDay.type+(absDay.duration!=='full'?' (halber Tag)':'')+' \u2013 Genehmigt'});
           day._isAbsence=true;
-        } else if(workDays.includes(day.dow)){
+        } else if(getArbeitsTageFor(empSettings,day.date).includes(day.dow)){
           day.warnings.push({type:'info', msg:'Kein Eintrag (Arbeitstag)'});
         }
         return;
@@ -2765,9 +2854,9 @@ function buildMonatsrapportPage(empId,monthStr){
   const entries=getEntriesForEmployee(empId,from,to);
   const absences=getAllAbsences().filter(a=>a.employeeId===empId&&a.from<=to&&a.to>=from&&a.status==='approved');
   const holidays=getHolidays(year);
-  const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
-  const dailyH=(s.weekHours||41)/arbeitsTage.length;
-  
+  // Arbeitstage koennen sich im Monat aendern (arbeitsTageHistory) – Soll/Tag am Monatsende ausweisen
+  const dailyH=(s.weekHours||41)/getArbeitsTageFor(s,to).length;
+
   // Use calcOvertimeAccount for accurate totals (handles Raucher, TempPensum, BF, etc.)
   const ot=calcOvertimeAccount(empId,yr,from,to);
   
@@ -2788,7 +2877,7 @@ function buildMonatsrapportPage(empId,monthStr){
     const dt=new Date(year,mo-1,d);
     const dow=dt.getDay();
     const dn=dayNames[dow];
-    const isWE=!arbeitsTage.includes(dow);
+    const isWE=!getArbeitsTageFor(s,dk).includes(dow);
     const hol=holidays[dk]?{date:dk,name:holidays[dk]}:null;
     const dayAbs=absences.filter(a=>a.from<=dk&&a.to>=dk);
     const dayEntries=byDate[dk]||[];
@@ -3447,7 +3536,6 @@ function countBetriebsferienDays(empId,from,to){
   const entries=getEntriesForEmployee(empId,from,to);
   const entryDates=new Set(entries.map(e=>e.date));
   const empS=getEmpSetting(empId);
-  const arbeitsTage=empS.arbeitsTage||[1,2,3,4,5];
   const eintritt=empS.eintritt||null;
   const austritt=empS.austritt||null;
   let count=0;
@@ -3461,7 +3549,7 @@ function countBetriebsferienDays(empId,from,to){
       // Skip days outside employment period
       if(eintritt&&dk<eintritt){d.setDate(d.getDate()+1);continue}
       if(austritt&&dk>austritt){d.setDate(d.getDate()+1);continue}
-      if(arbeitsTage.includes(dow)&&!entryDates.has(dk)){
+      if(getArbeitsTageFor(empS,dk).includes(dow)&&!entryDates.has(dk)){
         // Skip Feiertage - they don't count as BF days
         const hol=getHolidays(d.getFullYear());
         if(!hol[dk])count++;
@@ -4676,8 +4764,7 @@ function calcOvertimeAccount(empId,year,customFrom,customTo){
   // Kompensation absences
   const allAbs=getAllAbsences().filter(a=>a.employeeId===empId&&a.type==='Kompensation'&&a.status==='approved'&&a.from>=from&&a.to<=to);
   const kompDays=allAbs.reduce((s,a)=>s+a.days,0);
-  const arbeitsTage=s.arbeitsTage||[1,2,3,4,5];
-  const dailyH=(s.weekHours||41)/arbeitsTage.length;
+  const dailyH=(s.weekHours||41)/getArbeitsTageFor(s,to).length;
   const kompH=Math.round(kompDays*dailyH*100)/100;
   
   // Vortrag only for full-year or when starting from Jan 1
