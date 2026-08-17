@@ -1441,7 +1441,6 @@ function showCalDayDetail(dk){
       html+='<span>Soll: <strong>'+fmtH(sollMin)+'</strong></span>';
       html+='<span>Ist: <strong>'+fmtH(istMin)+'</strong></span>';
       html+='<span style="color:'+(saldoMin>=0?'var(--success)':'var(--danger)')+'">Saldo: <strong>'+(saldoMin>=0?'+':'')+fmtH(saldoMin)+'</strong></span>';
-      if(empS.raucher&&entries.length)html+='<span style="color:var(--warning)">\uD83D\uDEAC -15min</span>';
       if(effS._tempActive)html+='<span style="color:var(--danger)">(reduziert '+effS.pensum+'%)</span>';
       html+='</div>';
     }
@@ -2635,10 +2634,9 @@ function generateReport(){
     // Monthly breakdown
     const monthBrk={};entries.forEach(e=>{const ym=e.date.substring(0,7);monthBrk[ym]=(monthBrk[ym]||0)+(e.durationMin||0)});
 
-    html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+(s.raucher?' <span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDEAC</span>':'')+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' \u00b7 '+s.pensum+'% \u00b7 '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' \u2013 '+fmtDate(range.to)+'</div></div>';
+    html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' \u00b7 '+s.pensum+'% \u00b7 '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' \u2013 '+fmtDate(range.to)+'</div></div>';
     const tpInRange=(s.tempPensum||[]).filter(t=>t.von<=range.to&&t.bis>=range.from);
     if(tpInRange.length>0){html+='<div style="margin-bottom:12px">';tpInRange.forEach(t=>{html+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--danger);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:.8rem">\u26A0\uFE0F <strong>Pensum-Reduktion: '+t.pensum+'%</strong> ('+fmtDate(new Date(t.von))+' \u2013 '+fmtDate(new Date(t.bis))+')'+(t.grund?' \u00b7 '+t.grund:'')+'</div>'});const normalSollH=workDays*((s.weekHours||41)/(s.arbeitsTage||[1,2,3,4,5]).length);html+='<div style="font-size:.78rem;color:var(--text-dim);padding:2px 0">Soll ohne Reduktion: <strong>'+Math.round(normalSollH*10)/10+'h</strong></div></div>';}
-    if(s.raucher){html+='<div style="font-size:.78rem;color:var(--warning);margin-bottom:8px">\uD83D\uDEAC Raucherabzug: '+Math.round(raucherMin/60*10)/10+'h ('+countUniqueDates(entries)+' Tage \u00d7 15 Min)</div>';}
     // Overtime account
     const _ot=calcOvertimeAccount(emp.id,range.from.substring(0,4),range.from,range.to);
     // Stats grid
@@ -2720,7 +2718,7 @@ function exportReportCSV(){
   const emps=selEmp?EMPLOYEES.filter(e=>e.id===selEmp):EMPLOYEES;
   const allAbs=getAllAbsences();
   const empSettings=getEmpSettings();
-  let csv='\uFEFF'+'Mitarbeiter;MA-Nr;Pensum;Raucher;Soll-h/Wo;Ist-Stunden;Raucherabzug;Soll-Stunden;Saldo;Ferien Anspruch;Ferien bezogen;Ferien Rest;Ferien VJ;\u00dcberstunden VJ;Krankheit Tage;Eintr\u00e4ge\n';
+  let csv='\uFEFF'+'Mitarbeiter;MA-Nr;Pensum;Soll-h/Wo;Ist-Stunden;Soll-Stunden;Saldo;Ferien Anspruch;Ferien bezogen;Ferien Rest;Ferien VJ;\u00dcberstunden VJ;Krankheit Tage;Eintr\u00e4ge\n';
   emps.forEach(emp=>{
     const s=empSettings[emp.id]||{pensum:100,weekHours:41,ferienTage:23,arbeitsTage:[1,2,3,4,5],ferienUebertrag:0,ueberstundenUebertrag:0};
     const entries=getEntriesForEmployee(emp.id,range.from,range.to);
@@ -2737,7 +2735,7 @@ function exportReportCSV(){
     const ferienAnspruch=calcFerienAnspruch(emp.id,_csvYr)+_vtCsv.ferien;
     const ferienBez=absences.filter(a=>a.type==='Ferien'&&a.status==='approved').reduce((sum,a)=>sum+a.days,0);
     const krankT=absences.filter(a=>(a.type==='Krankheit'||a.type==='Unfall')).reduce((sum,a)=>sum+a.days,0);
-    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+(s.raucher?'Ja':'Nein')+';'+s.weekHours+';'+totalH+';'+Math.round(raucherMin/60*10)/10+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+_vtCsv.ferien+';'+_vtCsv.ueberstunden+';'+krankT+';'+entries.length+'\n';
+    csv+=emp.name+';'+emp.id+';'+s.pensum+'%;'+s.weekHours+';'+totalH+';'+sollH+';'+Math.round((totalH-sollH)*10)/10+';'+ferienAnspruch+';'+ferienBez+';'+Math.round((ferienAnspruch-ferienBez)*10)/10+';'+_vtCsv.ferien+';'+_vtCsv.ueberstunden+';'+krankT+';'+entries.length+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='Mitarbeiter_Report_'+$('reportPeriod').value+'.csv';a.click();
@@ -2878,7 +2876,7 @@ function showWeeklyReports() {
     }
 
     html += '<div class="weekly-report">';
-    html += '<div class="report-header"><h3>\uD83D\uDCCB ' + emp.name + '</h3><div class="report-period">' + weekLabel + (isRaucher?' <span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDEAC Raucher</span>':'') + '</div></div>';
+    html += '<div class="report-header"><h3>\uD83D\uDCCB ' + emp.name + '</h3><div class="report-period">' + weekLabel + '</div></div>';
     html += tpBanner;
 
     Object.values(days).forEach(day => {
@@ -2922,7 +2920,6 @@ function showWeeklyReports() {
     const saldo = totalWeekH - sollWeek;
     html += '<div class="report-summary">';
     html += '<div class="report-sum-row"><span>Total Woche:</span><strong>' + fmtH(totalWeekH) + '</strong></div>';
-    if(isRaucher) html += '<div class="report-sum-row" style="color:var(--warning)"><span>\uD83D\uDEAC Raucherabzug:</span><span>−' + fmtH(Object.values(days).filter(d=>d.entries.length>0).length*0.25) + '</span></div>';
     html += '<div class="report-sum-row"><span>Soll-Stunden:</span><span>' + fmtH(sollWeek) + '</span></div>';
     if(activeTp.length>0){const normalWeekH=empSettings.weekHours||41;html+='<div class="report-sum-row" style="font-size:.78rem;color:var(--text-dim)"><span>Soll ohne Reduktion:</span><span>'+fmtH(normalWeekH)+'</span></div>';}
     html += '<div class="report-sum-row ' + (saldo>=0?'positive':'negative') + '"><span>Saldo:</span><strong>' + (saldo>=0?'+':'') + fmtH(saldo) + '</strong></div>';
@@ -3080,6 +3077,8 @@ function buildMonatsrapportPage(empId,monthStr){
   const absTypeMap={'Ferien':'b-vac','Krankheit':'b-sick','Kompensation':'b-comp','Militär':'b-mil','Unfall':'b-sick','Unbezahlt':'b-other','Sonstiges':'b-other'};
   
   // Build day rows + project breakdown (display only, not for totals)
+  // Raucherabzug wird still pro Arbeitstag von der Tages-Nettozeit abgezogen (kein separater Ausweis)
+  const rMin=s.raucher?15:0;
   let rows='';
   let displayIstMin=0; // Only actual work (no absences)
   let prodMin=0,unprodMin=0;
@@ -3097,7 +3096,7 @@ function buildMonatsrapportPage(empId,monthStr){
     
     if(isWE){
       if(dayEntries.length>0){
-        const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+        const istMin=Math.max(0,dayEntries.reduce((s,e)=>s+(e.durationMin||0),0)-rMin);
         displayIstMin+=istMin;
         const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
         dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
@@ -3119,7 +3118,7 @@ function buildMonatsrapportPage(empId,monthStr){
     }else if(hol){
       if(dayEntries.length>0){
         // Worked on holiday
-        const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+        const istMin=Math.max(0,dayEntries.reduce((s,e)=>s+(e.durationMin||0),0)-rMin);
         displayIstMin+=istMin;
         const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
         dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
@@ -3139,7 +3138,7 @@ function buildMonatsrapportPage(empId,monthStr){
       rows+='<tr class="abs"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="5"><span class="badge '+cls+'">'+abs.type+'</span></td><td class="hrs" colspan="2" style="color:#8888a0">\u2014</td></tr>';
     }else if(dayEntries.length>0){
       // Normal work day
-      const istMin=dayEntries.reduce((s,e)=>s+(e.durationMin||0),0);
+      const istMin=Math.max(0,dayEntries.reduce((s,e)=>s+(e.durationMin||0),0)-rMin);
       displayIstMin+=istMin;
       dayEntries.forEach(e=>{const pn=e.project||e.projectName||'?';projHours[pn]=(projHours[pn]||0)+(e.durationMin||0)/60});
       const mainProj=dayEntries.sort((a,b)=>(b.durationMin||0)-(a.durationMin||0))[0];
@@ -3164,8 +3163,8 @@ function buildMonatsrapportPage(empId,monthStr){
   // Use calcOvertimeAccount values (accurate, handles Raucher/TempPensum/BF)
   // For display: Ist from entries only, Soll from calcSollHours, Saldo from OT
   const sollMonth=calcSollHours(empId,from,to,s,countWorkdays(from,to,empId));
-  const raucherMin=s.raucher?entries.reduce((dates,e)=>{dates.add(e.date);return dates},new Set()).size*15:0;
-  const istH=Math.round((displayIstMin-raucherMin)/60*100)/100;
+  // displayIstMin enthaelt den Raucherabzug bereits pro Tag
+  const istH=Math.round(displayIstMin/60*100)/100;
   const sollH=Math.round(sollMonth*100)/100;
   const saldoM=Math.round((istH-sollH)*100)/100;
   
@@ -3201,7 +3200,6 @@ function buildMonatsrapportPage(empId,monthStr){
   h+='<div><div class="lbl">Arbeitstage</div><div class="val">'+getArbeitsTageFor(s,to).map(x=>DAY_LABELS[x]||x).join(' ')+'</div></div></div>';
   const _freiTage=[1,2,3,4,5].filter(x=>!getArbeitsTageFor(s,to).includes(x));
   if(_freiTage.length)h+='<div style="font-size:.7rem;color:#1e40af;background:#dbeafe;padding:4px 12px;border-radius:6px;margin-bottom:12px">ℹ️ Regulär frei: '+_freiTage.map(x=>DAY_LABELS[x]||x).join(', ')+' – an diesen Tagen wird kein Ferientag abgezogen</div>';
-  if(s.raucher)h+='<div style="font-size:.7rem;color:#92400e;background:#fef3c7;padding:4px 12px;border-radius:6px;margin-bottom:12px">\uD83D\uDEAC Raucher \u2013 15 Min/Tag Abzug ber\u00fccksichtigt</div>';
   // Summary cards
   h+='<div class="summary">';
   h+='<div class="sc"><div class="n">'+istH.toFixed(2)+'</div><div class="l">Ist-Stunden</div></div>';
