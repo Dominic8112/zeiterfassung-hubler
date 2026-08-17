@@ -2472,6 +2472,69 @@ function buildFerienNachweis(empId,range,absences,anspruch,vortrag,bfDays){
   return h;
 }
 
+// ── ABSENZ-NACHWEIS (alles ausser Ferien) ──────────────────────────────────────
+// Krankheit, Unfall, Militaer, Kompensation usw. einzeln mit Status und Wirkung.
+// Wirkung: genehmigte Ganztages-Absenzen reduzieren das Soll (calcSollHours),
+// genehmigte Kompensation zusaetzlich das Ueberstunden-Guthaben (calcOvertimeAccount).
+function buildAbsenzNachweis(empId,range,absences){
+  const s=getEmpSetting(empId);
+  const today=dateKey(new Date());
+  const list=absences.filter(a=>a.type!=='Ferien').slice().sort((a,b)=>a.type===b.type?a.from.localeCompare(b.from):a.type.localeCompare(b.type));
+  if(!list.length)return '<div style="background:var(--bg-surface);border-radius:8px;padding:12px;margin-bottom:12px;font-size:.82rem"><div style="font-weight:600;margin-bottom:6px">🗂️ Übrige Abwesenheiten</div><div style="font-size:.78rem;color:var(--text-dim);font-style:italic">Keine weiteren Abwesenheiten im Zeitraum</div></div>';
+  const durLbl={full:'ganzer Tag',morning:'Vormittag',afternoon:'Nachmittag'};
+  const stat={approved:{t:'Genehmigt',c:'var(--success)'},pending:{t:'Pendent',c:'var(--warning)'},rejected:{t:'Abgelehnt',c:'var(--danger)'}};
+  // Summe je Typ (nur genehmigte zaehlen als effektiv bezogen)
+  const perType={};
+  list.forEach(a=>{
+    if(!perType[a.type])perType[a.type]={approved:0,pending:0,rejected:0};
+    perType[a.type][a.status==='approved'?'approved':a.status==='rejected'?'rejected':'pending']+=(a.days||0);
+  });
+
+  let h='<div style="background:var(--bg-surface);border-radius:8px;padding:12px;margin-bottom:12px;font-size:.82rem">';
+  h+='<div style="font-weight:600;margin-bottom:8px">🗂️ Übrige Abwesenheiten '+fmtDate(range.from)+' – '+fmtDate(range.to)+'</div>';
+  Object.keys(perType).sort().forEach(t=>{
+    const p=perType[t];const extra=[];
+    if(p.pending)extra.push(p.pending+' pendent');
+    if(p.rejected)extra.push(p.rejected+' abgelehnt');
+    h+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>'+(ABS_TYPES[t]||'📋')+' '+t+(extra.length?' <span style="color:var(--text-dim);font-size:.72rem">('+extra.join(', ')+')</span>':'')+'</span><strong style="font-family:var(--font-mono)">'+Math.round(p.approved*10)/10+' Tage</strong></div>';
+  });
+
+  h+='<div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin:12px 0 6px">Einzelaufstellung</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.78rem"><thead><tr style="color:var(--text-dim)">'
+    +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Typ</th>'
+    +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Zeitraum</th>'
+    +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Dauer</th>'
+    +'<th style="text-align:right;padding:4px;border-bottom:1px solid var(--border)">Tage</th>'
+    +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Status</th>'
+    +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Wirkung</th>'
+    +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Bemerkung</th></tr></thead><tbody>';
+  list.forEach(a=>{
+    const st=stat[a.status]||{t:a.status||'?',c:'var(--text-dim)'};
+    const zeit=a.from===a.to?fmtDate(a.from):fmtDate(a.from)+' – '+fmtDate(a.to);
+    const dim=a.status==='rejected';
+    let wirkung='keine';
+    if(a.status==='approved'){
+      if(a.type==='Kompensation'){
+        const dh=(s.weekHours||41)/getArbeitsTageFor(s,a.from).length;
+        wirkung='Ü-Stunden −'+(Math.round((a.days||0)*dh*10)/10)+'h';
+      }else wirkung=a.duration==='full'?'Soll reduziert':'Soll halbiert';
+    }else if(a.status==='pending')wirkung='noch keine';
+    const wann=a.to<today?'':(a.from>today?' · geplant':' · läuft aktuell');
+    h+='<tr style="'+(dim?'opacity:.55;':'')+'">'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border);white-space:nowrap">'+(ABS_TYPES[a.type]||'📋')+' '+a.type+'</td>'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border);white-space:nowrap'+(dim?';text-decoration:line-through':'')+'">'+zeit+'</td>'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border)">'+(durLbl[a.duration]||a.duration||'')+'</td>'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--font-mono)">'+(a.days||0)+'</td>'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border)"><span style="background:'+st.c+';color:#fff;padding:1px 6px;border-radius:4px;font-size:.7rem">'+st.t+'</span></td>'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border);color:var(--text-dim)">'+wirkung+'</td>'
+      +'<td style="padding:4px;border-bottom:1px solid var(--border);color:var(--text-dim)">'+(a.note||'')+wann+'</td></tr>';
+  });
+  const totApproved=Math.round(list.filter(a=>a.status==='approved').reduce((x,a)=>x+(a.days||0),0)*10)/10;
+  h+='<tr style="font-weight:700"><td style="padding:5px 4px" colspan="3">Total genehmigt</td><td style="padding:5px 4px;text-align:right;font-family:var(--font-mono)">'+totApproved+'</td><td colspan="3"></td></tr>';
+  h+='</tbody></table></div></div>';
+  return h;
+}
+
 function generateReport(){
   const selEmp=$('reportEmp').value;
   const range=getReportDateRange();
@@ -2510,8 +2573,6 @@ function generateReport(){
     const projBrk={};entries.forEach(e=>{projBrk[e.project]=(projBrk[e.project]||0)+(e.durationMin||0)});
     // Monthly breakdown
     const monthBrk={};entries.forEach(e=>{const ym=e.date.substring(0,7);monthBrk[ym]=(monthBrk[ym]||0)+(e.durationMin||0)});
-    // Absence summary
-    const absBrk={};absences.filter(a=>a.status!=='rejected').forEach(a=>{absBrk[a.type]=(absBrk[a.type]||0)+a.days});
 
     html+='<div class="card" style="border-left:3px solid var(--primary)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h3 style="font-size:1.1rem;margin-bottom:2px">'+emp.name+(s.raucher?' <span style="background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.7rem">\uD83D\uDEAC</span>':'')+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+emp.id+' \u00b7 '+s.pensum+'% \u00b7 '+(s.arbeitsTage||[1,2,3,4,5]).map(d=>({1:"Mo",2:"Di",3:"Mi",4:"Do",5:"Fr"})[d]).join(", ")+'</span></div><div style="text-align:right;font-size:.78rem;color:var(--text-dim)">'+fmtDate(range.from)+' \u2013 '+fmtDate(range.to)+'</div></div>';
     const tpInRange=(s.tempPensum||[]).filter(t=>t.von<=range.to&&t.bis>=range.from);
@@ -2530,6 +2591,7 @@ function generateReport(){
     html+='</div>';
     // Ferien-Nachweis mit Einzelaufstellung (Nachverfolgung fuers Qualifikationsgespraech)
     html+=buildFerienNachweis(emp.id,range,absences,ferienAnspruch,_vtRp.ferien,bfDays);
+    html+=buildAbsenzNachweis(emp.id,range,absences);
     // KS breakdown
     if(Object.keys(ksBrk).length){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Kostenstellen</div>';Object.entries(ksBrk).sort((a,b)=>b[1]-a[1]).forEach(([k,m])=>{const pct=totalMin>0?Math.round(m/totalMin*100):0;html+='<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+({"B\u00fcro":"#3b82f6","Zuschnitt":"#8b5cf6","BAZ":"#06b6d4","Werkstatt":"#22c55e","Montage":"#FF6B35"}[k]||"#666")+'"></div></div><div class="stat-bar-value">'+(Math.round(m/6)/10)+'h</div></div>'});html+='</div>'}
     // Top projects
@@ -2538,8 +2600,6 @@ function generateReport(){
     // Monthly breakdown
     const months=Object.entries(monthBrk).sort();
     if(months.length>1){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Monats\u00fcbersicht</div>';months.forEach(([ym,m])=>{const [yr,mo]=ym.split('-');html+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.82rem;border-bottom:1px solid var(--border)"><span>'+MO[parseInt(mo)-1]+' '+yr+'</span><span style="font-family:var(--font-mono)">'+(Math.round(m/6)/10)+'h</span></div>'});html+='</div>'}
-    // Absence summary
-    if(Object.keys(absBrk).length){html+='<div><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Abwesenheiten</div>';Object.entries(absBrk).forEach(([t,d])=>{html+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.82rem;border-bottom:1px solid var(--border)"><span>'+t+'</span><span style="font-family:var(--font-mono)">'+d+' Tage</span></div>'});html+='</div>'}
     html+='</div>';
   });
   $('reportOutput').innerHTML=html||'<div class="empty-state"><div class="empty-icon">📊</div><p>Keine Daten im gew\u00e4hlten Zeitraum</p></div>';
@@ -2978,7 +3038,13 @@ function buildMonatsrapportPage(empId,monthStr){
         rows+='<td class="prj">'+(mainProj.project||mainProj.projectName||'')+(dayEntries.length>1?'<span class="mp">+'+(dayEntries.length-1)+'</span>':'')+'</td>';
         rows+='<td>'+(mainProj.kostenstelle||mainProj.costCenter||'')+'</td><td></td></tr>';
       }else{
-        rows+='<tr class="we"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7">\u2014</td></tr>';
+        // Freier Tag \u2013 liegt er in einer Abwesenheit, explizit ausweisen dass nichts abgezogen wird
+        const freiAbs=dayAbs.length?dayAbs[0]:null;
+        if(freiAbs){
+          rows+='<tr class="we"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7"><span class="badge '+(absTypeMap[freiAbs.type]||'b-other')+'" style="opacity:.45">'+freiAbs.type+'</span> <span style="color:#8888a0;font-size:.65rem">freier Tag \u2013 kein Abzug</span></td></tr>';
+        }else{
+          rows+='<tr class="we"><td class="dn">'+dn+'</td><td class="dd">'+String(d).padStart(2,'0')+'</td><td colspan="7">\u2014</td></tr>';
+        }
       }
     }else if(hol){
       if(dayEntries.length>0){
@@ -3061,7 +3127,10 @@ function buildMonatsrapportPage(empId,monthStr){
   h+='<div class="emp-info"><div><div class="lbl">Mitarbeiter</div><div class="val">'+emp.name+'</div></div>';
   h+='<div><div class="lbl">Personal-Nr.</div><div class="val">'+emp.id+'</div></div>';
   h+='<div><div class="lbl">Pensum</div><div class="val">'+(s.pensum||100)+'%</div></div>';
-  h+='<div><div class="lbl">Soll / Tag</div><div class="val">'+dailyH.toFixed(2)+' h</div></div></div>';
+  h+='<div><div class="lbl">Soll / Tag</div><div class="val">'+dailyH.toFixed(2)+' h</div></div>';
+  h+='<div><div class="lbl">Arbeitstage</div><div class="val">'+getArbeitsTageFor(s,to).map(x=>DAY_LABELS[x]||x).join(' ')+'</div></div></div>';
+  const _freiTage=[1,2,3,4,5].filter(x=>!getArbeitsTageFor(s,to).includes(x));
+  if(_freiTage.length)h+='<div style="font-size:.7rem;color:#1e40af;background:#dbeafe;padding:4px 12px;border-radius:6px;margin-bottom:12px">ℹ️ Regulär frei: '+_freiTage.map(x=>DAY_LABELS[x]||x).join(', ')+' – an diesen Tagen wird kein Ferientag abgezogen</div>';
   if(s.raucher)h+='<div style="font-size:.7rem;color:#92400e;background:#fef3c7;padding:4px 12px;border-radius:6px;margin-bottom:12px">\uD83D\uDEAC Raucher \u2013 15 Min/Tag Abzug ber\u00fccksichtigt</div>';
   // Summary cards
   h+='<div class="summary">';
@@ -3238,7 +3307,10 @@ function fmtPauseShort(min){if(!min)return'0:00';return Math.floor(min/60)+':'+S
 function exportReportHTML(){
   const output=$('reportOutput');if(!output||!output.innerHTML){toast('Zuerst Report anzeigen','warning');return}
   const range=getReportDateRange();
-  const printHTML='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mitarbeiter-Report</title><style>body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#333}h1{font-size:1.3rem;border-bottom:2px solid #FF6B35;padding-bottom:8px}.card{border:1px solid #ddd;border-radius:8px;padding:16px;margin-bottom:16px;page-break-inside:avoid;border-left:3px solid #FF6B35}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.stat-box{background:#f8f9fa;padding:10px;border-radius:6px;text-align:center}.stat-num{font-size:1.2rem;font-weight:700}.stat-label{font-size:.7rem;color:#666}.stat-bar-item{display:flex;align-items:center;gap:8px;margin-bottom:6px}.stat-bar-label{width:80px;font-size:.8rem}.stat-bar-track{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}.stat-bar-fill{height:100%;border-radius:4px}.stat-bar-value{width:50px;text-align:right;font-size:.8rem;font-weight:600}@media print{.card{break-inside:avoid}}</style></head><body><h1>\u23f1 Mitarbeiter-Report &mdash; Hubler Metallbau AG</h1><p style="color:#666;margin-bottom:20px">'+fmtDate(range.from)+' &ndash; '+fmtDate(range.to)+' &bull; Erstellt am '+fmtDate(dateKey(new Date()))+'</p>'+output.innerHTML+'</body></html>';
+  // Der Report wird als fertiges HTML uebernommen und nutzt CSS-Variablen der App (Dark Theme).
+  // Fuer den Druck hier mit hellen, auf Papier lesbaren Werten neu definieren – sonst bleiben
+  // z.B. Status-Badges (background:var(--success);color:#fff) weiss auf weiss und unsichtbar.
+  const printHTML='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mitarbeiter-Report</title><style>:root{--primary:#FF6B35;--secondary:#004E89;--accent:#b45309;--success:#15803d;--danger:#b91c1c;--warning:#b45309;--text:#333;--text-dim:#666;--text-muted:#888;--border:#ddd;--bg-surface:#f8f9fa;--bg-card:#fff;--bg-card-hover:#f1f3f5;--bg-hover:#f1f3f5;--bg-input:#fff;--bg-deep:#fff;--font-mono:"Courier New",monospace}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}table{border-collapse:collapse}body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#333}h1{font-size:1.3rem;border-bottom:2px solid #FF6B35;padding-bottom:8px}.card{border:1px solid #ddd;border-radius:8px;padding:16px;margin-bottom:16px;page-break-inside:avoid;border-left:3px solid #FF6B35}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.stat-box{background:#f8f9fa;padding:10px;border-radius:6px;text-align:center}.stat-num{font-size:1.2rem;font-weight:700}.stat-label{font-size:.7rem;color:#666}.stat-bar-item{display:flex;align-items:center;gap:8px;margin-bottom:6px}.stat-bar-label{width:80px;font-size:.8rem}.stat-bar-track{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}.stat-bar-fill{height:100%;border-radius:4px}.stat-bar-value{width:50px;text-align:right;font-size:.8rem;font-weight:600}@media print{.card{break-inside:avoid}}</style></head><body><h1>\u23f1 Mitarbeiter-Report &mdash; Hubler Metallbau AG</h1><p style="color:#666;margin-bottom:20px">'+fmtDate(range.from)+' &ndash; '+fmtDate(range.to)+' &bull; Erstellt am '+fmtDate(dateKey(new Date()))+'</p>'+output.innerHTML+'</body></html>';
   const blob=new Blob([printHTML],{type:'text/html;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='Mitarbeiter_Report_'+fmtDate(range.from).replace(/\./g,'-')+'_'+fmtDate(range.to).replace(/\./g,'-')+'.html';
@@ -4207,7 +4279,8 @@ function renderAbsCalendar(){
         const dk=yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
         const dt=new Date(yr,mo,d);
         const dow=dt.getDay();
-        const isWe=dow===0||dow===6;
+        // Freier Tag = Wochenende ODER regulaer arbeitsfreier Tag (Teilzeit, inkl. arbeitsTageHistory)
+        const isFrei=!getArbeitsTageFor(s,dk).includes(dow);
         const isHol=!!holidays[dk];
         const isBf=bf.find(b=>dk>=b.from&&dk<=b.to);
         const abs=allAbs.find(a=>a.employeeId===emp.id&&dk>=a.from&&dk<=a.to);
@@ -4221,13 +4294,18 @@ function renderAbsCalendar(){
         else if(isHol){bg='rgba(239,68,68,.2)';icon='\uD83C\uDF89';title+=' '+holidays[dk]}
         else if(isBf&&!abs){bg='rgba(99,102,241,.2)';icon='\uD83C\uDFE2';title+=' BF'}
         if(abs&&!beforeEintritt&&!afterAustritt){
-          const ABS_BG={'Ferien':'rgba(34,197,94,.3)','Krankheit':'rgba(239,68,68,.3)','Unfall':'rgba(249,115,22,.3)','Milit\u00e4r/Zivildienst':'rgba(107,114,128,.3)','Mutterschaft/Vaterschaft':'rgba(168,85,247,.3)','Umzug':'rgba(59,130,246,.3)','Unbezahlt':'rgba(156,163,175,.3)','Sonstiges':'rgba(156,163,175,.3)'};
-          bg=ABS_BG[abs.type]||'rgba(156,163,175,.3)';
+          const ABS_RGB={'Ferien':'34,197,94','Krankheit':'239,68,68','Unfall':'249,115,22','Milit\u00e4r/Zivildienst':'107,114,128','Mutterschaft/Vaterschaft':'168,85,247','Umzug':'59,130,246','Unbezahlt':'156,163,175','Sonstiges':'156,163,175'};
+          const rgb=ABS_RGB[abs.type]||'156,163,175';
+          // An freien Tagen nur blass andeuten - dort wird kein Ferientag abgezogen
+          bg='rgba('+rgb+','+(isFrei?'.08':'.3')+')';
           icon=(ABS_TYPES[abs.type]||'');
-          title+=' '+abs.type+(abs.status==='pending'?' (pendent)':'');
+          if(isFrei)icon='<span style="opacity:.3">'+icon+'</span>';
+          title+=' '+abs.type+(abs.status==='pending'?' (pendent)':'')+(isFrei?' \u2013 freier Tag, kein Abzug':'');
+        }else if(isFrei&&!isHol&&!beforeEintritt&&!afterAustritt){
+          title+=' \u2013 freier Tag';
         }
         if(bdayMatch&&!beforeEintritt){icon='\uD83C\uDF82';title+=' Geburtstag'}
-        const border=isWe?'background:rgba(255,255,255,.04);':'';
+        const border=isFrei?'background:rgba(255,255,255,.04);':'';
 
         html+='<td style="padding:0;text-align:center;min-width:16px;height:18px;border:1px solid rgba(255,255,255,.05);'+border+'background:'+bg+';font-size:.55rem;cursor:default" title="'+title+'">'+icon+'</td>';
       }
@@ -4243,7 +4321,9 @@ function renderAbsCalendar(){
   html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,.3)"></span> Unfall</span>';
   html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(99,102,241,.2)"></span> BF</span>';
   html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,.2)"></span> Feiertag</span>';
+  html+='<span style="display:flex;align-items:center;gap:2px"><span style="width:12px;height:12px;border-radius:2px;background:rgba(34,197,94,.08);border:1px solid rgba(255,255,255,.12)"></span> freier Tag (kein Abzug)</span>';
   html+='<span>\uD83C\uDF82 Geburtstag</span></div>';
+  html+='<p style="font-size:.7rem;color:var(--text-dim);margin-top:6px">Blass eingef\u00E4rbte Tage liegen zwar in einer Abwesenheit, sind aber regul\u00E4re freie Tage des Mitarbeiters \u2013 dort wird kein Ferientag abgezogen.</p>';
 
   $('absCalResult').innerHTML=html;
 }
