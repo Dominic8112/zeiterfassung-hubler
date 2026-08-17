@@ -783,6 +783,12 @@ function loadEmployees(){try{const d=JSON.parse(localStorage.getItem(C.LS+'emplo
 function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(()=>console.log('[SP] employees gespeichert')).catch(e=>console.warn('[SP] employees Fehler:',e))}
 let EMPLOYEES=loadEmployees();
 function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
+// Austritt liegt in der Vergangenheit -> MA ist nicht mehr im Betrieb (Report-Filter standardmaessig aus)
+function isAusgetreten(empId,refDate){
+  const s=typeof getEmpSetting==='function'?getEmpSetting(empId):null;
+  const a=s&&s.austritt;
+  return !!(a&&a<(refDate||dateKey(new Date())));
+}
 // Migrate old dual-absences to single source
 (function(){
   const oldLocal=localStorage.getItem(C.LS+'absences');
@@ -2120,6 +2126,13 @@ async function loadEmpSettingsFromSP(){
       localStorage.setItem(C.LS+'emp_settings',JSON.stringify(merged));
       console.log('[SP] emp_settings geladen:',Object.keys(data).length,'MA');
       if(user&&user.admin)renderEmpSettings();
+      // Report-Filter wurden vor dem SP-Load gebaut - Austrittsdaten sind erst jetzt bekannt.
+      // Einmalig neu aufbauen, damit Ausgetretene nicht angehakt sind (spaeter nicht mehr,
+      // sonst wuerde eine manuelle Auswahl beim Focus-Sync zurueckgesetzt).
+      if(!window._reportFiltersRebuilt){
+        window._reportFiltersRebuilt=true;
+        if(canViewReports()){initWeeklyEmpFilter(true);initProdEmpFilter()}
+      }
     }
   }catch(e){console.warn('EmpSettings load:',e)}
 }
@@ -2412,6 +2425,22 @@ async function loadAbsencesFromSP(){
 // ═══ MITARBEITER-REPORT (for admin/approver) ═══
 function canViewReports(){return user&&(user.admin||user.approver)}
 
+// MA-Filter Wochenreport: Ausgetretene sind standardmaessig nicht angehakt
+function initWeeklyEmpFilter(force){
+  const filterDiv=$('weeklyReportEmpFilter');
+  if(!filterDiv)return;
+  if(filterDiv.children.length&&!force)return;
+  const isWeg=e=>isAusgetreten(e.id)||!!e.archived;
+  const anyEx=EMPLOYEES.some(isWeg);
+  let fhtml='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="weeklyAllCB"'+(anyEx?'':' checked')+' onchange="document.querySelectorAll(\'.weeklyEmpCB\').forEach(c=>c.checked=this.checked)"> Alle</label>';
+  EMPLOYEES.forEach(e=>{
+    const ex=isWeg(e);
+    const lbl=e.archived?'(archiviert)':'(ausgetreten)';
+    fhtml+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="weeklyEmpCB" value="'+e.id+'"'+(ex?'':' checked')+'> '+e.name+(ex?' <span style="color:var(--text-dim);font-size:.72rem">'+lbl+'</span>':'')+'</label>';
+  });
+  filterDiv.innerHTML=fhtml;
+}
+
 function renderReportTab(){
   const el=$('reportContent');if(!el||!canViewReports())return;
   const empSettings=getEmpSettings();
@@ -2430,12 +2459,7 @@ function renderReportTab(){
     const wi = $('weeklyReportWeek');
     if(wi && !wi.value) wi.value = yr + '-W' + String(weekNum).padStart(2, '0');
     // Populate employee filter checkboxes
-    const filterDiv = $('weeklyReportEmpFilter');
-    if(filterDiv && !filterDiv.children.length) {
-      let fhtml='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="weeklyAllCB" checked onchange="document.querySelectorAll(\'.weeklyEmpCB\').forEach(c=>c.checked=this.checked)"> Alle</label>';
-      EMPLOYEES.forEach(e => { fhtml+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="weeklyEmpCB" value="'+e.id+'" checked> '+e.name+'</label>'; });
-      filterDiv.innerHTML=fhtml;
-    }
+    initWeeklyEmpFilter();
   }
 
 }
@@ -3242,9 +3266,11 @@ function buildMonatsrapportPage(empId,monthStr){
 // ═══ PRODUKTIVITÄT ═══
 function initProdEmpFilter(){
   const container=$('prodEmpFilter');if(!container)return;
-  let html='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="prodAllCB" checked onchange="document.querySelectorAll(\'.prodEmpCB\').forEach(c=>c.checked=this.checked)"> Alle</label>';
+  const anyEx=getActiveEmployees().some(e=>isAusgetreten(e.id));
+  let html='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer;font-weight:600"><input type="checkbox" id="prodAllCB"'+(anyEx?'':' checked')+' onchange="document.querySelectorAll(\'.prodEmpCB\').forEach(c=>c.checked=this.checked)"> Alle</label>';
   getActiveEmployees().forEach(e=>{
-    html+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="prodEmpCB" value="'+e.id+'" checked> '+e.name+'</label>';
+    const ex=isAusgetreten(e.id);
+    html+='<label style="display:flex;align-items:center;gap:4px;padding:2px 0;cursor:pointer"><input type="checkbox" class="prodEmpCB" value="'+e.id+'"'+(ex?'':' checked')+'> '+e.name+(ex?' <span style="color:var(--text-dim);font-size:.72rem">(ausgetreten)</span>':'')+'</label>';
   });
   container.innerHTML=html;
 }
