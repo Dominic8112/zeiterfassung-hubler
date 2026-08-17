@@ -486,6 +486,7 @@
         <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:4px">
           <button class="btn btn-secondary btn-sm" onclick="exportHolidaysCSV()">📤 CSV</button>
           <label class="btn btn-secondary btn-sm" style="cursor:pointer">📁 Import<input type="file" accept=".csv" id="holImportFile" style="display:none" onchange="importHolidaysCSV(this)"></label>
+          <button class="btn btn-secondary btn-sm" onclick="recalcAbsenceDaysManual()" title="Gespeicherte Ferientage der Absenzen an die aktuellen Feiertage/Arbeitstage anpassen">🔄 Ferientage prüfen</button>
           <button class="btn btn-primary btn-sm" onclick="saveHolidaysSP()">💾 SP speichern</button>
         </div>
       </div>
@@ -2131,7 +2132,7 @@ async function loadEmpSettingsFromSP(){
       // sonst wuerde eine manuelle Auswahl beim Focus-Sync zurueckgesetzt).
       if(!window._reportFiltersRebuilt){
         window._reportFiltersRebuilt=true;
-        if(canViewReports()){initWeeklyEmpFilter(true);initProdEmpFilter()}
+        if(canViewReports()){initWeeklyEmpFilter(true);initProdEmpFilter();initMonatsrapport()}
         initAbsCalEmpFilter(true);
       }
     }
@@ -2146,6 +2147,47 @@ function getRawAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'all_a
 function getAllAbsences(){return getRawAbsences().filter(a=>!a._deleted)}
 function saveAllAbsences(a){localStorage.setItem(C.LS+'all_absences',JSON.stringify(a));queueAbsSync()}
 function getAbsences(){return getAllAbsences()}
+
+// Tage einer Absenz aus dem Zeitraum ableiten (Arbeitstage des MA, Feiertage zaehlen nicht)
+function calcAbsenceDays(a){
+  const wd=countWorkdays(a.from,a.to,a.employeeId);
+  return a.duration==='full'?wd:wd*0.5;
+}
+// Die Tage werden beim Erfassen berechnet und gespeichert. Aendern sich danach die
+// Feiertage (z.B. Knabenschiessen geloescht) oder die Arbeitstage eines MA, bleibt der
+// alte Wert stehen. Diese Funktion zieht die gespeicherten Tage nach.
+function recalcAbsenceDays(){
+  const all=getRawAbsences();
+  const changed=[];
+  all.forEach(a=>{
+    if(a._deleted||!a.from||!a.to||!a.employeeId)return;
+    const neu=calcAbsenceDays(a);
+    if(neu!==a.days){
+      changed.push((a.employeeName||a.employeeId)+' · '+a.type+' '+a.from+': '+a.days+' → '+neu);
+      a.days=neu;
+      a.lastModified=Date.now();
+    }
+  });
+  if(changed.length){
+    saveAllAbsences(all);
+    console.log('[Absenzen] Tage neu berechnet:',changed);
+    if(typeof renderAbsences==='function')renderAbsences();
+  }
+  return changed;
+}
+// Nach einer Feiertags-Aenderung aufrufen - nur Admins, damit nicht mehrere Browser
+// gleichzeitig dieselbe Korrektur in die Sync-Datei schreiben
+function recalcAbsenceDaysAfterHolidayChange(){
+  if(!user||!user.admin)return;
+  const ch=recalcAbsenceDays();
+  if(ch.length)toast(ch.length+' Absenz'+(ch.length>1?'en':'')+' neu berechnet','success');
+}
+// Button im Feiertage-Admin: manuell pruefen, mit Rueckmeldung was sich geaendert hat
+function recalcAbsenceDaysManual(){
+  const ch=recalcAbsenceDays();
+  if(!ch.length){toast('Alle Ferientage sind aktuell','info');return}
+  toast(ch.length+' Absenz'+(ch.length>1?'en':'')+' korrigiert: '+ch[0]+(ch.length>1?' …':''),'success');
+}
 
 let absSyncTm=null;
 let _absNeedsSync=false;
@@ -2981,7 +3023,16 @@ function exportWeeklyReportPrint(){
 // ═══ MONATSRAPPORT (Lohnabrechnung) ═══
 function initMonatsrapport(){
   const sel=$('mrEmp');if(!sel)return;
-  sel.innerHTML='<option value="">— Mitarbeiter wählen —</option>'+getActiveEmployees().map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('');
+  const prev=sel.value;
+  // Ausgetretene nach unten und als solche markieren, damit sie nicht versehentlich
+  // gewaehlt werden - auswaehlbar bleiben sie fuer nachtraegliche Rapporte
+  const emps=getActiveEmployees();
+  const aktiv=emps.filter(e=>!isAusgetreten(e.id));
+  const weg=emps.filter(e=>isAusgetreten(e.id));
+  sel.innerHTML='<option value="">— Mitarbeiter wählen —</option>'
+    +aktiv.map(e=>'<option value="'+e.id+'">'+e.name+'</option>').join('')
+    +weg.map(e=>'<option value="'+e.id+'">'+e.name+' (ausgetreten)</option>').join('');
+  if(prev)sel.value=prev;
   const mi=$('mrMonth');if(mi&&!mi.value){const now=new Date();mi.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')}
 }
 
@@ -4873,6 +4924,7 @@ function addHoliday(){
   $('holNewDate').value='';$('holNewName').value='';
   renderHolidayAdmin();
   toast('Feiertag hinzugef\u00fcgt','success');
+  recalcAbsenceDaysAfterHolidayChange();
 }
 
 function removeHoliday(dk){
@@ -4888,6 +4940,7 @@ function removeHoliday(dk){
   renderHolidayAdmin();
   if(typeof refreshView==='function')refreshView();
   toast('Feiertag entfernt – nicht vergessen: 💾 SP speichern','info');
+  recalcAbsenceDaysAfterHolidayChange();
 }
 
 // Einzelnen entfernten Standard-Feiertag zurueckholen (Tombstone loeschen)
@@ -4899,6 +4952,7 @@ function restoreHoliday(dk){
   renderHolidayAdmin();
   if(typeof refreshView==='function')refreshView();
   toast('Feiertag zurückgeholt – nicht vergessen: 💾 SP speichern','success');
+  recalcAbsenceDaysAfterHolidayChange();
 }
 
 // Standard-Feiertage des Jahres wiederherstellen (verwirft Anpassungen dieses Jahres)
@@ -4910,6 +4964,7 @@ function resetHolidays(yr){
   renderHolidayAdmin();
   if(typeof refreshView==='function')refreshView();
   toast('Standard-Feiertage wiederhergestellt – nicht vergessen: 💾 SP speichern','success');
+  recalcAbsenceDaysAfterHolidayChange();
 }
 
 function exportHolidaysCSV(){
@@ -4955,6 +5010,7 @@ function importHolidaysCSV(input){
     localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
     renderHolidayAdmin();
     toast(count+' Feiertage importiert','success');
+    recalcAbsenceDaysAfterHolidayChange();
   };
   reader.readAsText(file,'UTF-8');
   input.value='';
@@ -4974,6 +5030,14 @@ async function loadHolidaysFromSP(){
     if(data&&typeof data==='object'){
       _customHolidays=data;
       localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(data));
+      // Absenzen, die noch mit alten Feiertagen berechnet wurden, einmalig nachziehen.
+      // Nur Admin und nur wenn die MA-Einstellungen (Arbeitstage) vorliegen, sonst
+      // wuerde mit falschen Arbeitstagen gerechnet.
+      if(!window._absDaysHealed&&user&&user.admin&&Object.keys(getEmpSettings()).length){
+        window._absDaysHealed=true;
+        const ch=recalcAbsenceDays();
+        if(ch.length)toast(ch.length+' Absenz'+(ch.length>1?'en':'')+' an geänderte Feiertage angepasst','info');
+      }
     }
   }catch{}
 }
