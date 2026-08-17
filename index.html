@@ -2391,6 +2391,87 @@ function getReportDateRange(){
   return{from:dateKey(from),to:dateKey(to),fromD:from,toD:to}
 }
 
+// ── FERIEN-NACHWEIS ────────────────────────────────────────────────────────────
+// Einzelaufstellung aller Ferien-Antraege im Zeitraum inkl. Status und dem Abzug,
+// der daraus tatsaechlich resultiert. Nur genehmigte Antraege reduzieren das Guthaben.
+function buildFerienNachweis(empId,range,absences,anspruch,vortrag,bfDays){
+  const today=dateKey(new Date());
+  const ferienAbs=absences.filter(a=>a.type==='Ferien').slice().sort((a,b)=>a.from.localeCompare(b.from));
+  const bfDetail=getBetriebsferienDetail(empId,range.from,range.to);
+  // Antraege, die den Zeitraum nur teilweise ueberlappen, gehen nicht in die Summen ein – separat ausweisen
+  const rand=getAllAbsences().filter(a=>a.employeeId===empId&&a.type==='Ferien'&&a.from<=range.to&&a.to>=range.from&&!(a.from>=range.from&&a.to<=range.to)).sort((a,b)=>a.from.localeCompare(b.from));
+  const durLbl={full:'ganzer Tag',morning:'Vormittag',afternoon:'Nachmittag'};
+  const stat={approved:{t:'Genehmigt',c:'var(--success)'},pending:{t:'Pendent',c:'var(--warning)'},rejected:{t:'Abgelehnt',c:'var(--danger)'}};
+  const sumBy=k=>Math.round(ferienAbs.filter(a=>a.status===k).reduce((s,a)=>s+(a.days||0),0)*10)/10;
+  const bezogen=sumBy('approved'),pendent=sumBy('pending'),abgelehnt=sumBy('rejected');
+  const genommen=Math.round(ferienAbs.filter(a=>a.status==='approved'&&a.to<today).reduce((s,a)=>s+(a.days||0),0)*10)/10;
+  const geplant=Math.round((bezogen-genommen)*10)/10;
+  const total=Math.round((anspruch+vortrag)*10)/10;
+  const rest=Math.round((total-bezogen-bfDays)*10)/10;
+  const row=(l,v,c,bold)=>'<div style="display:flex;justify-content:space-between;padding:3px 0'+(bold?';border-top:1px solid var(--border);margin-top:4px;font-weight:700':'')+'"><span>'+l+'</span><strong'+(c?' style="color:'+c+'"':'')+'>'+v+'</strong></div>';
+
+  let h='<div style="background:var(--bg-surface);border-radius:8px;padding:12px;margin-bottom:12px;font-size:.82rem">';
+  h+='<div style="font-weight:600;margin-bottom:8px">🏖️ Ferien-Nachweis '+fmtDate(range.from)+' – '+fmtDate(range.to)+'</div>';
+  h+=row('Anspruch '+range.from.substring(0,4)+':','+'+anspruch+' Tage');
+  if(vortrag)h+=row('Vortrag aus Vorjahr:',(vortrag>=0?'+':'')+vortrag+' Tage','var(--success)');
+  h+=row('Total verfügbar:',total+' Tage',null,true);
+  h+=row('− Bezogen (genehmigt):','−'+bezogen+' Tage','var(--danger)');
+  if(bfDays>0)h+=row('− Betriebsferien:','−'+bfDays+' Tage','var(--danger)');
+  h+=row('= Restanspruch:',(rest>=0?'':'')+rest+' Tage',rest>=0?'var(--accent)':'var(--danger)',true);
+  if(pendent>0)h+='<div style="font-size:.75rem;color:var(--warning);margin-top:6px">⚠️ '+pendent+' Tage sind pendent und noch <strong>nicht</strong> abgezogen – nach Freigabe sinkt der Rest auf '+(Math.round((rest-pendent)*10)/10)+' Tage.</div>';
+  if(abgelehnt>0)h+='<div style="font-size:.75rem;color:var(--text-dim);margin-top:4px">'+abgelehnt+' Tage abgelehnt – werden nicht abgezogen.</div>';
+
+  // Einzelaufstellung
+  if(ferienAbs.length){
+    h+='<div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin:12px 0 6px">Einzelaufstellung</div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.78rem"><thead><tr style="color:var(--text-dim)">'
+      +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Zeitraum</th>'
+      +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Dauer</th>'
+      +'<th style="text-align:right;padding:4px;border-bottom:1px solid var(--border)">Tage</th>'
+      +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Status</th>'
+      +'<th style="text-align:right;padding:4px;border-bottom:1px solid var(--border)">Abzug</th>'
+      +'<th style="text-align:left;padding:4px;border-bottom:1px solid var(--border)">Bemerkung</th></tr></thead><tbody>';
+    ferienAbs.forEach(a=>{
+      const st=stat[a.status]||{t:a.status||'?',c:'var(--text-dim)'};
+      const zeit=a.from===a.to?fmtDate(a.from):fmtDate(a.from)+' – '+fmtDate(a.to);
+      const wann=a.to<today?'bereits bezogen':(a.from>today?'geplant':'läuft aktuell');
+      const abzug=a.status==='approved'?'−'+(a.days||0):'0';
+      const dim=a.status==='rejected';
+      h+='<tr style="'+(dim?'opacity:.55;':'')+'">'
+        +'<td style="padding:4px;border-bottom:1px solid var(--border);white-space:nowrap'+(dim?';text-decoration:line-through':'')+'">'+zeit+'</td>'
+        +'<td style="padding:4px;border-bottom:1px solid var(--border)">'+(durLbl[a.duration]||a.duration||'')+'</td>'
+        +'<td style="padding:4px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--font-mono)">'+(a.days||0)+'</td>'
+        +'<td style="padding:4px;border-bottom:1px solid var(--border)"><span style="background:'+st.c+';color:#fff;padding:1px 6px;border-radius:4px;font-size:.7rem">'+st.t+'</span></td>'
+        +'<td style="padding:4px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--font-mono);color:'+(a.status==='approved'?'var(--danger)':'var(--text-dim)')+'">'+abzug+'</td>'
+        +'<td style="padding:4px;border-bottom:1px solid var(--border);color:var(--text-dim)">'+(a.status==='approved'?wann:'—')+(a.note?' · '+a.note:'')+'</td></tr>';
+    });
+    h+='<tr style="font-weight:700"><td style="padding:5px 4px" colspan="2">Total abgezogen</td>'
+      +'<td style="padding:5px 4px;text-align:right;font-family:var(--font-mono)">'+Math.round((bezogen+pendent+abgelehnt)*10)/10+'</td><td></td>'
+      +'<td style="padding:5px 4px;text-align:right;font-family:var(--font-mono);color:var(--danger)">−'+bezogen+'</td>'
+      +'<td style="padding:5px 4px;color:var(--text-dim);font-weight:400;font-size:.72rem">davon '+genommen+' bezogen, '+geplant+' noch geplant</td></tr>';
+    h+='</tbody></table></div>';
+  }else{
+    h+='<div style="font-size:.78rem;color:var(--text-dim);font-style:italic;margin-top:8px">Keine Ferien-Anträge im Zeitraum</div>';
+  }
+
+  // Betriebsferien-Aufschluesselung
+  if(bfDetail.length){
+    h+='<div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin:12px 0 6px">🏢 Betriebsferien</div>';
+    bfDetail.forEach(b=>{
+      h+='<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>'+b.label+(b.type?' ('+b.type+')':'')+' · <span style="color:var(--text-dim)">'+fmtDate(b.from)+' – '+fmtDate(b.to)+'</span>'+(b.gearbeitet?' <span style="color:var(--text-dim);font-size:.72rem">· '+b.gearbeitet+' Tage gearbeitet, kein Abzug</span>':'')+'</span><strong style="font-family:var(--font-mono);color:'+(b.days?'var(--danger)':'var(--text-dim)')+'">'+(b.days?'−'+b.days:'0')+'</strong></div>';
+    });
+  }
+
+  // Antraege ueber die Zeitraumgrenze
+  if(rand.length){
+    h+='<div style="font-size:.75rem;color:var(--warning);margin-top:10px">⚠️ Nicht in obigen Summen enthalten, weil der Antrag über den gewählten Zeitraum hinausgeht:';
+    rand.forEach(a=>{h+='<div style="color:var(--text-dim);padding-left:14px">· '+fmtDate(a.from)+' – '+fmtDate(a.to)+' · '+(a.days||0)+' Tage · '+((stat[a.status]||{}).t||a.status)+'</div>'});
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
 function generateReport(){
   const selEmp=$('reportEmp').value;
   const range=getReportDateRange();
@@ -2447,6 +2528,8 @@ function generateReport(){
     if(_ot.kompH>0)html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Kompensation ('+_ot.kompDays+' Tage):</span><strong style="color:var(--danger)">-'+_ot.kompH+'h</strong></div>';
     html+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700"><span>Guthaben:</span><strong style="color:'+(_ot.guthaben>=0?'var(--success)':'var(--danger)')+'">'+(_ot.guthaben>=0?'+':'')+_ot.guthaben+'h</strong></div>';
     html+='</div>';
+    // Ferien-Nachweis mit Einzelaufstellung (Nachverfolgung fuers Qualifikationsgespraech)
+    html+=buildFerienNachweis(emp.id,range,absences,ferienAnspruch,_vtRp.ferien,bfDays);
     // KS breakdown
     if(Object.keys(ksBrk).length){html+='<div style="margin-bottom:12px"><div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Kostenstellen</div>';Object.entries(ksBrk).sort((a,b)=>b[1]-a[1]).forEach(([k,m])=>{const pct=totalMin>0?Math.round(m/totalMin*100):0;html+='<div class="stat-bar-item"><div class="stat-bar-label">'+k+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+({"B\u00fcro":"#3b82f6","Zuschnitt":"#8b5cf6","BAZ":"#06b6d4","Werkstatt":"#22c55e","Montage":"#FF6B35"}[k]||"#666")+'"></div></div><div class="stat-bar-value">'+(Math.round(m/6)/10)+'h</div></div>'});html+='</div>'}
     // Top projects
@@ -3530,18 +3613,20 @@ function isBetriebsferien(dateStr){
   return bf.find(b=>dateStr>=b.from&&dateStr<=b.to)||null;
 }
 
-// Count Betriebsferien-days consumed (where MA did NOT work)
-function countBetriebsferienDays(empId,from,to){
+// Betriebsferien pro Zeitraum aufschluesseln: wie viele Tage verbraucht wurden und an wie vielen
+// der MA trotzdem gearbeitet hat. Basis fuer countBetriebsferienDays und den Ferien-Nachweis.
+function getBetriebsferienDetail(empId,from,to){
   const bf=getBetriebsferien();
   const entries=getEntriesForEmployee(empId,from,to);
   const entryDates=new Set(entries.map(e=>e.date));
   const empS=getEmpSetting(empId);
   const eintritt=empS.eintritt||null;
   const austritt=empS.austritt||null;
-  let count=0;
+  const out=[];
   bf.forEach(b=>{
     const bFrom=b.from<from?from:b.from;
     const bTo=b.to>to?to:b.to;
+    let days=0,gearbeitet=0;
     const d=new Date(bFrom);const end=new Date(bTo);
     while(d<=end){
       const dk=dateKey(d);
@@ -3549,15 +3634,21 @@ function countBetriebsferienDays(empId,from,to){
       // Skip days outside employment period
       if(eintritt&&dk<eintritt){d.setDate(d.getDate()+1);continue}
       if(austritt&&dk>austritt){d.setDate(d.getDate()+1);continue}
-      if(getArbeitsTageFor(empS,dk).includes(dow)&&!entryDates.has(dk)){
+      if(getArbeitsTageFor(empS,dk).includes(dow)){
         // Skip Feiertage - they don't count as BF days
         const hol=getHolidays(d.getFullYear());
-        if(!hol[dk])count++;
+        if(!hol[dk]){if(entryDates.has(dk))gearbeitet++;else days++}
       }
       d.setDate(d.getDate()+1);
     }
+    if(days>0||gearbeitet>0)out.push({label:b.label||'Betriebsferien',type:b.type||'',from:bFrom,to:bTo,days:days,gearbeitet:gearbeitet});
   });
-  return count;
+  return out;
+}
+
+// Count Betriebsferien-days consumed (where MA did NOT work)
+function countBetriebsferienDays(empId,from,to){
+  return getBetriebsferienDetail(empId,from,to).reduce((s,b)=>s+b.days,0);
 }
 
 // Load from SharePoint
