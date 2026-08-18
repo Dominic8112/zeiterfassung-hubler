@@ -1094,7 +1094,7 @@ async function afterMsalLogin(){
       user={...emp};
       localStorage.setItem(C.LS+'session',JSON.stringify(user));
       console.log('[Auth] Angemeldet als:',emp.name);
-      showApp();syncWithRetry();
+      safeCall(showApp,'showApp');syncWithRetry();
     }else{
       console.warn('[Auth] Email nicht gefunden:',email,'Name:',profile.displayName);
       toast('Benutzer nicht gefunden: '+email+' ('+profile.displayName+'). Bitte Admin kontaktieren.','error');
@@ -1156,7 +1156,7 @@ function initLogin(){
     while(typeof msal==='undefined'&&msalWait<50){await new Promise(r=>setTimeout(r,100));msalWait++}
     if(typeof msal==='undefined'){console.warn('[Auth] MSAL nicht geladen');
       // Fallback: try session restore without MSAL
-      const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);showApp();setSyncStatus('offline');showOfflineBanner('MSAL nicht geladen \u2013 bitte Seite neu laden')}catch{}}
+      const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);safeCall(showApp,'showApp');setSyncStatus('offline');showOfflineBanner('MSAL nicht geladen \u2013 bitte Seite neu laden')}catch{}}
       return;
     }
     msalApp=new msal.PublicClientApplication(MSAL_CFG);
@@ -1172,7 +1172,7 @@ function initLogin(){
         await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});
         // Restore user from localStorage if available
         const saved=localStorage.getItem(C.LS+'session');
-        if(saved){try{user=JSON.parse(saved);showApp();syncWithRetry()}catch{await afterMsalLogin()}}
+        if(saved){try{user=JSON.parse(saved);safeCall(showApp,'showApp');syncWithRetry()}catch{await afterMsalLogin()}}
         else{await afterMsalLogin()}
       }catch(e){
         console.warn('[Auth] Silent token fehlgeschlagen:',e.message);
@@ -1185,7 +1185,7 @@ function initLogin(){
   const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
 }
 function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';updateTimerDate();refreshView();checkRecovery();calMonth=new Date().getMonth();calYear=new Date().getFullYear();updateMonthCalendar();renderProjectList();setSyncStatus(accessToken?'syncing':'local');if(user.admin){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()}if(canViewReports())renderReportTab();if(canViewReports())initMonatsrapport();if(canViewReports()){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'};initProdEmpFilter()}checkNotifications();renderAbsences();updateAbsPreview();initMyNotif();initAbsCalendar();setTimeout(initTimerSync,3000)}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';safeCall(updateTimerDate,'timerDate');safeCall(refreshView,'view');safeCall(checkRecovery,'recovery');calMonth=new Date().getMonth();calYear=new Date().getFullYear();safeCall(updateMonthCalendar,'calendar');safeCall(renderProjectList,'projects');setSyncStatus(accessToken?'syncing':'local');if(user.admin)safeCall(function(){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()},'admin');if(canViewReports())safeCall(renderReportTab,'reportTab');if(canViewReports())safeCall(initMonatsrapport,'monatsrapport');if(canViewReports())safeCall(function(){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'};initProdEmpFilter()},'prod');safeCall(checkNotifications,'notif');safeCall(renderAbsences,'absences');safeCall(updateAbsPreview,'absPreview');safeCall(initMyNotif,'myNotif');safeCall(initAbsCalendar,'absCalendar');setTimeout(function(){safeCall(initTimerSync,'timerSync')},3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -1592,22 +1592,27 @@ function loadNotifUI(){
   if($('notifOverflowOn'))$('notifOverflowOn').value=s.overflowOn!==false?'1':'0';
   updateNotifStatus();
 }
-function updateNotifStatus(){const el=$('notifStatus');if(!el)return;if(!('Notification' in window)){el.textContent='Browser unterst\u00fctzt keine Benachrichtigungen';return}if(Notification.permission==='granted')el.textContent='Aktiviert';else if(Notification.permission==='denied')el.textContent='Blockiert - bitte in Browser-Einstellungen erlauben';else el.textContent='Noch nicht aktiviert'}
+function updateNotifStatus(){const el=$('notifStatus');if(!el)return;if(!notifSupported()){el.textContent=isIOSNoPWA()?'Auf dem iPhone nur möglich, wenn die App über Teilen → Zum Home-Bildschirm installiert wird':'Browser unterstützt keine Benachrichtigungen';return}if(notifPerm()==='granted')el.textContent='Aktiviert';else if(notifPerm()==='denied')el.textContent='Blockiert - bitte in Browser-Einstellungen erlauben';else el.textContent='Noch nicht aktiviert'}
+// iOS Safari (ausserhalb installierter PWA) kennt "Notification" gar nicht -> nie direkt darauf zugreifen
+function isIOSNoPWA(){try{var ua=navigator.userAgent||'';var isIOS=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);var standalone=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);return isIOS&&!standalone}catch(e){return false}}
+function notifSupported(){try{return typeof Notification!=='undefined'&&typeof Notification.requestPermission==='function'}catch(e){return false}}
+function notifPerm(){try{return typeof Notification==='undefined'?'unsupported':Notification.permission}catch(e){return 'unsupported'}}
+function safeCall(fn,label){try{fn()}catch(e){console.error('[Init] '+(label||'')+':',e)}}
 const _notifCooldown={};
 function showNotif(title,body,tag){
-  if(Notification.permission!=='granted')return;
+  if(notifPerm()!=='granted')return;
   const key=tag||title;
   if(_notifCooldown[key]&&Date.now()-_notifCooldown[key]<1800000)return; // 30 min cooldown
   _notifCooldown[key]=Date.now();
   try{const n=new Notification(title,{body:body,tag:key,requireInteraction:false});n.onclick=function(){window.focus();n.close()};setTimeout(()=>n.close(),15000)}catch(e){console.warn('Notif:',e)}
 }
-$('notifEnableBtn').onclick=async function(){if(!('Notification' in window)){toast('Browser unterst\u00fctzt keine Benachrichtigungen','error');return}const perm=await Notification.requestPermission();if(perm==='granted'){toast('Benachrichtigungen aktiviert','success');updateNotifStatus();showNotif('Hubler Zeiterfassung','Benachrichtigungen sind jetzt aktiv!')}else{toast('Berechtigung abgelehnt','warning');updateNotifStatus()}};
-$('notifTestBtn').onclick=function(){if(Notification.permission!=='granted'){toast('Bitte zuerst aktivieren','warning');return}showNotif('Test-Benachrichtigung','Push-Notifications funktionieren!')};
+$('notifEnableBtn').onclick=async function(){if(!notifSupported()){toast(isIOSNoPWA()?'Auf dem iPhone nur möglich, wenn die App über Teilen → Zum Home-Bildschirm installiert wird':'Browser unterstützt keine Benachrichtigungen','error');return}const perm=await Notification.requestPermission();if(perm==='granted'){toast('Benachrichtigungen aktiviert','success');updateNotifStatus();showNotif('Hubler Zeiterfassung','Benachrichtigungen sind jetzt aktiv!')}else{toast('Berechtigung abgelehnt','warning');updateNotifStatus()}};
+$('notifTestBtn').onclick=function(){if(notifPerm()!=='granted'){toast(notifSupported()?'Bitte zuerst aktivieren':'Dieser Browser kann keine Benachrichtigungen anzeigen','warning');return}showNotif('Test-Benachrichtigung','Push-Notifications funktionieren!')};
 $('notifSaveBtn').onclick=function(){const s={morning:$('notifMorning').value,morningOn:$('notifMorningOn').value==='1',lunch:$('notifLunch').value,lunchOn:$('notifLunchOn').value==='1',eveningMoDo:$('notifEveningMoDo').value,eveningOn:$('notifEveningOn').value==='1',eveningFr:$('notifEveningFr').value,fridayOn:$('notifFridayOn').value==='1',overflowH:parseInt($('notifOverflow').value)||10,overflowOn:$('notifOverflowOn').value==='1'};saveNotifSettings(s);toast('Einstellungen gespeichert','success')};
 
 let notifFiredToday={};
 function checkNotifications(){
-  if(!user||Notification.permission!=='granted')return;
+  if(!user||notifPerm()!=='granted')return;
   const s=getNotifSettings();const now=new Date();const day=now.getDay();
   const hhmm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   const todayStr=todayKey();const isFri=day===5;const isWeekday=day>=1&&day<=5;
@@ -4287,19 +4292,19 @@ function initMyNotif(){
 
 function updateMyNotifStatus(){
   const el=$('myNotifStatus');if(!el)return;
-  if(!('Notification' in window)){el.textContent='Nicht unterst\u00fctzt';return}
-  el.textContent=Notification.permission==='granted'?'\u2705 Aktiviert':Notification.permission==='denied'?'\u274C Blockiert':'\u23F3 Noch nicht aktiviert';
+  if(!notifSupported()){el.textContent=isIOSNoPWA()?'Auf dem iPhone nur möglich, wenn die App über Teilen → Zum Home-Bildschirm installiert wird':'Browser unterstützt keine Benachrichtigungen';return}
+  el.textContent=notifPerm()==='granted'?'\u2705 Aktiviert':notifPerm()==='denied'?'\u274C Blockiert':'\u23F3 Noch nicht aktiviert';
 }
 
 if($('myNotifEnableBtn'))$('myNotifEnableBtn').onclick=async function(){
-  if(!('Notification' in window)){toast('Browser unterst\u00fctzt keine Benachrichtigungen','error');return}
+  if(!notifSupported()){toast(isIOSNoPWA()?'Auf dem iPhone nur möglich, wenn die App über Teilen → Zum Home-Bildschirm installiert wird':'Browser unterstützt keine Benachrichtigungen','error');return}
   const perm=await Notification.requestPermission();
   if(perm==='granted'){toast('Benachrichtigungen aktiviert!','success');updateMyNotifStatus();showNotif('Hubler Zeiterfassung','Benachrichtigungen aktiv!')}
   else{toast('Berechtigung abgelehnt','warning');updateMyNotifStatus()}
 };
 
 if($('myNotifTestBtn'))$('myNotifTestBtn').onclick=function(){
-  if(Notification.permission!=='granted'){toast('Zuerst aktivieren','warning');return}
+  if(notifPerm()!=='granted'){toast(notifSupported()?'Zuerst aktivieren':'Dieser Browser kann keine Benachrichtigungen anzeigen','warning');return}
   showNotif('Test','Benachrichtigungen funktionieren! \uD83D\uDE80');
 };
 
@@ -4316,7 +4321,7 @@ if($('myNotifSaveBtn'))$('myNotifSaveBtn').onclick=function(){
 
 // Personal notification check (runs every minute)
 function checkMyNotifications(){
-  if(Notification.permission!=='granted'||!user)return;
+  if(notifPerm()!=='granted'||!user)return;
   const s=getMyNotifSettings();
   const now=new Date();
   const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
