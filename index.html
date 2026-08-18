@@ -809,6 +809,72 @@ let user=null,accessToken=null,projects=[...PROJECTS_DATA];
 // MSAL Auth
 const MSAL_CFG={auth:{clientId:C.CLIENT_ID,authority:'https://login.microsoftonline.com/'+C.TENANT_ID,redirectUri:window.location.origin+window.location.pathname},cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}};
 const GRAPH_SCOPES=['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All'];
+// ===== Diagnose-Log (Fehlersuche auf Geraeten ohne Konsole, z.B. iPhone) =====
+var _diag=[];
+function logDiag(tag,msg){
+  try{
+    var t=new Date().toTimeString().slice(0,8);
+    var txt=(msg&&msg.message)?msg.message:(typeof msg==='string'?msg:JSON.stringify(msg));
+    _diag.push(t+' ['+tag+'] '+txt);
+    if(_diag.length>40)_diag.shift();
+    console.warn('[Diag] '+tag+':',msg);
+  }catch(e){}
+}
+window.addEventListener('error',function(e){logDiag('js-error',(e.message||'')+' @'+String(e.filename||'').split('/').pop()+':'+e.lineno)});
+window.addEventListener('unhandledrejection',function(e){logDiag('promise',(e.reason&&e.reason.message)||String(e.reason))});
+function _lsBytes(){try{var n=0;for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length}return Math.round(n/1024)+' KB'}catch(e){return 'n/a'}}
+function diagText(){
+  var L=[];
+  L.push('Zeit: '+new Date().toLocaleString('de-CH'));
+  L.push('URL: '+location.href);
+  L.push('Browser: '+navigator.userAgent);
+  L.push('Home-Screen-App: '+(isIOSNoPWA()?'nein (Safari-Tab)':'ja/kein iOS'));
+  L.push('Online-Flag: '+navigator.onLine);
+  L.push('MSAL geladen: '+(typeof msal!=='undefined'));
+  L.push('MSAL-Konto: '+(msalAccount?(msalAccount.username||'ja'):'KEINES'));
+  L.push('Access-Token: '+(accessToken?('ja ('+accessToken.length+' Zeichen)'):'NEIN'));
+  L.push('Drive-ID: '+(SP._driveId||localStorage.getItem(C.LS+'sp_driveId')||'KEINE'));
+  L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
+  L.push('Sync-Status: '+_syncStatus);
+  L.push('localStorage: '+_lsBytes());
+  L.push('');
+  L.push('--- Letzte Meldungen ---');
+  L.push(_diag.length?_diag.join('\n'):'(keine)');
+  return L.join('\n');
+}
+function showDiag(){
+  var old=document.getElementById('diagOverlay');
+  if(old)old.remove();
+  var o=document.createElement('div');
+  o.id='diagOverlay';
+  o.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--card,#fff);color:var(--text,#111);border-radius:12px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+  var head=document.createElement('div');
+  head.style.cssText='padding:12px 16px;font-weight:600;border-bottom:1px solid var(--border,#ddd)';
+  head.textContent='Verbindungs-Diagnose';
+  var pre=document.createElement('textarea');
+  pre.readOnly=true;
+  pre.value=diagText();
+  pre.style.cssText='flex:1;min-height:280px;border:none;outline:none;resize:none;padding:12px 16px;font-family:ui-monospace,monospace;font-size:.72rem;line-height:1.45;background:transparent;color:inherit;white-space:pre;overflow:auto';
+  var foot=document.createElement('div');
+  foot.style.cssText='padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border,#ddd);flex-wrap:wrap';
+  var bCopy=document.createElement('button');
+  bCopy.className='btn btn-secondary btn-sm';bCopy.textContent='Kopieren';
+  bCopy.onclick=function(){try{pre.readOnly=false;pre.select();pre.setSelectionRange(0,999999);document.execCommand('copy');pre.readOnly=true;if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(pre.value);toast('Diagnose kopiert','success')}catch(e){toast('Bitte Text markieren und kopieren','warning')}};
+  var bRetry=document.createElement('button');
+  bRetry.className='btn btn-secondary btn-sm';bRetry.textContent='Nochmal verbinden';
+  bRetry.onclick=function(){o.remove();reconnectNow()};
+  var bClose=document.createElement('button');
+  bClose.className='btn btn-sm';bClose.textContent='Schliessen';
+  bClose.onclick=function(){o.remove()};
+  foot.appendChild(bCopy);foot.appendChild(bRetry);foot.appendChild(bClose);
+  box.appendChild(head);box.appendChild(pre);box.appendChild(foot);
+  o.appendChild(box);
+  o.onclick=function(e){if(e.target===o)o.remove()};
+  document.body.appendChild(o);
+}
+
 let msalApp=null,msalAccount=null;
 const isMobile=/iPhone|iPod|Android/i.test(navigator.userAgent)||(/iPad/i.test(navigator.userAgent))||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,project:'',ks:'',note:'',segments:[]};
@@ -929,18 +995,18 @@ const SP={
       try{
         const search=await this.gf('/sites?search=HublerMetallbauDatenablage');
         if(search&&search.value&&search.value.length>0)site=search.value[0];
-      }catch(e){console.warn('[SP] Search failed:',e.message)}
+      }catch(e){logDiag('site-search',e)}
       // Method 2: Try direct site access by hostname
       if(!site){
         try{
           site=await this.gf('/sites/hublermetallbau.sharepoint.com:/sites/HublerMetallbauDatenablage');
-        }catch(e){console.warn('[SP] Direct site failed:',e.message)}
+        }catch(e){logDiag('site-direkt',e)}
       }
       // Method 3: Try root site
       if(!site){
         try{
           site=await this.gf('/sites/hublermetallbau.sharepoint.com');
-        }catch(e){console.warn('[SP] Root site failed:',e.message)}
+        }catch(e){logDiag('site-root',e)}
       }
       if(site){
         console.log('[SP] Site gefunden:',site.displayName||site.name,'ID:',site.id);
@@ -956,20 +1022,20 @@ const SP={
       console.warn('[SP] Site nicht gefunden - SharePoint nicht verf\u00fcgbar');
       setSyncStatus('offline');
       return null;
-    }catch(e){console.error('[SP] getDriveId:',e);setSyncStatus('offline');return null}
+    }catch(e){logDiag('getDriveId',e);setSyncStatus('offline');return null}
   },
   async getToken(){
     if(!msalApp||!msalAccount)return null;
-    try{const r=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});accessToken=r.accessToken;return r.accessToken}catch(e){
+    try{const r=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});accessToken=r.accessToken;return r.accessToken}catch(e){logDiag('token-silent',e);
       try{
         await msalApp.acquireTokenRedirect({scopes:GRAPH_SCOPES});
         return null; // will redirect
-      }catch(e2){console.warn('[Auth] Token-Beschaffung fehlgeschlagen:',e2.message);showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden');return null}
+      }catch(e2){logDiag('token',e2);showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden');return null}
     }
   },
-  async gf(ep,opts){const token=await this.getToken();if(!token)return null;const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){console.warn('[SP] Zugriff verweigert ('+resp.status+') f\u00fcr:',ep);throw new Error('Kein Zugriff ('+resp.status+')')}throw new Error('Graph '+resp.status)}return resp.json()},
-  async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){console.warn('SP read:',e);return null}},
-  async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const token=await this.getToken();if(!token)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){console.warn('SP write:',e);return false}},
+  async gf(ep,opts){const token=await this.getToken();if(!token){logDiag('graph','kein Token fuer '+ep);return null}const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){logDiag('graph','Zugriff verweigert '+resp.status+' bei '+ep);throw new Error('Kein Zugriff ('+resp.status+')')}{logDiag('graph',resp.status+' bei '+ep);throw new Error('Graph '+resp.status)}}return resp.json()},
+  async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){logDiag('read '+path,e);return null}},
+  async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const token=await this.getToken();if(!token)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){logDiag('write '+path,e);return false}},
   async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){
@@ -1002,7 +1068,51 @@ const SP={
       return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getRawEntries()});
     }
   },
-  async fullSync(){if(!msalAccount&&!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{console.log('[SP] Full sync...');const driveId=await this.getDriveId();if(!driveId){console.warn('[SP] Kein Drive - nur lokal');setSyncStatus('offline');toast('SharePoint nicht erreichbar - Daten werden lokal gespeichert','warning');return}const p=await this.loadProjects();if(!p)console.log('[SP] Keine projekte.json - lokale Projekte');const e=await this.loadEntries();if(!e)console.log('[SP] Keine Eintr\u00e4ge - erste Nutzung');const s=await this.saveEntries();console.log('[SP] Eintr\u00e4ge gespeichert:',s);setSyncStatus('online');toast('SharePoint verbunden','success');loadNotifSettingsFromSP();loadAbsencesFromSP().then(()=>syncAbsToSP());loadEmpSettingsFromSP();loadBetriebsferienFromSP();loadHolidaysFromSP();loadOvertimePayoutsFromSP();loadEmployeesFromSP();if(user&&(user.admin||user.approver))loadAllEntriesFromSP()}catch(e){console.error('[SP] Sync:',e);setSyncStatus('offline');toast('SharePoint-Sync fehlgeschlagen - Daten bleiben lokal gesichert','warning')}}
+  async fullSync(){
+    if(!msalAccount&&!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}
+    setSyncStatus('syncing');
+    logDiag('sync','Start');
+    let driveId=null;
+    try{driveId=await this.getDriveId()}catch(e){logDiag('getDriveId',e)}
+    if(!driveId){
+      logDiag('sync','Keine Drive-ID - nur lokal');
+      setSyncStatus('offline');
+      toast('SharePoint nicht erreichbar - Daten bleiben lokal gesichert','warning');
+      showOfflineBanner('SharePoint nicht erreichbar - auf Status tippen fuer Details');
+      return;
+    }
+    let coreErr=null;
+    const step=async function(name,fn){try{return await fn()}catch(e){logDiag(name,e);return e}};
+    const r1=await step('projekte',()=>this.loadProjects());
+    if(r1 instanceof Error&&!coreErr)coreErr='Projekte: '+r1.message;
+    const r2=await step('eintraege-laden',()=>this.loadEntries());
+    if(r2 instanceof Error&&!coreErr)coreErr='Eintraege laden: '+r2.message;
+    const r3=await step('eintraege-speichern',()=>this.saveEntries());
+    if(r3 instanceof Error&&!coreErr)coreErr='Eintraege speichern: '+r3.message;
+    else if(r3===false&&!coreErr)coreErr='SharePoint hat das Speichern abgelehnt';
+    // Zusatzdaten parallel, Fehler hier blockieren den Sync nicht
+    await Promise.all([
+      step('notif-settings',()=>loadNotifSettingsFromSP()),
+      step('absenzen',()=>loadAbsencesFromSP().then(()=>syncAbsToSP())),
+      step('emp-settings',()=>loadEmpSettingsFromSP()),
+      step('betriebsferien',()=>loadBetriebsferienFromSP()),
+      step('feiertage',()=>loadHolidaysFromSP()),
+      step('auszahlungen',()=>loadOvertimePayoutsFromSP()),
+      step('mitarbeiter',()=>loadEmployeesFromSP()),
+      (user&&(user.admin||user.approver))?step('alle-eintraege',()=>loadAllEntriesFromSP()):Promise.resolve()
+    ]);
+    if(coreErr){
+      logDiag('sync','Fehlgeschlagen: '+coreErr);
+      setSyncStatus('offline');
+      toast('SharePoint: '+coreErr+' - Daten bleiben lokal gesichert','warning');
+      showOfflineBanner('SharePoint-Problem - auf Status tippen fuer Details');
+    }else{
+      logDiag('sync','OK');
+      setSyncStatus('online');
+      hideOfflineBanner();
+      toast('SharePoint verbunden','success');
+    }
+  },
 };
 let _syncStatus='local';
 let _lastSyncOk=Date.now();
@@ -1149,6 +1259,8 @@ function initLogin(){
   function checkPin(){let pin='';for(let i=1;i<=5;i++){const v=$('pin'+i);if(v)pin+=v.value}const dv=$('demoUsers');if(pin===DEMO_PIN){if(dv)dv.classList.add('show')}else{if(dv)dv.classList.remove('show')}}
   setupPinInputs();
   $('msLoginBtn').onclick=msLogin;
+  if($('syncStatus')){$('syncStatus').style.cursor='pointer';$('syncStatus').title='Verbindungs-Diagnose anzeigen';$('syncStatus').onclick=showDiag}
+  if($('spStatusText')){$('spStatusText').style.cursor='pointer';$('spStatusText').onclick=showDiag}
 
   // MSAL init
   (async function(){
