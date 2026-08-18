@@ -107,7 +107,7 @@
 <div class="timer-indicator" id="timerIndicator"></div>
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-logo">⏱️</div><h1 class="login-title">Zeiterfassung</h1><p class="login-subtitle">Hubler Metallbau AG</p>
+    <div class="login-logo" onclick="try{showDiag()}catch(e){}" title="Diagnose" style="cursor:pointer">⏱️</div><h1 class="login-title">Zeiterfassung</h1><p class="login-subtitle">Hubler Metallbau AG</p>
     <button class="ms-login-btn" id="msLoginBtn"><svg viewBox="0 0 23 23"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg>Mit Microsoft anmelden</button>
     <div id="msLoginErr" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin:10px 0;font-size:.8rem;color:#f87171"></div>
     <div id="authDebug" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px;margin:12px 0;text-align:left;font-size:.75rem;color:#f87171;font-family:var(--font-mono);word-break:break-all;max-height:120px;overflow-y:auto"></div>
@@ -559,6 +559,157 @@
 <div class="toast-container" id="toasts"></div>
 
 <script>
+// ===== Diagnose-Log (Fehlersuche auf Geraeten ohne Konsole, z.B. iPhone) =====
+var _diag=[];
+function logDiag(tag,msg){
+  try{
+    var t=new Date().toTimeString().slice(0,8);
+    var txt=(msg&&msg.message)?msg.message:(typeof msg==='string'?msg:JSON.stringify(msg));
+    _diag.push(t+' ['+tag+'] '+txt);
+    if(_diag.length>40)_diag.shift();
+    console.warn('[Diag] '+tag+':',msg);
+  }catch(e){}
+}
+window.addEventListener('error',function(e){
+  logDiag('js-error',(e.message||'')+' @'+String(e.filename||'').split('/').pop()+':'+e.lineno);
+  try{var el=document.getElementById('msLoginErr');if(el&&!el.textContent){el.textContent='Fehler beim Laden: '+(e.message||'')+' - auf das Logo tippen zeigt die Diagnose.';el.style.display='block'}}catch(_){}
+});
+window.addEventListener('unhandledrejection',function(e){logDiag('promise',(e.reason&&e.reason.message)||String(e.reason))});
+function _lsBytes(){
+  try{
+    var NL=String.fromCharCode(10);
+    var n=0,list=[];
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);var v=localStorage.getItem(k)||'';n+=k.length+v.length;list.push([k,v.length])}
+    list.sort(function(a,b){return b[1]-a[1]});
+    var top=list.slice(0,6).map(function(x){return '    '+x[0]+': '+Math.round(x[1]/1024)+' KB'}).join(NL);
+    var mem=0;for(var mk in _mem)mem+=String(_mem[mk]||'').length;
+    return Math.round(n/1024)+' KB (Safari kappt bei ca. 2500 KB)'+NL+'  Nur im Arbeitsspeicher: '+Math.round(mem/1024)+' KB'+NL+'  Groesste Posten:'+NL+top;
+  }catch(e){return 'n/a'}
+}
+function diagText(){
+  var L=[];
+  L.push('Zeit: '+new Date().toLocaleString('de-CH'));
+  L.push('URL: '+location.href);
+  L.push('Browser: '+navigator.userAgent);
+  L.push('Home-Screen-App: '+(isIOSNoPWA()?'nein (Safari-Tab)':'ja/kein iOS'));
+  L.push('Online-Flag: '+navigator.onLine);
+  L.push('MSAL geladen: '+(typeof msal!=='undefined'));
+  L.push('MSAL-Konto: '+(msalAccount?(msalAccount.username||'ja'):'KEINES'));
+  L.push('Access-Token: '+(accessToken?('ja ('+accessToken.length+' Zeichen)'):'NEIN'));
+  L.push('Drive-ID: '+(SP._driveId||lsGet(C.LS+'sp_driveId')||'KEINE'));
+  L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
+  L.push('Sync-Status: '+_syncStatus);
+  L.push('localStorage: '+_lsBytes());
+  L.push('');
+  L.push('--- Letzte Meldungen ---');
+  L.push(_diag.length?_diag.join('\n'):'(keine)');
+  return L.join('\n');
+}
+function showDiag(){
+  var old=document.getElementById('diagOverlay');
+  if(old)old.remove();
+  var o=document.createElement('div');
+  o.id='diagOverlay';
+  o.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--card,#fff);color:var(--text,#111);border-radius:12px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+  var head=document.createElement('div');
+  head.style.cssText='padding:12px 16px;font-weight:600;border-bottom:1px solid var(--border,#ddd)';
+  head.textContent='Verbindungs-Diagnose';
+  var pre=document.createElement('textarea');
+  pre.readOnly=true;
+  pre.value=diagText();
+  pre.style.cssText='flex:1;min-height:280px;border:none;outline:none;resize:none;padding:12px 16px;font-family:ui-monospace,monospace;font-size:.72rem;line-height:1.45;background:transparent;color:inherit;white-space:pre;overflow:auto';
+  var foot=document.createElement('div');
+  foot.style.cssText='padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border,#ddd);flex-wrap:wrap';
+  var bCopy=document.createElement('button');
+  bCopy.className='btn btn-secondary btn-sm';bCopy.textContent='Kopieren';
+  bCopy.onclick=function(){try{pre.readOnly=false;pre.select();pre.setSelectionRange(0,999999);document.execCommand('copy');pre.readOnly=true;if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(pre.value);toast('Diagnose kopiert','success')}catch(e){toast('Bitte Text markieren und kopieren','warning')}};
+  var bRetry=document.createElement('button');
+  bRetry.className='btn btn-secondary btn-sm';bRetry.textContent='Nochmal verbinden';
+  bRetry.onclick=function(){o.remove();reconnectNow()};
+  var bClose=document.createElement('button');
+  bClose.className='btn btn-sm';bClose.textContent='Schliessen';
+  bClose.onclick=function(){o.remove()};
+  foot.appendChild(bCopy);foot.appendChild(bRetry);foot.appendChild(bClose);
+  box.appendChild(head);box.appendChild(pre);box.appendChild(foot);
+  o.appendChild(box);
+  o.onclick=function(e){if(e.target===o)o.remove()};
+  document.body.appendChild(o);
+}
+
+// ===== Speicher-Layer: localStorage mit RAM-Fallback =====
+// iOS Safari begrenzt localStorage auf ca. 5 MB (UTF-16!). Lief das voll, brach
+// frueher der ganze SharePoint-Sync ab. Jetzt: Werte liegen immer im RAM, der
+// localStorage ist nur noch die persistente Kopie - laeuft sie voll, werden
+// Cache-Daten (Eintraege anderer MA, Projektliste) verworfen statt der Sync.
+var _mem={};
+var _quotaWarned=false;
+var _cacheKeyRe=/_entries$|projects$/;
+var _noPersist={};
+function _isQuota(e){return e&&(e.name==='QuotaExceededError'||e.code===22||e.code===1014||/quota/i.test(e.message||''))}
+function _ownEntriesKey(){
+  try{
+    if(typeof user!=='undefined'&&user&&user.id)return C.LS+user.id+'_entries';
+    var s=localStorage.getItem(C.LS+'session');
+    if(s){var u=JSON.parse(s);if(u&&u.id)return C.LS+u.id+"_entries"}
+  }catch(e){}
+  return null;
+}
+function _pruneStorage(keepKey){
+  var freed=0;
+  try{
+    var own=_ownEntriesKey();
+    var kill=[];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(!k||k===keepKey||k===own)continue;
+      if(_cacheKeyRe.test(k))kill.push(k);
+    }
+    kill.forEach(function(k){var v=localStorage.getItem(k);freed+=(v||'').length;localStorage.removeItem(k)});
+    if(kill.length)logDiag('speicher','Cache verworfen: '+kill.length+' Eintraege, '+Math.round(freed/1024)+' KB frei');
+  }catch(e){}
+  return freed>0;
+}
+function lsSet(key,val,optional){
+  val=String(val);
+  if(!_mem)_mem={};
+  if(!_noPersist)_noPersist={};
+  _mem[key]=val;
+  if(_noPersist[key])return false;
+  try{localStorage.setItem(key,val);return true}catch(e){
+    if(!_isQuota(e)){logDiag('speicher',e);return false}
+    if(_pruneStorage(key)){
+      try{localStorage.setItem(key,val);return true}catch(e2){}
+    }
+    try{localStorage.removeItem(key)}catch(e3){}
+    if(optional)_noPersist[key]=true;
+    logDiag('speicher','Voll bei '+key+' ('+Math.round(String(val).length/1024)+' KB) - nur im Arbeitsspeicher');
+    if(!optional&&!_quotaWarned){
+      _quotaWarned=true;
+      if(typeof toast==='function')toast('Geraetespeicher voll - Daten liegen sicher auf SharePoint, lokal wird nur zwischengespeichert','warning');
+    }
+    return false;
+  }
+}
+// Vor dem Sync aufraeumen, wenn es eng wird (Safari kappt bei ca. 2.5 Mio Zeichen).
+// Verworfen werden nur Cache-Daten, die der naechste Sync ohnehin neu holt.
+function pruneIfTight(){
+  try{
+    var n=0;
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length}
+    if(n>1800000){logDiag('speicher','Belegung '+Math.round(n/1024)+' KB - raeume Cache auf');_pruneStorage(null)}
+  }catch(e){}
+}
+function lsGet(key){
+  if(_mem&&_mem[key]!==undefined)return _mem[key];
+  try{return localStorage.getItem(key)}catch(e){return null}
+}
+function lsDel(key){
+  if(_mem)delete _mem[key];
+  try{localStorage.removeItem(key)}catch(e){}
+}
+
 const PROJECTS_DATA=[
 {id:"AD1720",name:"Büro Allgemein",aktiv:true},
 {id:"210",name:"Loogartenstrasse 50, 8048 Zürich - Eingangstüre",aktiv:true},
@@ -809,81 +960,6 @@ let user=null,accessToken=null,projects=[...PROJECTS_DATA];
 // MSAL Auth
 const MSAL_CFG={auth:{clientId:C.CLIENT_ID,authority:'https://login.microsoftonline.com/'+C.TENANT_ID,redirectUri:window.location.origin+window.location.pathname},cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}};
 const GRAPH_SCOPES=['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All'];
-// ===== Diagnose-Log (Fehlersuche auf Geraeten ohne Konsole, z.B. iPhone) =====
-var _diag=[];
-function logDiag(tag,msg){
-  try{
-    var t=new Date().toTimeString().slice(0,8);
-    var txt=(msg&&msg.message)?msg.message:(typeof msg==='string'?msg:JSON.stringify(msg));
-    _diag.push(t+' ['+tag+'] '+txt);
-    if(_diag.length>40)_diag.shift();
-    console.warn('[Diag] '+tag+':',msg);
-  }catch(e){}
-}
-window.addEventListener('error',function(e){logDiag('js-error',(e.message||'')+' @'+String(e.filename||'').split('/').pop()+':'+e.lineno)});
-window.addEventListener('unhandledrejection',function(e){logDiag('promise',(e.reason&&e.reason.message)||String(e.reason))});
-function _lsBytes(){
-  try{
-    var NL=String.fromCharCode(10);
-    var n=0,list=[];
-    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);var v=localStorage.getItem(k)||'';n+=k.length+v.length;list.push([k,v.length])}
-    list.sort(function(a,b){return b[1]-a[1]});
-    var top=list.slice(0,6).map(function(x){return '    '+x[0]+': '+Math.round(x[1]/1024)+' KB'}).join(NL);
-    var mem=0;for(var mk in _mem)mem+=String(_mem[mk]||'').length;
-    return Math.round(n/1024)+' KB (Safari kappt bei ca. 2500 KB)'+NL+'  Nur im Arbeitsspeicher: '+Math.round(mem/1024)+' KB'+NL+'  Groesste Posten:'+NL+top;
-  }catch(e){return 'n/a'}
-}
-function diagText(){
-  var L=[];
-  L.push('Zeit: '+new Date().toLocaleString('de-CH'));
-  L.push('URL: '+location.href);
-  L.push('Browser: '+navigator.userAgent);
-  L.push('Home-Screen-App: '+(isIOSNoPWA()?'nein (Safari-Tab)':'ja/kein iOS'));
-  L.push('Online-Flag: '+navigator.onLine);
-  L.push('MSAL geladen: '+(typeof msal!=='undefined'));
-  L.push('MSAL-Konto: '+(msalAccount?(msalAccount.username||'ja'):'KEINES'));
-  L.push('Access-Token: '+(accessToken?('ja ('+accessToken.length+' Zeichen)'):'NEIN'));
-  L.push('Drive-ID: '+(SP._driveId||lsGet(C.LS+'sp_driveId')||'KEINE'));
-  L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
-  L.push('Sync-Status: '+_syncStatus);
-  L.push('localStorage: '+_lsBytes());
-  L.push('');
-  L.push('--- Letzte Meldungen ---');
-  L.push(_diag.length?_diag.join('\n'):'(keine)');
-  return L.join('\n');
-}
-function showDiag(){
-  var old=document.getElementById('diagOverlay');
-  if(old)old.remove();
-  var o=document.createElement('div');
-  o.id='diagOverlay';
-  o.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px';
-  var box=document.createElement('div');
-  box.style.cssText='background:var(--card,#fff);color:var(--text,#111);border-radius:12px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.4)';
-  var head=document.createElement('div');
-  head.style.cssText='padding:12px 16px;font-weight:600;border-bottom:1px solid var(--border,#ddd)';
-  head.textContent='Verbindungs-Diagnose';
-  var pre=document.createElement('textarea');
-  pre.readOnly=true;
-  pre.value=diagText();
-  pre.style.cssText='flex:1;min-height:280px;border:none;outline:none;resize:none;padding:12px 16px;font-family:ui-monospace,monospace;font-size:.72rem;line-height:1.45;background:transparent;color:inherit;white-space:pre;overflow:auto';
-  var foot=document.createElement('div');
-  foot.style.cssText='padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border,#ddd);flex-wrap:wrap';
-  var bCopy=document.createElement('button');
-  bCopy.className='btn btn-secondary btn-sm';bCopy.textContent='Kopieren';
-  bCopy.onclick=function(){try{pre.readOnly=false;pre.select();pre.setSelectionRange(0,999999);document.execCommand('copy');pre.readOnly=true;if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(pre.value);toast('Diagnose kopiert','success')}catch(e){toast('Bitte Text markieren und kopieren','warning')}};
-  var bRetry=document.createElement('button');
-  bRetry.className='btn btn-secondary btn-sm';bRetry.textContent='Nochmal verbinden';
-  bRetry.onclick=function(){o.remove();reconnectNow()};
-  var bClose=document.createElement('button');
-  bClose.className='btn btn-sm';bClose.textContent='Schliessen';
-  bClose.onclick=function(){o.remove()};
-  foot.appendChild(bCopy);foot.appendChild(bRetry);foot.appendChild(bClose);
-  box.appendChild(head);box.appendChild(pre);box.appendChild(foot);
-  o.appendChild(box);
-  o.onclick=function(e){if(e.target===o)o.remove()};
-  document.body.appendChild(o);
-}
 
 let msalApp=null,msalAccount=null;
 const isMobile=/iPhone|iPod|Android/i.test(navigator.userAgent)||(/iPad/i.test(navigator.userAgent))||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -980,68 +1056,6 @@ function getHolidays(y){
   return _defaultHolidays(y);
 }
 function _defaultHolidays(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1,easter=new Date(y,mo-1,da);const ad=(d2,n)=>{const r=new Date(d2);r.setDate(r.getDate()+n);return r},dk=d2=>dateKey(d2);const hol={};hol[dk(new Date(y,0,1))]='Neujahr';hol[dk(new Date(y,0,2))]='Berchtoldstag';hol[dk(ad(easter,-2))]='Karfreitag';hol[dk(ad(easter,1))]='Ostermontag';hol[dk(new Date(y,4,1))]='Tag der Arbeit';hol[dk(ad(easter,39))]='Auffahrt';hol[dk(ad(easter,50))]='Pfingstmontag';hol[dk(new Date(y,7,1))]='Bundesfeier';hol[dk(new Date(y,11,25))]='Weihnachten';hol[dk(new Date(y,11,26))]='Stephanstag';const s1=new Date(y,8,1),fm=new Date(s1);fm.setDate(1+(8-s1.getDay())%7);const ks2=new Date(fm);ks2.setDate(fm.getDate()+7);hol[dk(ks2)]='Knabenschiessen';return hol}
-
-// ===== Speicher-Layer: localStorage mit RAM-Fallback =====
-// iOS Safari begrenzt localStorage auf ca. 5 MB (UTF-16!). Lief das voll, brach
-// frueher der ganze SharePoint-Sync ab. Jetzt: Werte liegen immer im RAM, der
-// localStorage ist nur noch die persistente Kopie - laeuft sie voll, werden
-// Cache-Daten (Eintraege anderer MA, Projektliste) verworfen statt der Sync.
-var _mem={};
-var _quotaWarned=false;
-var _cacheKeyRe=/_entries$|projects$/;
-var _noPersist={};
-function _isQuota(e){return e&&(e.name==='QuotaExceededError'||e.code===22||e.code===1014||/quota/i.test(e.message||''))}
-function _pruneStorage(keepKey){
-  var freed=0;
-  try{
-    var own=(typeof user!=='undefined'&&user)?(C.LS+user.id+'_entries'):null;
-    var kill=[];
-    for(var i=0;i<localStorage.length;i++){
-      var k=localStorage.key(i);
-      if(!k||k===keepKey||k===own)continue;
-      if(_cacheKeyRe.test(k))kill.push(k);
-    }
-    kill.forEach(function(k){var v=localStorage.getItem(k);freed+=(v||'').length;localStorage.removeItem(k)});
-    if(kill.length)logDiag('speicher','Cache verworfen: '+kill.length+' Eintraege, '+Math.round(freed/1024)+' KB frei');
-  }catch(e){}
-  return freed>0;
-}
-function lsSet(key,val,optional){
-  val=String(val);
-  _mem[key]=val;
-  if(_noPersist[key])return false;
-  try{localStorage.setItem(key,val);return true}catch(e){
-    if(!_isQuota(e)){logDiag('speicher',e);return false}
-    if(_pruneStorage(key)){
-      try{localStorage.setItem(key,val);return true}catch(e2){}
-    }
-    try{localStorage.removeItem(key)}catch(e3){}
-    if(optional)_noPersist[key]=true;
-    logDiag('speicher','Voll bei '+key+' ('+Math.round(String(val).length/1024)+' KB) - nur im Arbeitsspeicher');
-    if(!optional&&!_quotaWarned){
-      _quotaWarned=true;
-      toast('Geraetespeicher voll - Daten liegen sicher auf SharePoint, lokal wird nur zwischengespeichert','warning');
-    }
-    return false;
-  }
-}
-// Vor dem Sync aufraeumen, wenn es eng wird (Safari kappt bei ca. 2.5 Mio Zeichen).
-// Verworfen werden nur Cache-Daten, die der naechste Sync ohnehin neu holt.
-function pruneIfTight(){
-  try{
-    var n=0;
-    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length}
-    if(n>1800000){logDiag('speicher','Belegung '+Math.round(n/1024)+' KB - raeume Cache auf');_pruneStorage(null)}
-  }catch(e){}
-}
-function lsGet(key){
-  if(_mem[key]!==undefined)return _mem[key];
-  try{return localStorage.getItem(key)}catch(e){return null}
-}
-function lsDel(key){
-  delete _mem[key];
-  try{localStorage.removeItem(key)}catch(e){}
-}
 
 // SHAREPOINT GRAPH API
 const SP={
@@ -1333,6 +1347,9 @@ function initLogin(){
   $('msLoginBtn').onclick=msLogin;
   if($('syncStatus')){$('syncStatus').style.cursor='pointer';$('syncStatus').title='Verbindungs-Diagnose anzeigen';$('syncStatus').onclick=showDiag}
   if($('spStatusText')){$('spStatusText').style.cursor='pointer';$('spStatusText').onclick=showDiag}
+
+  // Speicher freiraeumen, bevor MSAL seinen Auth-State schreibt
+  pruneIfTight();
 
   // MSAL init
   (async function(){
