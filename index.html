@@ -780,8 +780,8 @@ const PROJECTS_DATA=[
 
 const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
 const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:'fabienne_schneider23@hotmail.com',admin:false},{id:'HM-009',name:'Luis Silva',email:'x_luissilva@hotmail.com',admin:false}];
-function loadEmployees(){try{const d=JSON.parse(localStorage.getItem(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
-function saveEmployees(list){localStorage.setItem(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(()=>console.log('[SP] employees gespeichert')).catch(e=>console.warn('[SP] employees Fehler:',e))}
+function loadEmployees(){try{const d=JSON.parse(lsGet(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
+function saveEmployees(list){lsSet(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(()=>console.log('[SP] employees gespeichert')).catch(e=>console.warn('[SP] employees Fehler:',e))}
 let EMPLOYEES=loadEmployees();
 function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
 // Austritt liegt in der Vergangenheit -> MA ist nicht mehr im Betrieb (Report-Filter standardmaessig aus)
@@ -792,14 +792,14 @@ function isAusgetreten(empId,refDate){
 }
 // Migrate old dual-absences to single source
 (function(){
-  const oldLocal=localStorage.getItem(C.LS+'absences');
-  const oldGlobal=localStorage.getItem(C.LS+'global_absences');
+  const oldLocal=lsGet(C.LS+'absences');
+  const oldGlobal=lsGet(C.LS+'global_absences');
   const newKey=C.LS+'all_absences';
-  if(!localStorage.getItem(newKey)){
+  if(!lsGet(newKey)){
     let merged=[];
     try{if(oldGlobal)merged=JSON.parse(oldGlobal)}catch{}
     try{if(oldLocal){const loc=JSON.parse(oldLocal);const ids=new Set(merged.map(a=>a.id));loc.forEach(a=>{if(!ids.has(a.id))merged.push(a)})}}catch{}
-    if(merged.length){localStorage.setItem(newKey,JSON.stringify(merged));console.log('[Migration] Abwesenheiten migriert:',merged.length)}
+    if(merged.length){lsSet(newKey,JSON.stringify(merged));console.log('[Migration] Abwesenheiten migriert:',merged.length)}
   }
 })();
 
@@ -822,7 +822,17 @@ function logDiag(tag,msg){
 }
 window.addEventListener('error',function(e){logDiag('js-error',(e.message||'')+' @'+String(e.filename||'').split('/').pop()+':'+e.lineno)});
 window.addEventListener('unhandledrejection',function(e){logDiag('promise',(e.reason&&e.reason.message)||String(e.reason))});
-function _lsBytes(){try{var n=0;for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length}return Math.round(n/1024)+' KB'}catch(e){return 'n/a'}}
+function _lsBytes(){
+  try{
+    var NL=String.fromCharCode(10);
+    var n=0,list=[];
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);var v=localStorage.getItem(k)||'';n+=k.length+v.length;list.push([k,v.length])}
+    list.sort(function(a,b){return b[1]-a[1]});
+    var top=list.slice(0,6).map(function(x){return '    '+x[0]+': '+Math.round(x[1]/1024)+' KB'}).join(NL);
+    var mem=0;for(var mk in _mem)mem+=String(_mem[mk]||'').length;
+    return Math.round(n/1024)+' KB (Safari kappt bei ca. 2500 KB)'+NL+'  Nur im Arbeitsspeicher: '+Math.round(mem/1024)+' KB'+NL+'  Groesste Posten:'+NL+top;
+  }catch(e){return 'n/a'}
+}
 function diagText(){
   var L=[];
   L.push('Zeit: '+new Date().toLocaleString('de-CH'));
@@ -833,7 +843,7 @@ function diagText(){
   L.push('MSAL geladen: '+(typeof msal!=='undefined'));
   L.push('MSAL-Konto: '+(msalAccount?(msalAccount.username||'ja'):'KEINES'));
   L.push('Access-Token: '+(accessToken?('ja ('+accessToken.length+' Zeichen)'):'NEIN'));
-  L.push('Drive-ID: '+(SP._driveId||localStorage.getItem(C.LS+'sp_driveId')||'KEINE'));
+  L.push('Drive-ID: '+(SP._driveId||lsGet(C.LS+'sp_driveId')||'KEINE'));
   L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
   L.push('Sync-Status: '+_syncStatus);
   L.push('localStorage: '+_lsBytes());
@@ -880,9 +890,9 @@ const isMobile=/iPhone|iPod|Android/i.test(navigator.userAgent)||(/iPad/i.test(n
 let timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,project:'',ks:'',note:'',segments:[]};
 let timerIv=null,calOff=0,editId=null,pendingEntry=null;
 const $=s=>document.getElementById(s);const lk=k=>C.LS+(user?user.id+'_':'')+k;
-const getEntries=()=>{try{return JSON.parse(localStorage.getItem(lk('entries'))||'[]').filter(e=>!e._deleted)}catch{return[]}};
-const getRawEntries=()=>{try{return JSON.parse(localStorage.getItem(lk('entries'))||'[]')}catch{return[]}};
-const saveEntries=e=>{localStorage.setItem(lk('entries'),JSON.stringify(e));queueSync()};
+const getEntries=()=>{try{return JSON.parse(lsGet(lk('entries'))||'[]').filter(e=>!e._deleted)}catch{return[]}};
+const getRawEntries=()=>{try{return JSON.parse(lsGet(lk('entries'))||'[]')}catch{return[]}};
+const saveEntries=e=>{lsSet(lk('entries'),JSON.stringify(e));queueSync()};
 
 // Intelligent merge: combines local and remote entries by ID, newest wins
 function mergeEntries(localArr,remoteArr){
@@ -971,20 +981,82 @@ function getHolidays(y){
 }
 function _defaultHolidays(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1,easter=new Date(y,mo-1,da);const ad=(d2,n)=>{const r=new Date(d2);r.setDate(r.getDate()+n);return r},dk=d2=>dateKey(d2);const hol={};hol[dk(new Date(y,0,1))]='Neujahr';hol[dk(new Date(y,0,2))]='Berchtoldstag';hol[dk(ad(easter,-2))]='Karfreitag';hol[dk(ad(easter,1))]='Ostermontag';hol[dk(new Date(y,4,1))]='Tag der Arbeit';hol[dk(ad(easter,39))]='Auffahrt';hol[dk(ad(easter,50))]='Pfingstmontag';hol[dk(new Date(y,7,1))]='Bundesfeier';hol[dk(new Date(y,11,25))]='Weihnachten';hol[dk(new Date(y,11,26))]='Stephanstag';const s1=new Date(y,8,1),fm=new Date(s1);fm.setDate(1+(8-s1.getDay())%7);const ks2=new Date(fm);ks2.setDate(fm.getDate()+7);hol[dk(ks2)]='Knabenschiessen';return hol}
 
+// ===== Speicher-Layer: localStorage mit RAM-Fallback =====
+// iOS Safari begrenzt localStorage auf ca. 5 MB (UTF-16!). Lief das voll, brach
+// frueher der ganze SharePoint-Sync ab. Jetzt: Werte liegen immer im RAM, der
+// localStorage ist nur noch die persistente Kopie - laeuft sie voll, werden
+// Cache-Daten (Eintraege anderer MA, Projektliste) verworfen statt der Sync.
+var _mem={};
+var _quotaWarned=false;
+var _cacheKeyRe=/_entries$|projects$/;
+var _noPersist={};
+function _isQuota(e){return e&&(e.name==='QuotaExceededError'||e.code===22||e.code===1014||/quota/i.test(e.message||''))}
+function _pruneStorage(keepKey){
+  var freed=0;
+  try{
+    var own=(typeof user!=='undefined'&&user)?(C.LS+user.id+'_entries'):null;
+    var kill=[];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(!k||k===keepKey||k===own)continue;
+      if(_cacheKeyRe.test(k))kill.push(k);
+    }
+    kill.forEach(function(k){var v=localStorage.getItem(k);freed+=(v||'').length;localStorage.removeItem(k)});
+    if(kill.length)logDiag('speicher','Cache verworfen: '+kill.length+' Eintraege, '+Math.round(freed/1024)+' KB frei');
+  }catch(e){}
+  return freed>0;
+}
+function lsSet(key,val,optional){
+  val=String(val);
+  _mem[key]=val;
+  if(_noPersist[key])return false;
+  try{localStorage.setItem(key,val);return true}catch(e){
+    if(!_isQuota(e)){logDiag('speicher',e);return false}
+    if(_pruneStorage(key)){
+      try{localStorage.setItem(key,val);return true}catch(e2){}
+    }
+    try{localStorage.removeItem(key)}catch(e3){}
+    if(optional)_noPersist[key]=true;
+    logDiag('speicher','Voll bei '+key+' ('+Math.round(String(val).length/1024)+' KB) - nur im Arbeitsspeicher');
+    if(!optional&&!_quotaWarned){
+      _quotaWarned=true;
+      toast('Geraetespeicher voll - Daten liegen sicher auf SharePoint, lokal wird nur zwischengespeichert','warning');
+    }
+    return false;
+  }
+}
+// Vor dem Sync aufraeumen, wenn es eng wird (Safari kappt bei ca. 2.5 Mio Zeichen).
+// Verworfen werden nur Cache-Daten, die der naechste Sync ohnehin neu holt.
+function pruneIfTight(){
+  try{
+    var n=0;
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length}
+    if(n>1800000){logDiag('speicher','Belegung '+Math.round(n/1024)+' KB - raeume Cache auf');_pruneStorage(null)}
+  }catch(e){}
+}
+function lsGet(key){
+  if(_mem[key]!==undefined)return _mem[key];
+  try{return localStorage.getItem(key)}catch(e){return null}
+}
+function lsDel(key){
+  delete _mem[key];
+  try{localStorage.removeItem(key)}catch(e){}
+}
+
 // SHAREPOINT GRAPH API
 const SP={
   _driveId:null,
   async getDriveId(){
     if(this._driveId)return this._driveId;
     // Try cached driveId from localStorage first
-    const cached=localStorage.getItem(C.LS+'sp_driveId');
+    const cached=lsGet(C.LS+'sp_driveId');
     if(cached){
       console.log('[SP] Using cached driveId');
       this._driveId=cached;
       // Verify it still works in background
       this.gf('/drives/'+cached+'/root').then(()=>{console.log('[SP] Cached driveId valid')}).catch(()=>{
         console.warn('[SP] Cached driveId invalid, clearing');
-        localStorage.removeItem(C.LS+'sp_driveId');this._driveId=null;
+        lsDel(C.LS+'sp_driveId');this._driveId=null;
       });
       return this._driveId;
     }
@@ -1014,7 +1086,7 @@ const SP={
         if(drives&&drives.value){
           const docDrive=drives.value.find(d=>d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')||drives.value[0];
           this._driveId=docDrive.id;
-          localStorage.setItem(C.LS+'sp_driveId',this._driveId);
+          lsSet(C.LS+'sp_driveId',this._driveId);
           console.log('[SP] Drive gefunden:',docDrive.name,'ID:',docDrive.id);
           return this._driveId;
         }
@@ -1033,10 +1105,10 @@ const SP={
       }catch(e2){logDiag('token',e2);showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden');return null}
     }
   },
-  async gf(ep,opts){const token=await this.getToken();if(!token){logDiag('graph','kein Token fuer '+ep);return null}const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){logDiag('graph','Zugriff verweigert '+resp.status+' bei '+ep);throw new Error('Kein Zugriff ('+resp.status+')')}{logDiag('graph',resp.status+' bei '+ep);throw new Error('Graph '+resp.status)}}return resp.json()},
-  async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){logDiag('read '+path,e);return null}},
+  async gf(ep,opts){const token=await this.getToken();if(!token){logDiag('graph','kein Token fuer '+ep);return null}const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){logDiag('graph','Zugriff verweigert '+resp.status+' bei '+ep);throw new Error('Kein Zugriff ('+resp.status+')')}{if(resp.status!==404)logDiag('graph',resp.status+' bei '+ep);throw new Error('Graph '+resp.status)}}return resp.json()},
+  async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){if(!/404/.test(e&&e.message||''))logDiag('read '+path,e);return null}},
   async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const token=await this.getToken();if(!token)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){logDiag('write '+path,e);return false}},
-  async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
+  async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;lsSet(C.LS+'projects',JSON.stringify(projects),true);toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){
     const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';
@@ -1044,7 +1116,7 @@ const SP={
     if(data&&Array.isArray(data.entries)){
       const local=getRawEntries();
       const merged=mergeEntries(local,data.entries);
-      localStorage.setItem(lk('entries'),JSON.stringify(merged));
+      lsSet(lk('entries'),JSON.stringify(merged));
       refreshView();return true
     }return false
   },
@@ -1057,7 +1129,7 @@ const SP={
       const spEntries=(remote&&Array.isArray(remote.entries))?remote.entries:[];
       const merged=mergeEntries(local,spEntries);
       // Save merged result locally
-      localStorage.setItem(lk('entries'),JSON.stringify(merged));
+      lsSet(lk('entries'),JSON.stringify(merged));
       // Write to SP (exclude soft-deleted older than 30 days)
       const cutoff=Date.now()-30*86400000;
       const toWrite=merged.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
@@ -1140,7 +1212,7 @@ function setSyncStatus(s){
 }
 // Update sync age display every minute - only auto-offline after first successful sync
 setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min';showOfflineBanner('Keine Verbindung seit '+ago+' Min');if(ago%5===0)reconnectNow()}}},60000);
-let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||localStorage.getItem(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
+let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||lsGet(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
 
 async function syncWithRetry(attempt){
   attempt=attempt||1;
@@ -1194,7 +1266,7 @@ async function afterMsalLogin(){
         const spData=await SP.readFile('employees.json');
         if(spData&&spData.employees&&spData.employees.length){
           EMPLOYEES=spData.employees;
-          localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
+          lsSet(C.LS+'employees',JSON.stringify(EMPLOYEES));
           console.log('[Auth] MA-Liste von SP:',EMPLOYEES.length);break;
         }
       }catch(e){console.warn('[Auth] SP employees Versuch '+(_attempt+1)+':',e.message);if(_attempt===0)await new Promise(r=>setTimeout(r,1500))}
@@ -1202,7 +1274,7 @@ async function afterMsalLogin(){
     const emp=matchEmployee(email,profile.displayName);
     if(emp){
       user={...emp};
-      localStorage.setItem(C.LS+'session',JSON.stringify(user));
+      lsSet(C.LS+'session',JSON.stringify(user));
       console.log('[Auth] Angemeldet als:',emp.name);
       safeCall(showApp,'showApp');syncWithRetry();
     }else{
@@ -1228,7 +1300,7 @@ async function msLogin(){
   }
 }
 
-function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;localStorage.removeItem(C.LS+'session');
+function logout(){if(timer.on&&!confirm('Timer l\u00e4uft noch! Wirklich abmelden?'))return;clearInterval(timerIv);timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};user=null;accessToken=null;lsDel(C.LS+'session');
   if(msalApp&&msalAccount){
     msalApp.logoutRedirect({account:msalAccount}).catch(()=>{});
   }
@@ -1268,7 +1340,7 @@ function initLogin(){
     while(typeof msal==='undefined'&&msalWait<50){await new Promise(r=>setTimeout(r,100));msalWait++}
     if(typeof msal==='undefined'){console.warn('[Auth] MSAL nicht geladen');
       // Fallback: try session restore without MSAL
-      const saved=localStorage.getItem(C.LS+'session');if(saved){try{user=JSON.parse(saved);safeCall(showApp,'showApp');setSyncStatus('offline');showOfflineBanner('MSAL nicht geladen \u2013 bitte Seite neu laden')}catch{}}
+      const saved=lsGet(C.LS+'session');if(saved){try{user=JSON.parse(saved);safeCall(showApp,'showApp');setSyncStatus('offline');showOfflineBanner('MSAL nicht geladen \u2013 bitte Seite neu laden')}catch{}}
       return;
     }
     msalApp=new msal.PublicClientApplication(MSAL_CFG);
@@ -1283,7 +1355,7 @@ function initLogin(){
       try{
         await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});
         // Restore user from localStorage if available
-        const saved=localStorage.getItem(C.LS+'session');
+        const saved=lsGet(C.LS+'session');
         if(saved){try{user=JSON.parse(saved);safeCall(showApp,'showApp');syncWithRetry()}catch{await afterMsalLogin()}}
         else{await afterMsalLogin()}
       }catch(e){
@@ -1294,10 +1366,10 @@ function initLogin(){
       $('login-screen').style.display='flex';
     }
   })();
-  const cp=localStorage.getItem(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
+  const cp=lsGet(C.LS+'projects');if(cp)try{projects=JSON.parse(cp)}catch{}
 }
-function loginAs(emp){user={...emp};accessToken=null;localStorage.setItem(C.LS+'session',JSON.stringify(user));showApp()}
-function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';safeCall(updateTimerDate,'timerDate');safeCall(refreshView,'view');safeCall(checkRecovery,'recovery');calMonth=new Date().getMonth();calYear=new Date().getFullYear();safeCall(updateMonthCalendar,'calendar');safeCall(renderProjectList,'projects');setSyncStatus(accessToken?'syncing':'local');if(user.admin)safeCall(function(){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()},'admin');if(canViewReports())safeCall(renderReportTab,'reportTab');if(canViewReports())safeCall(initMonatsrapport,'monatsrapport');if(canViewReports())safeCall(function(){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'};initProdEmpFilter()},'prod');safeCall(checkNotifications,'notif');safeCall(renderAbsences,'absences');safeCall(updateAbsPreview,'absPreview');safeCall(initMyNotif,'myNotif');safeCall(initAbsCalendar,'absCalendar');setTimeout(function(){safeCall(initTimerSync,'timerSync')},3000)}
+function loginAs(emp){user={...emp};accessToken=null;lsSet(C.LS+'session',JSON.stringify(user));showApp()}
+function showApp(){$('login-screen').style.display='none';$('app').style.display='block';$('userAvatar').textContent=user.name.split(' ').map(n=>n[0]).join('');$('userName').textContent=user.name;$('manDate').value=todayKey();if($('absFrom'))$('absFrom').value=todayKey();if($('absTo'))$('absTo').value=todayKey();document.querySelector('[data-tab="admin"]').style.display=user.admin?'':'none';document.querySelector('[data-tab="report"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="dashboard"]').style.display=canViewReports()?'':'none';document.querySelector('[data-tab="maedit"]').style.display=user.admin?'':'none';safeCall(pruneIfTight,'speicher');safeCall(updateTimerDate,'timerDate');safeCall(refreshView,'view');safeCall(checkRecovery,'recovery');calMonth=new Date().getMonth();calYear=new Date().getFullYear();safeCall(updateMonthCalendar,'calendar');safeCall(renderProjectList,'projects');setSyncStatus(accessToken?'syncing':'local');if(user.admin)safeCall(function(){loadNotifUI();renderEmpSettings();initMAEdit();renderBetriebsferien();renderEmpManagement();if($('renameOld'))setupAC('renameOld','renameOldAC');if($('renameNew'))setupAC('renameNew','renameNewAC');renderHolidayAdmin();initPayoutUI()},'admin');if(canViewReports())safeCall(renderReportTab,'reportTab');if(canViewReports())safeCall(initMonatsrapport,'monatsrapport');if(canViewReports())safeCall(function(){const pp=$('prodPeriod');if(pp)pp.onchange=function(){const c=this.value==='custom';$('prodCustomWrap').style.display=c?'block':'none';$('prodCustomWrap2').style.display=c?'block':'none'};initProdEmpFilter()},'prod');safeCall(checkNotifications,'notif');safeCall(renderAbsences,'absences');safeCall(updateAbsPreview,'absPreview');safeCall(initMyNotif,'myNotif');safeCall(initAbsCalendar,'absCalendar');setTimeout(function(){safeCall(initTimerSync,'timerSync')},3000)}
 
 // TABS
 $('navTabs').addEventListener('click',e=>{const tab=e.target.closest('.nav-tab');if(!tab)return;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$('tab-'+tab.dataset.tab).classList.add('active');refreshView()});
@@ -1318,14 +1390,14 @@ $('btnStart').onclick=function(){if(timer.paused){
   timer.totalPaused+=Date.now()-timer.pauseAt;timer.paused=false;timer.pauseAt=null;timer.on=true;
   // Restore form fields to current timer project (don't overwrite timer from form)
   $('timerProject').value=timer.project||'';$('timerKS').value=timer.ks||'';$('timerNote').value=timer.note||'';
-  localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);
+  lsSet(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);
   $('timerIndicator').classList.add('on');$('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;
   toast('Timer fortgesetzt','success');return;
 }
 // New timer start
 const proj=$('timerProject').value.trim(),ks=$('timerKS').value;if(!proj){toast('Bitte Projekt w\u00e4hlen','warning');return}if(!validateProjectOrWarn(proj))return;if(!ks){toast('Bitte Kostenstelle w\u00e4hlen','warning');return}
-timer.start=Date.now();timer.totalPaused=0;timer.paused=false;timer.segments=[];timer.on=true;timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=ks+' \u00b7 '+proj};
-$('btnPause').onclick=function(){if(!timer.on||timer.paused)return;timer.paused=true;timer.pauseAt=Date.now();localStorage.setItem(lk('timer'),JSON.stringify(timer));updateTimerUI()};
+timer.start=Date.now();timer.totalPaused=0;timer.paused=false;timer.segments=[];timer.on=true;timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();lsSet(lk('timer'),JSON.stringify(timer));updateTimerUI();timerIv=setInterval(tickTimer,1000);$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=ks+' \u00b7 '+proj};
+$('btnPause').onclick=function(){if(!timer.on||timer.paused)return;timer.paused=true;timer.pauseAt=Date.now();lsSet(lk('timer'),JSON.stringify(timer));updateTimerUI()};
 $('btnStop').onclick=function(){if(!timer.on)return;clearInterval(timerIv);if(timer.paused)timer.totalPaused+=Date.now()-timer.pauseAt;
   if(timer.segments&&timer.segments.length>0){
     // Has multiple segments - show split dialog
@@ -1339,7 +1411,7 @@ function tickTimer(){if(!timer.on)return;let el=timer.paused?(timer.pauseAt-time
 // After 18:00 warning
 const now=new Date();const _empTimerEnd=user?getEmpSetting(user.id).timerEndzeit||'18:00':'18:00';const [_teH,_teM]=_empTimerEnd.split(':').map(Number);const _teTotal=now.getHours()*60+now.getMinutes();if(_teTotal>=_teH*60+(_teM||0)&&!timer.paused&&Date.now()-_lateWorkConfirmed>7200000){_lateWorkConfirmed=Date.now();setTimeout(()=>{if(timer.on&&!timer.paused&&confirm('Es ist nach '+_empTimerEnd+' \u2013 Arbeitest du noch?')){_lateWorkConfirmed=Date.now()}else if(timer.on){$('btnStop').click()}},100)}}
 function updateTimerUI(){const st=$('btnStart'),pa=$('btnPause'),sp=$('btnStop'),di=$('timerDisplay'),sw=$('btnSwitch');if(timer.on&&!timer.paused){st.style.display='none';pa.style.display='flex';sp.style.display='flex';di.className='timer-time running';if(sw)sw.style.display='inline-flex'}else if(timer.paused){st.style.display='flex';pa.style.display='none';sp.style.display='flex';di.className='timer-time paused';if(sw)sw.style.display='inline-flex'}else{st.style.display='flex';pa.style.display='none';sp.style.display='none';di.className='timer-time';if(sw)sw.style.display='none'}}
-function resetTimer(){timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};localStorage.removeItem(lk('timer'));$('timerDisplay').textContent='00:00:00';$('timerDisplay').className='timer-time';$('timerProjDisp').textContent='';$('timerIndicator').classList.remove('on');updateTimerUI();updateSegmentDisplay()}
+function resetTimer(){timer={on:false,paused:false,start:null,pauseAt:null,totalPaused:0,segments:[]};lsDel(lk('timer'));$('timerDisplay').textContent='00:00:00';$('timerDisplay').className='timer-time';$('timerProjDisp').textContent='';$('timerIndicator').classList.remove('on');updateTimerUI();updateSegmentDisplay()}
 
 // PAUSE DIALOG
 function showPauseDialog(e){const sMin=timeToMin(e.startTime),eMin=timeToMin(e.endTime),brutto=eMin-sMin,day=new Date(e.date).getDay(),isFri=day===5,cl=sMin<780&&eMin>720;let h='<div class="pause-summary" style="margin-bottom:16px"><div class="pause-row"><span>Arbeitszeit:</span><span style="font-family:var(--font-mono)">'+e.startTime+' \u2013 '+e.endTime+'</span></div><div class="pause-row"><span>Brutto:</span><span style="font-family:var(--font-mono)">'+fmtMin(brutto)+'</span></div></div><div style="font-weight:600;margin-bottom:8px;font-size:.9rem">Pausen-Abz\u00fcge:</div><div class="pause-opt sel" data-pause="znueni"><input type="checkbox" id="pZn" checked><span class="pause-lbl">Zn\u00fcni-Pause</span><span class="pt">15 Min</span></div>';if(cl||brutto>360){h+='<div class="pause-opt '+(isFri?'':'sel')+'" data-pause="lunch" data-val="60"><input type="radio" name="lunch" value="60" '+(isFri?'':'checked')+'><span class="pause-lbl">Normale Mittagspause</span><span class="pt">1h</span></div><div class="pause-opt" data-pause="lunch" data-val="30"><input type="radio" name="lunch" value="30"><span class="pause-lbl">Kurzer Mittag</span><span class="pt">30 Min</span></div><div class="pause-opt '+(isFri?'sel':'')+'" data-pause="lunch" data-val="0"><input type="radio" name="lunch" value="0" '+(isFri?'checked':'')+'><span class="pause-lbl">Durchgearbeitet</span><span class="pt">0 Min</span></div>'}h+='<div class="pause-summary" id="nettoDisp"></div>';$('pauseBody').innerHTML=h;
@@ -1373,9 +1445,9 @@ $('pauseConfirm').onclick=function(){let p=0;const z=$('pZn');const hasZnueni=z&
 };
 
 // RECOVERY
-function checkRecovery(){const s=localStorage.getItem(lk('timer'));if(!s)return;try{const st=JSON.parse(s);if(!st.on||!st.start)return;const el=Date.now()-st.start-(st.totalPaused||0),h=Math.floor(el/1000/3600),m=Math.floor((el/1000%3600)/60);$('recoveryBody').innerHTML='<p style="margin-bottom:12px">Ein Timer war noch aktiv:</p><div class="pause-summary"><div class="pause-row"><span>Projekt:</span><span>'+(st.project||'\u2014')+'</span></div><div class="pause-row"><span>Kostenstelle:</span><span>'+(st.ks||'\u2014')+'</span></div><div class="pause-row"><span>Verstrichene Zeit:</span><span style="font-family:var(--font-mono);color:var(--primary)">'+h+'h '+m+'min</span></div></div>';$('recoveryModal').classList.add('show')}catch{localStorage.removeItem(lk('timer'))}}
-$('recoveryRestore').onclick=function(){const s=localStorage.getItem(lk('timer'));if(!s)return;timer=JSON.parse(s);$('timerProject').value=timer.project||'';$('timerKS').value=timer.ks||'';$('timerNote').value=timer.note||'';updateTimerUI();timerIv=setInterval(tickTimer,1000);tickTimer();$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;$('recoveryModal').classList.remove('show');toast('Timer wiederhergestellt','success');updateSegmentDisplay()};
-$('recoveryDiscard').onclick=function(){localStorage.removeItem(lk('timer'));$('recoveryModal').classList.remove('show')};
+function checkRecovery(){const s=lsGet(lk('timer'));if(!s)return;try{const st=JSON.parse(s);if(!st.on||!st.start)return;const el=Date.now()-st.start-(st.totalPaused||0),h=Math.floor(el/1000/3600),m=Math.floor((el/1000%3600)/60);$('recoveryBody').innerHTML='<p style="margin-bottom:12px">Ein Timer war noch aktiv:</p><div class="pause-summary"><div class="pause-row"><span>Projekt:</span><span>'+(st.project||'\u2014')+'</span></div><div class="pause-row"><span>Kostenstelle:</span><span>'+(st.ks||'\u2014')+'</span></div><div class="pause-row"><span>Verstrichene Zeit:</span><span style="font-family:var(--font-mono);color:var(--primary)">'+h+'h '+m+'min</span></div></div>';$('recoveryModal').classList.add('show')}catch{lsDel(lk('timer'))}}
+$('recoveryRestore').onclick=function(){const s=lsGet(lk('timer'));if(!s)return;timer=JSON.parse(s);$('timerProject').value=timer.project||'';$('timerKS').value=timer.ks||'';$('timerNote').value=timer.note||'';updateTimerUI();timerIv=setInterval(tickTimer,1000);tickTimer();$('timerIndicator').classList.add('on');$('timerProjDisp').textContent=timer.ks+' \u00b7 '+timer.project;$('recoveryModal').classList.remove('show');toast('Timer wiederhergestellt','success');updateSegmentDisplay()};
+$('recoveryDiscard').onclick=function(){lsDel(lk('timer'));$('recoveryModal').classList.remove('show')};
 
 // MANUAL
 $('manSaveBtn').onclick=function(){const dt=$('manDate').value,st=$('manStart').value,en=$('manEnd').value,pr=$('manProject').value.trim(),ks=$('manKS').value,nt=$('manNote').value.trim();if(!dt||!st||!en){toast('Datum und Zeiten ausf\u00fcllen','warning');return}if(!pr){toast('Projekt w\u00e4hlen','warning');return}if(!ks){toast('Kostenstelle w\u00e4hlen','warning');return}const sM=timeToMin(st),eM=timeToMin(en);if(eM<=sM){toast('Endzeit nach Startzeit','warning');return}const brutto=eM-sM;const hasZnueni=$('manZnueni').checked;const mittagVal=$('manMittag').value;let p=0;if(hasZnueni)p+=15;if(mittagVal==='60min')p+=60;else if(mittagVal==='30min')p+=30;addEntry({date:dt,start:st,end:en,startTime:st,endTime:en,pauseMin:p,durationMin:brutto-p,hours:(brutto-p)/60,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,bemerkung:nt,note:nt,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:mittagVal,mittagsPause:mittagVal,breakMinutes:p});$('manProject').value='';$('manKS').value='';$('manNote').value='';$('manZnueni').checked=true;$('manMittag').value='60min'};
@@ -1623,12 +1695,12 @@ function bindEditSave(){
 // ADMIN
 function renderProjectList(filter){const f=(filter||'').toLowerCase();const filtered=f?projects.filter(p=>p.id.includes(f)||p.name.toLowerCase().includes(f)):projects;$('projCountDisp').textContent=projects.length;$('projFilterCount').textContent=f?filtered.length+' von '+projects.length:projects.length+' Projekte';$('projList').innerHTML=filtered.map(p=>{const isProd=p.produktiv!==false;return'<div class="proj-list-item"><span class="proj-id">'+p.id+'</span><span class="proj-name" title="'+p.name+'">'+p.name+'</span><span class="proj-badge '+(p.aktiv?'':'inactive')+'">'+(p.aktiv?'aktiv':'inaktiv')+'</span><span class="proj-badge" style="cursor:pointer;'+(isProd?'background:var(--success-glow);color:var(--success)':'background:var(--danger-glow);color:var(--danger)')+'" onclick="toggleProjProduktiv(\''+p.id+'\')">'+(isProd?'\u2705 produktiv':'\u274C unproduktiv')+'</span><button class="entry-action" onclick="toggleProjActive(\''+p.id+'\')">\u270f\ufe0f</button></div>'}).join('')}
 $('projSearch').oninput=function(){renderProjectList(this.value)};
-function toggleProjActive(id){const p=projects.find(x=>x.id===id);if(!p)return;p.aktiv=!p.aktiv;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList($('projSearch').value);toast('Projekt '+id+' '+(p.aktiv?'aktiviert':'deaktiviert'),'info');if(accessToken)SP.saveProjects()}
-function toggleProjProduktiv(id){const p=projects.find(x=>x.id===id);if(!p)return;p.produktiv=p.produktiv===false?true:false;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList($('projSearch').value);toast('Projekt '+id+': '+(p.produktiv!==false?'produktiv':'unproduktiv'),'info');if(accessToken)SP.saveProjects()}
+function toggleProjActive(id){const p=projects.find(x=>x.id===id);if(!p)return;p.aktiv=!p.aktiv;lsSet(C.LS+'projects',JSON.stringify(projects),true);renderProjectList($('projSearch').value);toast('Projekt '+id+' '+(p.aktiv?'aktiviert':'deaktiviert'),'info');if(accessToken)SP.saveProjects()}
+function toggleProjProduktiv(id){const p=projects.find(x=>x.id===id);if(!p)return;p.produktiv=p.produktiv===false?true:false;lsSet(C.LS+'projects',JSON.stringify(projects),true);renderProjectList($('projSearch').value);toast('Projekt '+id+': '+(p.produktiv!==false?'produktiv':'unproduktiv'),'info');if(accessToken)SP.saveProjects()}
 $('addProjBtn').onclick=function(){const maxId=Math.max(...projects.map(p=>parseInt(p.id)||0));$('newProjId').value=String(maxId+1);$('newProjName').value='';$('addProjModal').classList.add('show')};
 $('addProjCancel').onclick=function(){$('addProjModal').classList.remove('show')};
-$('addProjSave').onclick=function(){const id=$('newProjId').value.trim(),name=$('newProjName').value.trim();if(!id||!name){toast('ID und Name erforderlich','warning');return}if(projects.find(p=>p.id===id)){toast('Nr. existiert bereits','warning');return}projects.unshift({id:id,name:name,aktiv:true});localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList();$('addProjModal').classList.remove('show');toast('Projekt '+id+' hinzugef\u00fcgt','success');if(accessToken)SP.saveProjects()};
-$('importProjFile').onchange=function(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(ev){try{const data=JSON.parse(ev.target.result);if(data.projekte&&Array.isArray(data.projekte)){projects=data.projekte;localStorage.setItem(C.LS+'projects',JSON.stringify(projects));renderProjectList();toast(projects.length+' Projekte importiert','success');if(accessToken)SP.saveProjects()}else toast('Ung\u00fcltiges Format','error')}catch{toast('JSON-Fehler','error')}};reader.readAsText(file)};
+$('addProjSave').onclick=function(){const id=$('newProjId').value.trim(),name=$('newProjName').value.trim();if(!id||!name){toast('ID und Name erforderlich','warning');return}if(projects.find(p=>p.id===id)){toast('Nr. existiert bereits','warning');return}projects.unshift({id:id,name:name,aktiv:true});lsSet(C.LS+'projects',JSON.stringify(projects),true);renderProjectList();$('addProjModal').classList.remove('show');toast('Projekt '+id+' hinzugef\u00fcgt','success');if(accessToken)SP.saveProjects()};
+$('importProjFile').onchange=function(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(ev){try{const data=JSON.parse(ev.target.result);if(data.projekte&&Array.isArray(data.projekte)){projects=data.projekte;lsSet(C.LS+'projects',JSON.stringify(projects),true);renderProjectList();toast(projects.length+' Projekte importiert','success');if(accessToken)SP.saveProjects()}else toast('Ung\u00fcltiges Format','error')}catch{toast('JSON-Fehler','error')}};reader.readAsText(file)};
 $('loadSPProj').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}await SP.loadProjects()};
 $('exportProjBtn').onclick=function(){const blob=new Blob([JSON.stringify({lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='projekte.json';a.click();toast('projekte.json exportiert','success')};
 $('syncNowBtn').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}await SP.fullSync()};
@@ -1688,8 +1760,8 @@ setInterval(()=>{
 
 // PUSH NOTIFICATIONS
 const NOTIF_DEFAULTS={morning:'06:55',morningOn:true,lunch:'12:00',lunchOn:true,eveningMoDo:'16:45',eveningOn:true,eveningFr:'13:45',fridayOn:true,overflowH:10,overflowOn:true};
-function getNotifSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'notif_settings'))||{...NOTIF_DEFAULTS}}catch{return{...NOTIF_DEFAULTS}}}
-function saveNotifSettings(s){localStorage.setItem(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s).then(()=>console.log('[SP] notif_settings gespeichert')).catch(e=>console.warn('[SP] notif_settings Fehler:',e))}
+function getNotifSettings(){try{return JSON.parse(lsGet(C.LS+'notif_settings'))||{...NOTIF_DEFAULTS}}catch{return{...NOTIF_DEFAULTS}}}
+function saveNotifSettings(s){lsSet(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s).then(()=>console.log('[SP] notif_settings gespeichert')).catch(e=>console.warn('[SP] notif_settings Fehler:',e))}
 function loadNotifUI(){
   const s=getNotifSettings();
   if($('notifMorning'))$('notifMorning').value=s.morning||'06:55';
@@ -1737,7 +1809,7 @@ function checkNotifications(){
   if(s.overflowOn&&timer.on&&!timer.paused&&!notifFiredToday.overflow){const elapsed=(Date.now()-timer.start-timer.totalPaused)/3600000;if(elapsed>=s.overflowH){showNotif('Timer l\u00e4uft seit '+Math.floor(elapsed)+'h!','Mehr als '+s.overflowH+'h. Bitte pr\u00fcfen ob der Timer noch laufen soll.','overflow');notifFiredToday.overflow=true}}
 }
 setInterval(checkNotifications,30000);
-async function loadNotifSettingsFromSP(){if(!accessToken)return;try{const data=await SP.readFile('notif_settings.json');if(data&&data.morning){localStorage.setItem(C.LS+'notif_settings',JSON.stringify(data));if(user&&user.admin)loadNotifUI()}}catch{}}
+async function loadNotifSettingsFromSP(){if(!accessToken)return;try{const data=await SP.readFile('notif_settings.json');if(data&&data.morning){lsSet(C.LS+'notif_settings',JSON.stringify(data));if(user&&user.admin)loadNotifUI()}}catch{}}
 
 
 // PROJECT SWITCH (during running timer)
@@ -1752,7 +1824,7 @@ function switchProject(){
   timer.segments.push({start:segStart,end:now,project:timer.project,ks:timer.ks,note:timer.note});
   // Switch to new project
   timer.project=proj;timer.ks=ks;timer.note=$('timerNote').value.trim();
-  localStorage.setItem(lk('timer'),JSON.stringify(timer));
+  lsSet(lk('timer'),JSON.stringify(timer));
   $('timerProjDisp').textContent=ks+' \u00b7 '+proj;
   toast('Projekt gewechselt \u2013 Segment gespeichert','success');
   updateSegmentDisplay();
@@ -1779,7 +1851,7 @@ function editTimerSegment(idx){
     if(!proj||!ks){toast('Projekt und KS ausf\u00fcllen','warning');return}
     timer.segments[window._segEditIdx].project=proj;
     timer.segments[window._segEditIdx].ks=ks;
-    localStorage.setItem(lk('timer'),JSON.stringify(timer));
+    lsSet(lk('timer'),JSON.stringify(timer));
     $('segEditModal').classList.remove('show');
     updateSegmentDisplay();
     toast('Segment aktualisiert','success');
@@ -1976,8 +2048,8 @@ function calcFerienAnspruch(empId,year){
   months=Math.min(months,12);
   return Math.round(ferienTage*(pensum/100)*(months/12)*10)/10;
 }
-function getEmpSettings(){try{return JSON.parse(localStorage.getItem(C.LS+'emp_settings'))||{}}catch{return{}}}
-function saveEmpSettings(s){localStorage.setItem(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s).then(()=>console.log('[SP] emp_settings gespeichert')).catch(e=>console.warn('[SP] emp_settings Fehler:',e))}
+function getEmpSettings(){try{return JSON.parse(lsGet(C.LS+'emp_settings'))||{}}catch{return{}}}
+function saveEmpSettings(s){lsSet(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s).then(()=>console.log('[SP] emp_settings gespeichert')).catch(e=>console.warn('[SP] emp_settings Fehler:',e))}
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
 function setEmpSetting(empId,data){const all=getEmpSettings();all[empId]={...EMP_DEFAULTS,...(all[empId]||{}),...data};saveEmpSettings(all)}
 
@@ -2241,7 +2313,7 @@ async function loadEmpSettingsFromSP(){
       // SP data takes priority, merge with local (SP overwrites per employee)
       const local=getEmpSettings();
       const merged={...local,...data};
-      localStorage.setItem(C.LS+'emp_settings',JSON.stringify(merged));
+      lsSet(C.LS+'emp_settings',JSON.stringify(merged));
       console.log('[SP] emp_settings geladen:',Object.keys(data).length,'MA');
       if(user&&user.admin)renderEmpSettings();
       // Report-Filter wurden vor dem SP-Load gebaut - Austrittsdaten sind erst jetzt bekannt.
@@ -2260,9 +2332,9 @@ async function loadEmpSettingsFromSP(){
 const ABS_TYPES={'Ferien':'🏖\ufe0f','Krankheit':'🤒','Unfall':'🤕','Kompensation':'\u23F0','Milit\u00e4r/Zivildienst':'🎖\ufe0f','Mutterschaft/Vaterschaft':'👶','Umzug':'📦','Unbezahlt':'🚫','Sonstiges':'📋'};
 const ABS_COLORS={'Ferien':'#22c55e','Krankheit':'#ef4444','Unfall':'#f97316','Kompensation':'#0ea5e9','Milit\u00e4r/Zivildienst':'#8b5cf6','Mutterschaft/Vaterschaft':'#ec4899','Umzug':'#06b6d4','Unbezahlt':'#6b7280','Sonstiges':'#a3a3a3'};
 
-function getRawAbsences(){try{return JSON.parse(localStorage.getItem(C.LS+'all_absences')||'[]')}catch{return[]}}
+function getRawAbsences(){try{return JSON.parse(lsGet(C.LS+'all_absences')||'[]')}catch{return[]}}
 function getAllAbsences(){return getRawAbsences().filter(a=>!a._deleted)}
-function saveAllAbsences(a){localStorage.setItem(C.LS+'all_absences',JSON.stringify(a));queueAbsSync()}
+function saveAllAbsences(a){lsSet(C.LS+'all_absences',JSON.stringify(a));queueAbsSync()}
 function getAbsences(){return getAllAbsences()}
 
 // Tage einer Absenz aus dem Zeitraum ableiten (Arbeitstage des MA, Feiertage zaehlen nicht)
@@ -2324,7 +2396,7 @@ async function syncAbsToSP(){
       if(!existing||((a.lastModified||0)>(existing.lastModified||0)))map.set(a.id,{...a});
     });
     const merged=Array.from(map.values());
-    localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
+    lsSet(C.LS+'all_absences',JSON.stringify(merged));
     // Write to SP, exclude soft-deleted older than 30 days
     const cutoff=Date.now()-30*86400000;
     const toWrite=merged.filter(a=>!a._deleted||(a.lastModified&&a.lastModified>cutoff));
@@ -2574,7 +2646,7 @@ async function loadAbsencesFromSP(){
         }
       });
       const merged=Array.from(map.values());
-      localStorage.setItem(C.LS+'all_absences',JSON.stringify(merged));
+      lsSet(C.LS+'all_absences',JSON.stringify(merged));
       console.log('[SP] Abwesenheiten merged:',merged.length);
     }
     renderAbsences();
@@ -2852,7 +2924,7 @@ function getEntriesForEmployee(empId,from,to){
   const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return[];
   const key=C.LS+empId+'_entries';
   try{
-    const data=JSON.parse(localStorage.getItem(key)||'[]');
+    const data=JSON.parse(lsGet(key)||'[]');
     return data.filter(e=>!e._deleted&&e.date>=from&&e.date<=to);
   }catch{return[]}
 }
@@ -2863,7 +2935,7 @@ function syncEmpEntriesToSP(empId){
   const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return;
   const key=C.LS+empId+'_entries';
   try{
-    const all=JSON.parse(localStorage.getItem(key)||'[]');
+    const all=JSON.parse(lsGet(key)||'[]');
     const cutoff=Date.now()-30*86400000;
     const toWrite=all.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
     const fn='Mitarbeiter/'+emp.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';
@@ -2883,12 +2955,12 @@ async function loadAllEntriesFromSP(){
       const data=await SP.readFile(fn);
       if(data&&Array.isArray(data.entries)){
         const key=C.LS+emp.id+'_entries';
-        const local=JSON.parse(localStorage.getItem(key)||'[]');
+        const local=JSON.parse(lsGet(key)||'[]');
         const localIds=new Set(local.map(e=>e.id));
         const spIds=new Set(data.entries.map(e=>e.id));
         // Merge: use mergeEntries logic (timestamp-based, respects _deleted)
         const merged=mergeEntries(local,data.entries);
-        localStorage.setItem(key,JSON.stringify(merged));
+        lsSet(key,JSON.stringify(merged),true);
       }
     }catch(e){/* skip - file might not exist */}
   }
@@ -3682,9 +3754,9 @@ function maeSaveEdit(){
     // Update existing - need to load correct user's entries
     const empKey=C.LS+_maeEmpId+'_entries';
     try{
-      const all=JSON.parse(localStorage.getItem(empKey)||'[]');
+      const all=JSON.parse(lsGet(empKey)||'[]');
       const i=all.findIndex(e=>e.id===id);
-      if(i>=0){all[i]={...all[i],...upd};localStorage.setItem(empKey,JSON.stringify(all));toast('Eintrag aktualisiert','success')}
+      if(i>=0){all[i]={...all[i],...upd};lsSet(empKey,JSON.stringify(all));toast('Eintrag aktualisiert','success')}
       else{toast('Eintrag nicht gefunden','error')}
     }catch(e){toast('Fehler: '+e.message,'error')}
   }else{
@@ -3694,8 +3766,8 @@ function maeSaveEdit(){
     upd.createdBy=user.name;
     const empKey=C.LS+_maeEmpId+'_entries';
     try{
-      const all=JSON.parse(localStorage.getItem(empKey)||'[]');
-      all.push(upd);localStorage.setItem(empKey,JSON.stringify(all));
+      const all=JSON.parse(lsGet(empKey)||'[]');
+      all.push(upd);lsSet(empKey,JSON.stringify(all));
       toast('Eintrag hinzugefügt','success');
     }catch(e){toast('Fehler: '+e.message,'error')}
   }
@@ -3709,9 +3781,9 @@ function maeDeleteEntry(id){
   if(!confirm('Eintrag wirklich löschen?'))return;
   const empKey=C.LS+_maeEmpId+'_entries';
   try{
-    let all=JSON.parse(localStorage.getItem(empKey)||'[]');
+    let all=JSON.parse(lsGet(empKey)||'[]');
     all=all.filter(e=>e.id!==id);
-    localStorage.setItem(empKey,JSON.stringify(all));
+    lsSet(empKey,JSON.stringify(all));
     syncEmpEntriesToSP(_maeEmpId);
     toast('Eintrag gelöscht','success');
     maeLoad();
@@ -3880,7 +3952,7 @@ function maeDoImport(){
   if(!valid.length){toast('Keine gültigen Einträge','warning');return}
   const empKey=C.LS+_maeEmpId+'_entries';
   try{
-    const all=JSON.parse(localStorage.getItem(empKey)||'[]');
+    const all=JSON.parse(lsGet(empKey)||'[]');
     valid.forEach(d=>{
       all.push({
         id:Date.now().toString(36)+Math.random().toString(36).slice(2,6)+(d.line),
@@ -3892,7 +3964,7 @@ function maeDoImport(){
         created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString()
       });
     });
-    localStorage.setItem(empKey,JSON.stringify(all));
+    lsSet(empKey,JSON.stringify(all));
     syncEmpEntriesToSP(_maeEmpId);
     toast(valid.length+' Einträge importiert!','success');
     $('maeImportArea').style.display='none';
@@ -3902,8 +3974,8 @@ function maeDoImport(){
 }
 
 // ==================== BETRIEBSFERIEN & BRÜCKENTAGE ====================
-function getBetriebsferien(){try{return JSON.parse(localStorage.getItem(C.LS+'betriebsferien')||'[]')}catch{return[]}}
-function saveBetriebsferien(bf){localStorage.setItem(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf}).then(()=>console.log('[SP] betriebsferien gespeichert')).catch(e=>console.warn('[SP] betriebsferien Fehler:',e))}
+function getBetriebsferien(){try{return JSON.parse(lsGet(C.LS+'betriebsferien')||'[]')}catch{return[]}}
+function saveBetriebsferien(bf){lsSet(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf}).then(()=>console.log('[SP] betriebsferien gespeichert')).catch(e=>console.warn('[SP] betriebsferien Fehler:',e))}
 
 function renderBetriebsferien(){
   const el=$('bfList');if(!el)return;
@@ -3996,7 +4068,7 @@ async function loadBetriebsferienFromSP(){
   try{
     const data=await SP.readFile('betriebsferien.json');
     if(data&&data.betriebsferien){
-      localStorage.setItem(C.LS+'betriebsferien',JSON.stringify(data.betriebsferien));
+      lsSet(C.LS+'betriebsferien',JSON.stringify(data.betriebsferien));
       renderBetriebsferien();
     }
   }catch(e){console.warn('BF load:',e)}
@@ -4061,7 +4133,7 @@ async function loadEmployeesFromSP(){
       const spIds=new Set(data.employees.map(e=>e.id));
       const localOnly=EMPLOYEES.filter(e=>!spIds.has(e.id));
       EMPLOYEES=[...data.employees,...localOnly];
-      localStorage.setItem(C.LS+'employees',JSON.stringify(EMPLOYEES));
+      lsSet(C.LS+'employees',JSON.stringify(EMPLOYEES));
       console.log('[SP] employees geladen:',data.employees.length);
       if(user&&user.admin){renderEmpManagement();renderEmpSettings()}
     }
@@ -4385,9 +4457,9 @@ function saveEmpManageModal(){
 
 // ==================== PERSONAL NOTIFICATIONS ====================
 function getMyNotifSettings(){
-  try{return JSON.parse(localStorage.getItem(C.LS+(user?user.id+'_':'')+'my_notif'))||{morning:'06:55',morningOn:true,evening:'16:45',eveningOn:true}}catch{return{morning:'06:55',morningOn:true,evening:'16:45',eveningOn:true}}
+  try{return JSON.parse(lsGet(C.LS+(user?user.id+'_':'')+'my_notif'))||{morning:'06:55',morningOn:true,evening:'16:45',eveningOn:true}}catch{return{morning:'06:55',morningOn:true,evening:'16:45',eveningOn:true}}
 }
-function saveMyNotifSettings(s){localStorage.setItem(C.LS+(user?user.id+'_':'')+'my_notif',JSON.stringify(s))}
+function saveMyNotifSettings(s){lsSet(C.LS+(user?user.id+'_':'')+'my_notif',JSON.stringify(s))}
 
 function initMyNotif(){
   const s=getMyNotifSettings();
@@ -4607,7 +4679,7 @@ function renderAbsCalendar(){
 // TIMER SYNC ÜBER GERÄTE (SharePoint)
 // ============================================================
 let _timerSyncInterval=null;
-const _deviceId=(function(){let id=localStorage.getItem('zt_deviceId');if(!id){id=Math.random().toString(36).substring(2,10);localStorage.setItem('zt_deviceId',id)}return id})();
+const _deviceId=(function(){let id=lsGet('zt_deviceId');if(!id){id=Math.random().toString(36).substring(2,10);lsSet('zt_deviceId',id)}return id})();
 let _pendingTimerOff=false; // Track if we need to sync timer-off state
 
 async function syncTimerToSP(){
@@ -4662,7 +4734,7 @@ async function checkRemoteTimer(){
     const resume=confirm(msg);
     if(resume){
       timer={on:true,paused:remote.paused||false,start:remote.start,pauseAt:remote.pauseAt||null,totalPaused:remote.totalPaused||0,project:remote.project,ks:remote.ks,note:remote.note||'',segments:remote.segments||[]};
-      localStorage.setItem(lk('timer'),JSON.stringify(timer));
+      lsSet(lk('timer'),JSON.stringify(timer));
       $('timerProject').value=timer.project;
       $('timerKS').value=timer.ks;
       $('timerNote').value=timer.note||'';
@@ -4750,7 +4822,7 @@ function scanDuplicateProjects(){
   let allEntries=[...getEntries()];
   EMPLOYEES.forEach(emp=>{
     try{
-      const data=JSON.parse(localStorage.getItem(C.LS+emp.id+'_entries')||'[]');
+      const data=JSON.parse(lsGet(C.LS+emp.id+'_entries')||'[]');
       data.forEach(e=>{if(!allEntries.find(x=>x.id===e.id))allEntries.push(e)});
     }catch{}
   });
@@ -4830,7 +4902,7 @@ function mergeProject(num,officialName){
     }
   });
   if(merged>0){
-    localStorage.setItem(lk('entries'),JSON.stringify(entries));
+    lsSet(lk('entries'),JSON.stringify(entries));
     queueSync();
   }
   return merged;
@@ -4873,7 +4945,7 @@ async function renameProjectGlobal(){
       e.project=newName;e.projectName=newName;e.lastModified=Date.now();total++;
     }
   });
-  localStorage.setItem(lk('entries'),JSON.stringify(entries));
+  lsSet(lk('entries'),JSON.stringify(entries));
   
   // All employees on SP
   if(accessToken){
@@ -4977,15 +5049,15 @@ function importAltdaten(){
     // Save to employee's local storage
     const lsKey=C.LS+maId+'_entries';
     let empEntries=[];
-    try{empEntries=JSON.parse(localStorage.getItem(lsKey)||'[]')}catch{}
+    try{empEntries=JSON.parse(lsGet(lsKey)||'[]')}catch{}
     empEntries.push(entry);
-    localStorage.setItem(lsKey,JSON.stringify(empEntries));
+    lsSet(lsKey,JSON.stringify(empEntries));
     
     // If current user
     if(user&&user.id===maId){
       const mainEntries=getRawEntries();
       mainEntries.push(entry);
-      localStorage.setItem(lk('entries'),JSON.stringify(mainEntries));
+      lsSet(lk('entries'),JSON.stringify(mainEntries));
     }
     
     imported++;
@@ -5036,7 +5108,7 @@ function addHoliday(){
   if(!_customHolidays)_customHolidays={};
   if(!_customHolidays[yr])_customHolidays[yr]={..._defaultHolidays(yr)};
   _customHolidays[yr][date]=name;
-  localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+  lsSet(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
   $('holYear').value=yr;
   $('holNewDate').value='';$('holNewName').value='';
   renderHolidayAdmin();
@@ -5053,7 +5125,7 @@ function removeHoliday(dk){
   // null statt delete: markiert den Tag als geloescht, sonst kommt ein
   // Standard-Feiertag beim naechsten getHolidays() aus _defaultHolidays zurueck
   _customHolidays[yr][dk]=null;
-  localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+  lsSet(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
   renderHolidayAdmin();
   if(typeof refreshView==='function')refreshView();
   toast('Feiertag entfernt – nicht vergessen: 💾 SP speichern','info');
@@ -5065,7 +5137,7 @@ function restoreHoliday(dk){
   const yr=parseInt(dk.substring(0,4));
   if(!_customHolidays||!_customHolidays[yr])return;
   delete _customHolidays[yr][dk];
-  localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+  lsSet(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
   renderHolidayAdmin();
   if(typeof refreshView==='function')refreshView();
   toast('Feiertag zurückgeholt – nicht vergessen: 💾 SP speichern','success');
@@ -5077,7 +5149,7 @@ function resetHolidays(yr){
   if(!_customHolidays||!_customHolidays[yr]){toast('Bereits Standard','info');return}
   if(!confirm('Alle Anpassungen für '+yr+' verwerfen und die Standard-Feiertage wiederherstellen?'))return;
   delete _customHolidays[yr];
-  localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+  lsSet(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
   renderHolidayAdmin();
   if(typeof refreshView==='function')refreshView();
   toast('Standard-Feiertage wiederhergestellt – nicht vergessen: 💾 SP speichern','success');
@@ -5124,7 +5196,7 @@ function importHolidaysCSV(input){
       _customHolidays[yr][date]=name;
       count++;
     });
-    localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
+    lsSet(C.LS+'custom_holidays',JSON.stringify(_customHolidays));
     renderHolidayAdmin();
     toast(count+' Feiertage importiert','success');
     recalcAbsenceDaysAfterHolidayChange();
@@ -5146,7 +5218,7 @@ async function loadHolidaysFromSP(){
     const data=await SP.readFile('feiertage.json');
     if(data&&typeof data==='object'){
       _customHolidays=data;
-      localStorage.setItem(C.LS+'custom_holidays',JSON.stringify(data));
+      lsSet(C.LS+'custom_holidays',JSON.stringify(data));
       // Absenzen, die noch mit alten Feiertagen berechnet wurden, einmalig nachziehen.
       // Nur Admin und nur wenn die MA-Einstellungen (Arbeitstage) vorliegen, sonst
       // wuerde mit falschen Arbeitstagen gerechnet.
@@ -5160,16 +5232,16 @@ async function loadHolidaysFromSP(){
 }
 
 // Load custom holidays from localStorage on init
-try{const ch=localStorage.getItem(C.LS+'custom_holidays');if(ch)_customHolidays=JSON.parse(ch)}catch{}
+try{const ch=lsGet(C.LS+'custom_holidays');if(ch)_customHolidays=JSON.parse(ch)}catch{}
 
 // ============================================================
 // ÜBERSTUNDEN MANAGEMENT
 // ============================================================
 function getOvertimePayouts(){
-  try{return JSON.parse(localStorage.getItem(C.LS+'overtime_payouts')||'[]')}catch{return[]}
+  try{return JSON.parse(lsGet(C.LS+'overtime_payouts')||'[]')}catch{return[]}
 }
 function saveOvertimePayouts(payouts){
-  localStorage.setItem(C.LS+'overtime_payouts',JSON.stringify(payouts));
+  lsSet(C.LS+'overtime_payouts',JSON.stringify(payouts));
   if(accessToken)SP.writeFile('overtime_payouts.json',{lastUpdated:new Date().toISOString(),payouts}).catch(()=>{});
 }
 async function loadOvertimePayoutsFromSP(){
@@ -5177,7 +5249,7 @@ async function loadOvertimePayoutsFromSP(){
   try{
     const data=await SP.readFile('overtime_payouts.json');
     if(data&&Array.isArray(data.payouts)){
-      localStorage.setItem(C.LS+'overtime_payouts',JSON.stringify(data.payouts));
+      lsSet(C.LS+'overtime_payouts',JSON.stringify(data.payouts));
     }
   }catch{}
 }
