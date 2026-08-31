@@ -155,7 +155,10 @@
     <div class="card" style="margin-top:1.25rem">
       <div class="card-title">☁️ Daten auf SharePoint</div>
       <div class="sp-info" id="timerSyncInfo" style="margin-bottom:10px">Einträge werden automatisch hochgeladen. Falls etwas fehlt: Upload erzwingen.</div>
-      <button class="btn btn-secondary btn-sm" id="timerForceUpload">📤 Upload erzwingen</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" id="timerForceUpload">📤 Upload erzwingen</button>
+        <button class="btn btn-secondary btn-sm" id="timerResetConn">🔄 Verbindung zurücksetzen</button>
+      </div>
     </div>
   </div>
 
@@ -431,7 +434,7 @@
     <div class="card"><div class="card-title">🏖 Abwesenheiten aller Mitarbeiter</div><div id="adminAbsList"></div><button class="btn btn-secondary btn-sm" id="exportAbsBtn" style="margin-top:12px">📤 CSV Export</button></div>
 
     <!-- SHAREPOINT -->
-    <div class="card"><div class="card-title">📡 SharePoint</div><div class="sp-info"><strong>Status:</strong> <span id="spStatusText">⚡ Lokal</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" id="syncNowBtn">🔄 Sync</button><button class="btn btn-secondary btn-sm" id="forceSPUpload">📤 Upload</button></div></div>
+    <div class="card"><div class="card-title">📡 SharePoint</div><div class="sp-info"><strong>Status:</strong> <span id="spStatusText">⚡ Lokal</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" id="syncNowBtn">🔄 Sync</button><button class="btn btn-secondary btn-sm" id="forceSPUpload">📤 Upload</button><button class="btn btn-secondary btn-sm" id="resetSPConn">🔄 Verbindung zurücksetzen</button></div></div>
 
     <!-- PROJECTS -->
     <div class="card"><div class="card-title">📋 Projekte (<span id="projCountDisp">0</span>)</div><div class="form-row" style="margin-bottom:12px"><input type="text" class="form-input" id="projSearch" placeholder="🔍 Filtern..."><div><button class="btn btn-success btn-sm" id="addProjBtn">+ Neu</button></div></div><div class="proj-count" id="projFilterCount"></div><div class="proj-scroll" id="projList"></div></div>
@@ -604,9 +607,11 @@ function diagText(){
   L.push('Drive-ID: '+(SP._driveId||lsGet(C.LS+'sp_driveId')||'KEINE'));
   if(SP._driveInfo){
     const d=SP._driveInfo;
-    L.push('  gefunden ueber: '+(d.quelle||'?'));
+    L.push('  gefunden ueber: '+(d.quelle||'?')+(SP._driveVerified?'':' - NOCH NICHT GEPRUEFT'));
     if(d.siteName)L.push('  Site: '+d.siteName+(d.siteUrl?' ('+d.siteUrl+')':''));
     if(d.driveName)L.push('  Bibliothek: '+d.driveName+(d.driveUrl?' ('+d.driveUrl+')':''));
+    if(d.driveUrl)L.push('  Richtige Site: '+(SP._isRightSite(d.driveUrl)?'ja':'NEIN - Verbindung zuruecksetzen!'));
+    if(d.warnung)L.push('  ACHTUNG: '+d.warnung);
   }
   L.push('Zielpfad: '+(user?SP._targetPath(SP.entriesFile(user.name)):C.SP_PATH));
   L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
@@ -948,7 +953,7 @@ const PROJECTS_DATA=[
 // HUBLER METALLBAU ZEITERFASSUNG - Complete App JS
 // SharePoint Integration + 197 Bexio Projects + Push Notifications
 
-const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
+const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',SP_HOST:'hublermetallbau.sharepoint.com',SP_SITE:'HublerMetallbauDatenablage',LS:'hm_zt_'};
 const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:'fabienne_schneider23@hotmail.com',admin:false},{id:'HM-009',name:'Luis Silva',email:'x_luissilva@hotmail.com',admin:false}];
 function loadEmployees(){try{const d=JSON.parse(lsGet(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
 function saveEmployees(list){lsSet(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(ok=>console.log('[SP] employees '+(ok?'gespeichert':'FEHLGESCHLAGEN'))).catch(e=>console.error('[SP] employees Fehler:',e))}
@@ -1145,102 +1150,152 @@ function _toastWriteFail(path,msg){
 const SP={
   _driveId:null,
   _driveInfo:null,
-  // Prueft, ob im Drive wirklich der Ordner /Shared Documents/Zeiterfassung liegt.
-  // Zeigt ein PUT spaeter 200, die Datei taucht aber nirgends auf, dann wurde in
-  // aller Regel in die falsche Bibliothek geschrieben - genau das faengt das hier ab.
-  async _driveHasZeiterfassung(driveId){
+  _driveVerified:false,
+  _driveResolving:null,
+  // Gehoert das Drive zur Datenablage-Site?
+  // Die Ordnerpruefung allein reicht NICHT: wer laenger versehentlich in die
+  // Root-Bibliothek geschrieben hat, hat dort inzwischen selbst einen
+  // Zeiterfassungs-Ordner angelegt - der Check waere gruen und die falsche
+  // Drive-ID bliebe fuer immer im Cache stehen. Entscheidend ist die webUrl.
+  _isRightSite(webUrl){
+    return new RegExp('/sites/'+C.SP_SITE+'(/|$)','i').test(String(webUrl||'').replace(/\?.*$/,''));
+  },
+  // Liefert: ok (nutzbar), discard (sicher falsch, Cache wegwerfen),
+  // error (nicht pruefbar - dann weiterbenutzen, aber nicht als geprueft merken).
+  async _checkDrive(driveId){
+    const r={driveId:driveId};
+    try{
+      const d=await this.gf('/drives/'+driveId);
+      r.driveName=d&&d.name;r.driveUrl=d&&d.webUrl;
+    }catch(e){
+      if(((e&&e.status)||0)===404){r.discard=true;r.grund='Bibliothek existiert nicht mehr';return r}
+      r.error=(e&&e.message)||String(e);return r;
+    }
+    if(!this._isRightSite(r.driveUrl)){
+      r.discard=true;
+      r.grund='gehoert nicht zur Site '+C.SP_SITE+' ('+(r.driveUrl||'ohne URL')+')';
+      return r;
+    }
     try{
       const f=await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH);
-      return{ok:true,folder:f};
+      r.folderUrl=f&&f.webUrl;r.folder=true;r.ok=true;return r;
     }catch(e){
-      const st=(e&&e.status)||0;
-      // Nur bei einem klaren 404 verwerfen. Ein Netz- oder Tokenfehler darf ein
-      // funktionierendes Drive nicht wegwerfen.
-      return{ok:st!==404,missing:st===404,error:(e&&e.message)||String(e)};
+      if(((e&&e.status)||0)!==404){r.error=(e&&e.message)||String(e);return r}
     }
+    r.folderMissing=true;
+    // Kein Ordner unter SP_PATH - liegt er direkt in der Bibliothek? Dann stimmt
+    // nicht die Bibliothek, sondern der konfigurierte Pfad nicht.
+    try{
+      const alt=await this.gf('/drives/'+driveId+'/root:/Zeiterfassung');
+      r.altFolderUrl=alt&&alt.webUrl;
+      r.ok=true;
+      r.warnung='Ordner liegt unter /Zeiterfassung statt unter '+C.SP_PATH;
+      return r;
+    }catch(e){}
+    r.discard=true;
+    r.grund='kein Zeiterfassungs-Ordner in dieser Bibliothek';
+    return r;
+  },
+  // Verbindungsdaten vergessen (Reset-Knopf und automatische Reparatur).
+  // Zeiteintraege, Abwesenheiten und Session bleiben unangetastet.
+  _forgetDrive(){
+    this._driveId=null;this._driveInfo=null;this._driveVerified=false;
+    try{lsDel(C.LS+'sp_driveId')}catch(e){}
+  },
+  _logDrive(){
+    const d=this._driveInfo||{};
+    const txt='Drive '+(d.driveId||'?')+' ('+(d.driveName||'?')+') '+(d.quelle||'')+' - '+(d.driveUrl||'ohne URL')+(d.warnung?' | ACHTUNG: '+d.warnung:'');
+    logDiag('drive',txt);
+    console.log('[SP] '+txt);
   },
   async getDriveId(){
-    if(this._driveId)return this._driveId;
-    // Try cached driveId from localStorage first
-    const cached=lsGet(C.LS+'sp_driveId');
+    if(this._driveId&&this._driveVerified)return this._driveId;
+    // Parallele Aufrufe (fullSync startet viele) teilen sich eine Aufloesung.
+    if(!this._driveResolving){
+      const self=this;
+      this._driveResolving=this._resolveDrive().then(function(id){self._driveResolving=null;return id},
+                                                    function(e){self._driveResolving=null;throw e});
+    }
+    return this._driveResolving;
+  },
+  async _resolveDrive(){
+    // 1) Gecachte Drive-ID BLOCKIEREND pruefen. Frueher lief die Pruefung im
+    //    Hintergrund - der erste Sync der Sitzung schrieb also noch einmal an den
+    //    falschen Ort, bevor der Cache verworfen wurde.
+    const cached=this._driveId||lsGet(C.LS+'sp_driveId');
     if(cached){
-      console.log('[SP] Using cached driveId');
-      this._driveId=cached;
-      if(!this._driveInfo)this._driveInfo={driveId:cached,quelle:'aus lokalem Cache'};
-      // Im Hintergrund pruefen, ob der Zeiterfassungs-Ordner in diesem Drive liegt.
-      // Ein einmal falsch aufgeloestes Drive haelt sich sonst dauerhaft im
-      // localStorage und alle Uploads landen weiter in der falschen Bibliothek.
-      this._driveHasZeiterfassung(cached).then(r=>{
-        if(r.missing){
-          logDiag('drive','Gecachte Drive-ID enthaelt keinen Zeiterfassungs-Ordner - wird verworfen');
-          console.warn('[SP] Cached driveId zeigt auf die falsche Bibliothek, wird verworfen');
-          lsDel(C.LS+'sp_driveId');this._driveId=null;this._driveInfo=null;
-        }else if(r.ok){
-          console.log('[SP] Cached driveId valid');
-          this.gf('/drives/'+cached).then(d=>{this._driveInfo={driveId:cached,quelle:'aus lokalem Cache',driveName:d&&d.name,driveUrl:d&&d.webUrl}}).catch(()=>{});
-        }
-      });
-      return this._driveId;
+      const chk=await this._checkDrive(cached);
+      if(chk.discard){
+        logDiag('drive','Gecachte Drive-ID verworfen: '+chk.grund);
+        console.warn('[SP] Gecachte Drive-ID verworfen:',chk.grund);
+        this._forgetDrive();
+        toast('SharePoint-Verbindung wird neu aufgebaut','info');
+      }else if(chk.error){
+        // Nicht pruefbar (Netz/Token): weiterbenutzen, aber nicht als geprueft
+        // merken, damit beim naechsten Mal erneut geprueft wird.
+        this._driveId=cached;
+        this._driveInfo={driveId:cached,quelle:'aus dem Cache (nicht pruefbar: '+chk.error+')',driveName:chk.driveName,driveUrl:chk.driveUrl};
+        this._logDrive();
+        return cached;
+      }else{
+        this._driveId=cached;this._driveVerified=true;
+        this._driveInfo={driveId:cached,quelle:'aus dem Cache, geprueft',driveName:chk.driveName,driveUrl:chk.driveUrl,folderUrl:chk.folderUrl,warnung:chk.warnung};
+        this._logDrive();
+        return cached;
+      }
     }
     try{
       console.log('[SP] Suche SharePoint-Site...');
-      // Method 1: Search by name
       let site=null,quelle='';
+      // Methode 1: Suche - aber nur ein Treffer, dessen URL wirklich auf
+      // /sites/HublerMetallbauDatenablage zeigt. Der frueher benutzte
+      // Rueckfall auf value[0] konnte die Root-Site liefern, in der Uploads
+      // mit HTTP 200 quittiert werden und trotzdem niemand sie findet.
       try{
-        const search=await this.gf('/sites?search=HublerMetallbauDatenablage');
-        // Nicht blind value[0] nehmen - die Suche liefert auch fremde Sites.
-        if(search&&search.value&&search.value.length>0){
-          site=search.value.find(s=>/HublerMetallbauDatenablage/i.test(s.webUrl||s.name||''))||search.value[0];
-          quelle='Suche';
+        const search=await this.gf('/sites?search='+C.SP_SITE);
+        if(search&&search.value&&search.value.length){
+          site=search.value.find(s=>this._isRightSite(s.webUrl))||null;
+          if(site)quelle='Suche';
+          else logDiag('site-search',search.value.length+' Treffer, keiner davon '+C.SP_SITE+' - verworfen');
         }
       }catch(e){logDiag('site-search',e)}
-      // Method 2: Try direct site access by hostname
+      // Methode 2: direkter Pfad zur Site
       if(!site){
         try{
-          site=await this.gf('/sites/hublermetallbau.sharepoint.com:/sites/HublerMetallbauDatenablage');
+          site=await this.gf('/sites/'+C.SP_HOST+':/sites/'+C.SP_SITE);
           quelle='direkter Pfad';
         }catch(e){logDiag('site-direkt',e)}
       }
-      // Method 3: Try root site
-      // Achtung: das ist eine ANDERE Site als die Datenablage. Landet der Upload
-      // hier, meldet Graph brav 200 - in der Datenablage aendert sich aber nichts.
+      // Die Root-Site ist bewusst KEIN Fallback mehr - genau von dort kamen die
+      // Uploads, die scheinbar erfolgreich waren und nirgends ankamen.
       if(!site){
-        try{
-          site=await this.gf('/sites/hublermetallbau.sharepoint.com');
-          quelle='Root-Site (Notfall-Fallback!)';
-          logDiag('site','Nur ueber die Root-Site gefunden - Uploads landen moeglicherweise in der falschen Bibliothek');
-        }catch(e){logDiag('site-root',e)}
+        logDiag('site','Site '+C.SP_SITE+' nicht erreichbar');
+        console.warn('[SP] Site nicht gefunden - SharePoint nicht verf\u00fcgbar');
+        setSyncStatus('offline');
+        return null;
       }
-      if(site){
-        console.log('[SP] Site gefunden:',site.displayName||site.name,'ID:',site.id,site.webUrl||'');
-        logDiag('site',(site.displayName||site.name||'?')+' ueber '+quelle+' - '+(site.webUrl||'keine URL'));
-        const drives=await this.gf('/sites/'+site.id+'/drives');
-        if(drives&&drives.value){
-          // Erst das Drive nehmen, in dem der Zeiterfassungs-Ordner tatsaechlich
-          // liegt. Sonst kann "drives.value[0]" eine beliebige andere Bibliothek
-          // sein - der Upload meldet dann 200 und niemand findet die Datei.
-          const kandidaten=drives.value.slice().sort((a,b)=>{
-            const s=d=>(d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')?0:1;
-            return s(a)-s(b);
-          });
-          let docDrive=null;
-          for(const d of kandidaten){
-            const chk=await this._driveHasZeiterfassung(d.id);
-            if(chk.missing){logDiag('drive','"'+d.name+'" enthaelt keinen Zeiterfassungs-Ordner - uebersprungen');continue}
-            docDrive=d;break;
-          }
-          if(!docDrive){
-            docDrive=kandidaten[0];
-            logDiag('drive','Kein Drive mit Zeiterfassungs-Ordner gefunden - nehme "'+(docDrive&&docDrive.name)+'"');
-          }
-          this._driveId=docDrive.id;
-          this._driveInfo={driveId:docDrive.id,quelle:quelle,siteName:site.displayName||site.name,siteUrl:site.webUrl,driveName:docDrive.name,driveUrl:docDrive.webUrl};
+      console.log('[SP] Site gefunden:',site.displayName||site.name,'ID:',site.id,site.webUrl||'');
+      logDiag('site',(site.displayName||site.name||'?')+' ueber '+quelle+' - '+(site.webUrl||'keine URL'));
+      const drives=await this.gf('/sites/'+site.id+'/drives');
+      if(drives&&drives.value&&drives.value.length){
+        // Dokumentbibliothek zuerst, dann pruefen ob der Ordner drin liegt.
+        const kandidaten=drives.value.slice().sort((a,b)=>{
+          const s=d=>(d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')?0:1;
+          return s(a)-s(b);
+        });
+        for(const d of kandidaten){
+          const chk=await this._checkDrive(d.id);
+          if(chk.discard){logDiag('drive','"'+d.name+'" verworfen: '+chk.grund);continue}
+          this._driveId=d.id;
+          this._driveVerified=!chk.error;
+          this._driveInfo={driveId:d.id,quelle:quelle,siteName:site.displayName||site.name,siteUrl:site.webUrl,
+                           driveName:chk.driveName||d.name,driveUrl:chk.driveUrl||d.webUrl,folderUrl:chk.folderUrl,warnung:chk.warnung};
           lsSet(C.LS+'sp_driveId',this._driveId);
-          console.log('[SP] Drive gefunden:',docDrive.name,'ID:',docDrive.id,docDrive.webUrl||'');
+          this._logDrive();
           return this._driveId;
         }
+        logDiag('drive','Keine Bibliothek mit Zeiterfassungs-Ordner in '+C.SP_SITE);
       }
-      console.warn('[SP] Site nicht gefunden - SharePoint nicht verf\u00fcgbar');
       setSyncStatus('offline');
       return null;
     }catch(e){logDiag('getDriveId',e);setSyncStatus('offline');return null}
@@ -1456,16 +1511,18 @@ const SP={
     // Wohin schreiben wir ueberhaupt? Bei "200, aber die Datei aendert sich nicht"
     // ist fast immer die Bibliothek eine andere als die, in der nachgeschaut wird.
     const di=this._driveInfo||{};
-    const ordner=await this._driveHasZeiterfassung(driveId);
+    const chk=await this._checkDrive(driveId);
     const zielBlock=[
       'Drive-ID: '+driveId,
       'Gefunden ueber: '+(di.quelle||'unbekannt'),
       di.siteName?('Site: '+di.siteName+(di.siteUrl?' - '+di.siteUrl:'')):null,
-      di.driveName?('Bibliothek: '+di.driveName+(di.driveUrl?' - '+di.driveUrl:'')):null,
-      'Zielordner '+C.SP_PATH+': '+(ordner.missing?'FEHLT IN DIESER BIBLIOTHEK!':(ordner.ok?'vorhanden':'nicht pruefbar ('+ordner.error+')')),
-      ordner.folder&&ordner.folder.webUrl?('Ordner-URL: '+ordner.folder.webUrl):null
+      'Bibliothek: '+(chk.driveName||di.driveName||'?')+' - '+(chk.driveUrl||di.driveUrl||'ohne URL'),
+      'Richtige Site ('+C.SP_SITE+'): '+(chk.discard?'NEIN - '+chk.grund:'ja'),
+      'Zielordner '+C.SP_PATH+': '+(chk.folder?'vorhanden':(chk.folderMissing?'FEHLT':'nicht pruefbar'+(chk.error?' ('+chk.error+')':''))),
+      chk.folderUrl?('Ordner-URL: '+chk.folderUrl):null,
+      chk.warnung?('ACHTUNG: '+chk.warnung+(chk.altFolderUrl?' - '+chk.altFolderUrl:'')):null
     ].filter(Boolean).join('\n');
-    note('Ziel-Bibliothek',!ordner.missing,ordner.missing?'Der Zeiterfassungs-Ordner liegt nicht in dieser Bibliothek - Uploads landen am falschen Ort':'Token und Drive-ID OK',null,zielBlock);
+    note('Ziel-Bibliothek',!chk.discard,chk.discard?('Falsche Bibliothek: '+chk.grund+' - auf "Verbindung zur\u00fccksetzen" tippen'):'Token und Bibliothek OK',null,zielBlock);
     // 1) Eigene Zeiteintraege - mit Gegenpruefung
     const fnE=this.entriesFile(user.name);
     try{const n=await this.saveEntries({quiet:true,verify:true});note(fnE,true,'hochgeladen und gegengelesen',n,letzterBlock())}
@@ -2098,6 +2155,49 @@ $('exportProjBtn').onclick=function(){const blob=new Blob([JSON.stringify({lastU
 $('syncNowBtn').onclick=async function(){if(!accessToken&&!msalAccount){toast('Bitte mit Microsoft anmelden','warning');return}await SP.fullSync()};
 $('forceSPUpload').onclick=function(){forceUploadNow()};
 if($('timerForceUpload'))$('timerForceUpload').onclick=function(){forceUploadNow()};
+if($('resetSPConn'))$('resetSPConn').onclick=function(){resetSPConnection()};
+if($('timerResetConn'))$('timerResetConn').onclick=function(){resetSPConnection()};
+// Verbindung zuruecksetzen: wirft NUR die Verbindungsdaten weg (Drive-ID, Site-Cache,
+// Token im Speicher) und ermittelt sie neu. Zeiteintraege, Abwesenheiten und die
+// Anmeldung bleiben unangetastet - sonst waeren die lokalen Stunden weg.
+let _resetRunning=false;
+async function resetSPConnection(){
+  if(_resetRunning)return;
+  if(!msalAccount&&!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}
+  _resetRunning=true;
+  try{
+    const weg=[];
+    try{
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(k&&k.indexOf(C.LS+'sp_')===0)weg.push(k);
+      }
+    }catch(e){}
+    weg.forEach(function(k){lsDel(k)});
+    SP._forgetDrive();
+    accessToken=null;
+    logDiag('reset','Verbindungsdaten verworfen ('+(weg.length||0)+' Eintraege) - Neuermittlung laeuft');
+    console.log('[SP] Verbindung zurueckgesetzt, verworfen:',weg);
+    toast('Verbindung zur\u00fcckgesetzt \u2013 Sync l\u00e4uft','info');
+    setSyncStatus('syncing');
+    const token=await SP.getToken();
+    if(!token){setSyncStatus('offline');toast('Bitte neu mit Microsoft anmelden','warning');return}
+    const driveId=await SP.getDriveId();
+    if(!driveId){
+      setSyncStatus('offline');
+      toast('SharePoint-Bibliothek nicht gefunden \u2013 bitte Admin melden','error');
+      showOfflineBanner('SharePoint nicht erreichbar \u2013 auf Status tippen f\u00fcr Details');
+      return;
+    }
+    const d=SP._driveInfo||{};
+    logDiag('reset','Neue Drive-ID: '+driveId+' ('+(d.driveName||'?')+', '+(d.quelle||'?')+')');
+    await SP.fullSync();
+  }catch(e){
+    logDiag('reset',e);
+    setSyncStatus('offline');
+    toast('Zur\u00fccksetzen fehlgeschlagen: '+((e&&e.message)||e),'error');
+  }finally{_resetRunning=false}
+}
 // Force-Upload mit Rueckmeldung pro Datei. Bewusst auch im Timer-Tab erreichbar,
 // damit ein normaler MA ohne Admin-Rechte seine Eintraege selbst hochschieben kann.
 let _forceUploadRunning=false;
