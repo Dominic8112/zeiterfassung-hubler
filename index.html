@@ -152,6 +152,11 @@
       <div class="form-group"><label class="form-label">Kostenstelle <span class="req">*</span></label><select class="form-select" id="timerKS"><option value="">— Bitte wählen —</option><option>Büro</option><option>Zuschnitt</option><option>BAZ</option><option>Werkstatt</option><option>Montage</option></select></div>
       <div class="form-group"><label class="form-label">Bemerkung</label><input type="text" class="form-input" id="timerNote" placeholder="Optional..."></div>
     </div>
+    <div class="card" style="margin-top:1.25rem">
+      <div class="card-title">☁️ Daten auf SharePoint</div>
+      <div class="sp-info" id="timerSyncInfo" style="margin-bottom:10px">Einträge werden automatisch hochgeladen. Falls etwas fehlt: Upload erzwingen.</div>
+      <button class="btn btn-secondary btn-sm" id="timerForceUpload">📤 Upload erzwingen</button>
+    </div>
   </div>
 
   <!-- MANUAL -->
@@ -599,6 +604,9 @@ function diagText(){
   L.push('Drive-ID: '+(SP._driveId||lsGet(C.LS+'sp_driveId')||'KEINE'));
   L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
   L.push('Sync-Status: '+_syncStatus);
+  L.push('Letzter Upload OK: '+(SP._lastWriteOk?new Date(SP._lastWriteOk).toLocaleTimeString('de-CH'):'noch keiner'));
+  L.push('Letzter Schreibfehler: '+(SP._lastWriteError||'keiner'));
+  L.push('Eintraege lokal: '+(typeof getRawEntries==='function'?getRawEntries().length:'?')+(typeof _pendingEntrySync!=='undefined'&&_pendingEntrySync?' (Upload ausstehend!)':''));
   L.push('localStorage: '+_lsBytes());
   L.push('');
   L.push('--- Letzte Meldungen ---');
@@ -932,7 +940,7 @@ const PROJECTS_DATA=[
 const C={CLIENT_ID:'19ae5266-ce31-4758-80e5-9cb87be67dfa',TENANT_ID:'bf52de6b-9185-46fb-998d-989d583b27a2',REDIRECT:'https://zeiterfassung-hubler.netlify.app/',SP_PATH:'/Shared Documents/Zeiterfassung',LS:'hm_zt_'};
 const DEFAULT_EMPLOYEES=[{id:'HM-001',name:'Roman Koller',email:'roman.koller@hublermetallbau.ch',admin:false,approver:true},{id:'HM-002',name:'Dominic Schnorf',email:'dominic.schnorf@hublermetallbau.ch',admin:true,approver:true},{id:'HM-003',name:'Ursin Meienberg',email:'ursin.meienberg@hublermetallbau.ch',admin:false},{id:'HM-007',name:'Leonie Egloff',email:'leonie.egloff@hublermetallbau.ch',admin:false},{id:'HM-004',name:'Muhamed Cerkezi',email:null,admin:false},{id:'HM-005',name:'Aky Storz',email:null,admin:false},{id:'HM-006',name:'David Durica',email:null,admin:false},{id:'HM-008',name:'Fabienne Schneider',email:'fabienne_schneider23@hotmail.com',admin:false},{id:'HM-009',name:'Luis Silva',email:'x_luissilva@hotmail.com',admin:false}];
 function loadEmployees(){try{const d=JSON.parse(lsGet(C.LS+'employees'));if(d&&d.length)return d}catch{}return DEFAULT_EMPLOYEES.map(e=>({...e}))}
-function saveEmployees(list){lsSet(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(()=>console.log('[SP] employees gespeichert')).catch(e=>console.warn('[SP] employees Fehler:',e))}
+function saveEmployees(list){lsSet(C.LS+'employees',JSON.stringify(list));if(accessToken)SP.writeFile('employees.json',{employees:list}).then(ok=>console.log('[SP] employees '+(ok?'gespeichert':'FEHLGESCHLAGEN'))).catch(e=>console.error('[SP] employees Fehler:',e))}
 let EMPLOYEES=loadEmployees();
 function getActiveEmployees(){return EMPLOYEES.filter(e=>!e.archived)}
 // Austritt liegt in der Vergangenheit -> MA ist nicht mehr im Betrieb (Report-Filter standardmaessig aus)
@@ -1058,6 +1066,29 @@ function getHolidays(y){
 function _defaultHolidays(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1,easter=new Date(y,mo-1,da);const ad=(d2,n)=>{const r=new Date(d2);r.setDate(r.getDate()+n);return r},dk=d2=>dateKey(d2);const hol={};hol[dk(new Date(y,0,1))]='Neujahr';hol[dk(new Date(y,0,2))]='Berchtoldstag';hol[dk(ad(easter,-2))]='Karfreitag';hol[dk(ad(easter,1))]='Ostermontag';hol[dk(new Date(y,4,1))]='Tag der Arbeit';hol[dk(ad(easter,39))]='Auffahrt';hol[dk(ad(easter,50))]='Pfingstmontag';hol[dk(new Date(y,7,1))]='Bundesfeier';hol[dk(new Date(y,11,25))]='Weihnachten';hol[dk(new Date(y,11,26))]='Stephanstag';const s1=new Date(y,8,1),fm=new Date(s1);fm.setDate(1+(8-s1.getDay())%7);const ks2=new Date(fm);ks2.setDate(fm.getDate()+7);hol[dk(ks2)]='Knabenschiessen';return hol}
 
 // SHAREPOINT GRAPH API
+// ===== Fehlermeldungen von Microsoft Graph lesbar machen =====
+// Graph liefert bei Fehlern einen JSON-Body mit code/message. Ohne den steht in der
+// Diagnose nur "PUT 403" - mit ihm z.B. "accessDenied - The user does not have access".
+async function _graphErrText(resp){
+  try{
+    const t=await resp.text();
+    if(!t)return resp.statusText||'';
+    try{const j=JSON.parse(t);if(j&&j.error)return ((j.error.code||'')+' '+(j.error.message||'')).trim()}catch(_){}
+    return t.slice(0,300);
+  }catch(e){return resp.statusText||''}
+}
+// Pro Datei hoechstens alle 10s einen Toast, damit ein fehlgeschlagener Voll-Sync
+// (8 Dateien x 3 Versuche) nicht den halben Bildschirm mit Meldungen zupflastert.
+var _writeFailToastAt={};
+function _toastWriteFail(path,msg){
+  try{
+    var now=Date.now();
+    if(now-(_writeFailToastAt[path]||0)<10000)return;
+    _writeFailToastAt[path]=now;
+    if(typeof toast==='function')toast('SharePoint-Fehler bei '+String(path).split('/').pop()+': '+msg,'error');
+  }catch(e){}
+}
+
 const SP={
   _driveId:null,
   async getDriveId(){
@@ -1110,18 +1141,94 @@ const SP={
       return null;
     }catch(e){logDiag('getDriveId',e);setSyncStatus('offline');return null}
   },
-  async getToken(){
+  async getToken(forceRefresh){
     if(!msalApp||!msalAccount)return null;
-    try{const r=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});accessToken=r.accessToken;return r.accessToken}catch(e){logDiag('token-silent',e);
+    try{const r=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount,forceRefresh:!!forceRefresh});accessToken=r.accessToken;return r.accessToken}catch(e){logDiag('token-silent',e);
       try{
         await msalApp.acquireTokenRedirect({scopes:GRAPH_SCOPES});
         return null; // will redirect
-      }catch(e2){logDiag('token',e2);showOfflineBanner('Sitzung abgelaufen \u2013 bitte \u00fcber \u23FB abmelden');return null}
+      }catch(e2){logDiag('token',e2);showOfflineBanner('Sitzung abgelaufen – bitte über ⏻ abmelden');return null}
     }
   },
-  async gf(ep,opts){const token=await this.getToken();if(!token){logDiag('graph','kein Token fuer '+ep);return null}const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});if(!resp.ok){if(resp.status===403||resp.status===401){logDiag('graph','Zugriff verweigert '+resp.status+' bei '+ep);throw new Error('Kein Zugriff ('+resp.status+')')}{if(resp.status!==404)logDiag('graph',resp.status+' bei '+ep);throw new Error('Graph '+resp.status)}}return resp.json()},
-  async readFile(path){try{const driveId=await this.getDriveId();if(!driveId)return null;return await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content')}catch(e){if(!/404/.test(e&&e.message||''))logDiag('read '+path,e);return null}},
-  async writeFile(path,content){try{const driveId=await this.getDriveId();if(!driveId)return false;const token=await this.getToken();if(!token)return false;const body=typeof content==='string'?content:JSON.stringify(content,null,2);const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});if(!resp.ok)throw new Error('PUT '+resp.status);return true}catch(e){logDiag('write '+path,e);return false}},
+  async gf(ep,opts){
+    const token=await this.getToken();
+    if(!token){logDiag('graph','kein Token fuer '+ep);const e0=new Error('Kein Zugriffstoken - Anmeldung abgelaufen');e0.status=0;throw e0}
+    const url=ep.startsWith('http')?ep:'https://graph.microsoft.com/v1.0'+ep;
+    const resp=await fetch(url,{method:opts&&opts.method||'GET',headers:{'Authorization':'Bearer '+token,...(opts&&opts.headers||{})},body:opts&&opts.body});
+    if(!resp.ok){
+      const detail=await _graphErrText(resp);
+      if(resp.status===403||resp.status===401)logDiag('graph','Zugriff verweigert '+resp.status+' bei '+ep+(detail?' - '+detail:''));
+      else if(resp.status!==404)logDiag('graph',resp.status+' bei '+ep+(detail?' - '+detail:''));
+      const err=new Error((resp.status===401||resp.status===403)?('Kein Zugriff ('+resp.status+')'+(detail?': '+detail:'')):('Graph '+resp.status+(detail?': '+detail:'')));
+      err.status=resp.status;
+      throw err;
+    }
+    return resp.json();
+  },
+  // readFileEx unterscheidet "Datei gibt es nicht" (404, harmlos) von "Lesen
+  // fehlgeschlagen" (Token/Netz/Berechtigung). Ohne diese Unterscheidung sah ein
+  // fehlgeschlagener Read wie eine leere Datei aus - und der folgende Write haette
+  // die Daten auf SharePoint mit dem lokalen Stand ueberschrieben.
+  async readFileEx(path){
+    let driveId=null;
+    try{driveId=await this.getDriveId()}catch(e){return{ok:false,data:null,error:(e&&e.message)||String(e)}}
+    if(!driveId)return{ok:false,data:null,error:'Keine SharePoint-Drive-ID (Site nicht erreichbar)'};
+    try{
+      const data=await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content');
+      return{ok:true,data:data};
+    }catch(e){
+      const st=(e&&e.status)||0;
+      if(st===404||/404/.test((e&&e.message)||''))return{ok:true,data:null,missing:true};
+      logDiag('read '+path,e);
+      return{ok:false,data:null,error:(e&&e.message)||String(e)};
+    }
+  },
+  async readFile(path){const r=await this.readFileEx(path);return r.data},
+  _lastWriteError:null,
+  _lastWriteOk:null,
+  // Schreiben mit Wiederholung und lauter Fehlermeldung. Frueher wurde jeder Fehler
+  // nur mit console.warn geloggt und false zurueckgegeben - der Sync sah dann fuer
+  // den Benutzer wie "erledigt" aus, obwohl nichts auf SharePoint ankam.
+  async writeFile(path,content,opts){
+    opts=opts||{};
+    const body=typeof content==='string'?content:JSON.stringify(content,null,2);
+    const kb=Math.round(body.length/1024);
+    let lastErr='unbekannter Fehler';
+    for(let attempt=1;attempt<=3;attempt++){
+      try{
+        const driveId=await this.getDriveId();
+        if(!driveId)throw new Error('Keine SharePoint-Drive-ID (Site nicht erreichbar)');
+        // Ab Versuch 2 ein frisches Token erzwingen - ein abgelaufenes Token ist die
+        // haeufigste Ursache fuer still fehlschlagende PUT-Requests (401).
+        const token=await this.getToken(attempt>1);
+        if(!token)throw new Error('Kein Zugriffstoken - Anmeldung abgelaufen');
+        const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});
+        if(resp.ok){
+          if(attempt>1)logDiag('write '+path,'OK nach Versuch '+attempt);
+          console.log('[SP] geschrieben: '+path+' ('+kb+' KB)');
+          this._lastWriteError=null;this._lastWriteOk=Date.now();
+          return true;
+        }
+        const detail=await _graphErrText(resp);
+        lastErr='PUT '+resp.status+(detail?' - '+detail:'');
+        if(resp.status===401&&attempt<3){logDiag('write '+path,lastErr+' - Token wird erneuert');continue}
+        if((resp.status===409||resp.status===423||resp.status===429||resp.status>=500)&&attempt<3){
+          logDiag('write '+path,lastErr+' - Wiederholung '+(attempt+1));
+          await new Promise(r=>setTimeout(r,attempt*1200));continue;
+        }
+        break;
+      }catch(e){
+        lastErr=(e&&e.message)||String(e);
+        if(attempt<3&&/network|fetch|load failed|abgelaufen/i.test(lastErr)){await new Promise(r=>setTimeout(r,attempt*1200));continue}
+        break;
+      }
+    }
+    this._lastWriteError=path+': '+lastErr;
+    logDiag('write '+path,lastErr+' ('+kb+' KB)');
+    console.error('[SP] Schreiben fehlgeschlagen:',path,lastErr);
+    if(!opts.quiet)_toastWriteFail(path,lastErr);
+    return false;
+  },
   async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;lsSet(C.LS+'projects',JSON.stringify(projects),true);toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
   async loadEntries(){
@@ -1134,25 +1241,74 @@ const SP={
       refreshView();return true
     }return false
   },
-  async saveEntries(){
-    const fn='Mitarbeiter/'+user.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';
-    // Read current SP state first, then merge
-    try{
-      const remote=await this.readFile(fn);
-      const local=getRawEntries();
-      const spEntries=(remote&&Array.isArray(remote.entries))?remote.entries:[];
-      const merged=mergeEntries(local,spEntries);
-      // Save merged result locally
-      lsSet(lk('entries'),JSON.stringify(merged));
-      // Write to SP (exclude soft-deleted older than 30 days)
-      const cutoff=Date.now()-30*86400000;
-      const toWrite=merged.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
-      return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:toWrite});
-    }catch(e){
-      // If read fails, write local entries as fallback
-      console.warn('[SP] Merge-Save fallback:',e.message);
-      return await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:getRawEntries()});
+  // Read-Merge-Write fuer die eigenen Zeiteintraege.
+  // Wirft bei Misserfolg eine Exception mit Klartext-Grund - frueher kam hier nur
+  // ein "false" zurueck, das jeder Aufrufer als Erfolg verbucht hat.
+  // Rueckgabe: Anzahl geschriebener Eintraege.
+  async saveEntries(opts){
+    opts=opts||{};
+    if(!user)throw new Error('Kein Benutzer angemeldet');
+    const fn=this.entriesFile(user.name);
+    const local=getRawEntries();
+    // 1. Read: aktuellen SharePoint-Stand holen
+    const res=await this.readFileEx(fn);
+    if(!res.ok){
+      // Lesen fehlgeschlagen: NICHT schreiben. Sonst wuerde ein transienter Fehler
+      // (Token/Netz) dazu fuehren, dass der lokale Stand die SharePoint-Datei
+      // ueberschreibt - auf einem frisch eingerichteten Geraet waere das Datenverlust.
+      throw new Error('Bestehende Datei konnte nicht gelesen werden ('+res.error+') - Upload abgebrochen, damit auf SharePoint nichts verloren geht');
     }
+    const remote=res.data;
+    if(remote&&!Array.isArray(remote.entries))logDiag('save '+fn,'Remote-Datei ohne entries-Array - wird ersetzt');
+    const spEntries=(remote&&Array.isArray(remote.entries))?remote.entries:[];
+    // 2. Merge: neuere lastModified gewinnt (beidseitig, nichts geht verloren)
+    const merged=mergeEntries(local,spEntries);
+    lsSet(lk('entries'),JSON.stringify(merged));
+    // 3. Write: Soft-Deletes aelter als 30 Tage werden nicht mehr mitgeschleppt
+    const cutoff=Date.now()-30*86400000;
+    const toWrite=merged.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
+    const ok=await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:toWrite},{quiet:!!opts.quiet});
+    if(!ok)throw new Error(this._lastWriteError||'SharePoint hat das Speichern abgelehnt');
+    console.log('[SP] Eintraege gespeichert:',toWrite.length,'('+fn+')');
+    return toWrite.length;
+  },
+  entriesFile(name){return 'Mitarbeiter/'+String(name||'').replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json'},
+  // Force-Upload: schreibt alles Lokale explizit auf SharePoint und meldet pro Datei
+  // Erfolg oder Fehlergrund zurueck. Aufruf ueber den Button "Upload erzwingen".
+  async forceUpload(onProgress){
+    const rep=[];
+    const note=(file,ok,msg,count)=>{rep.push({file:file,ok:ok,msg:msg||'',count:count});if(onProgress)onProgress(rep);return rep[rep.length-1]};
+    if(!user){note('Anmeldung',false,'Kein Benutzer angemeldet');return rep}
+    const token=await this.getToken();
+    if(!token){note('Anmeldung',false,'Kein Zugriffstoken - bitte neu mit Microsoft anmelden');return rep}
+    const driveId=await this.getDriveId();
+    if(!driveId){note('SharePoint-Site',false,'Drive-ID nicht gefunden - fehlende Berechtigung?');return rep}
+    note('Verbindung',true,'Token und Drive-ID OK');
+    // 1) Eigene Zeiteintraege
+    const fnE=this.entriesFile(user.name);
+    try{const n=await this.saveEntries({quiet:true});note(fnE,true,'hochgeladen',n)}
+    catch(e){note(fnE,false,e.message)}
+    // 2) Abwesenheiten
+    try{const n=await syncAbsToSP({quiet:true});note('Abwesenheiten/alle.json',true,'hochgeladen',n)}
+    catch(e){note('Abwesenheiten/alle.json',false,e.message)}
+    // 3) Admin-Daten nur fuer Admins - normale MA haben darauf keinen Schreibzugriff
+    if(user.admin){
+      const jobs=[
+        ['projekte.json',()=>({lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects}),()=>projects.length],
+        ['employees.json',()=>({employees:EMPLOYEES}),()=>EMPLOYEES.length],
+        ['emp_settings.json',()=>getEmpSettings(),()=>Object.keys(getEmpSettings()).length],
+        ['feiertage.json',()=>(_customHolidays||{}),()=>Object.keys(_customHolidays||{}).length]
+      ];
+      for(const job of jobs){
+        const fn=job[0];
+        try{
+          const ok=await this.writeFile(fn,job[1](),{quiet:true});
+          if(ok)note(fn,true,'hochgeladen',job[2]());
+          else note(fn,false,this._lastWriteError||'abgelehnt');
+        }catch(e){note(fn,false,(e&&e.message)||String(e))}
+      }
+    }
+    return rep;
   },
   async fullSync(){
     if(!msalAccount&&!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}
@@ -1173,9 +1329,8 @@ const SP={
     if(r1 instanceof Error&&!coreErr)coreErr='Projekte: '+r1.message;
     const r2=await step('eintraege-laden',()=>this.loadEntries());
     if(r2 instanceof Error&&!coreErr)coreErr='Eintraege laden: '+r2.message;
-    const r3=await step('eintraege-speichern',()=>this.saveEntries());
+    const r3=await step('eintraege-speichern',()=>this.saveEntries({quiet:true}));
     if(r3 instanceof Error&&!coreErr)coreErr='Eintraege speichern: '+r3.message;
-    else if(r3===false&&!coreErr)coreErr='SharePoint hat das Speichern abgelehnt';
     // Zusatzdaten parallel, Fehler hier blockieren den Sync nicht
     await Promise.all([
       step('notif-settings',()=>loadNotifSettingsFromSP()),
@@ -1226,7 +1381,42 @@ function setSyncStatus(s){
 }
 // Update sync age display every minute - only auto-offline after first successful sync
 setInterval(()=>{if(_syncStatus==='online'&&_firstSyncDone&&_lastSyncOk){const ago=Math.round((Date.now()-_lastSyncOk)/60000);$('spStatusText').textContent='Verbunden \u00b7 Sync vor '+(ago<1?'<1':ago)+' Min';if(ago>15){$('syncStatus').className='sync-status offline';$('syncStatus').textContent='Offline?';$('spStatusText').textContent='Keine Verbindung seit '+ago+' Min';showOfflineBanner('Keine Verbindung seit '+ago+' Min');if(ago%5===0)reconnectNow()}}},60000);
-let syncTm=null;function queueSync(){if(!accessToken)return;clearTimeout(syncTm);syncTm=setTimeout(async()=>{const driveId=SP._driveId||lsGet(C.LS+'sp_driveId');if(!driveId){return}setSyncStatus('syncing');try{await SP.saveEntries();setSyncStatus('online')}catch(e){console.warn('[Sync]',e.message);setSyncStatus('offline')}},3000)}
+// Eintraege werden 3s nach der letzten Aenderung hochgeladen. Schlaegt das fehl,
+// wird bis zu 3x mit wachsendem Abstand wiederholt und danach klar gemeldet -
+// frueher wurde der Upload bei fehlendem Token/fehlender Drive-ID stillschweigend
+// verworfen und der Status trotzdem auf "online" gesetzt.
+let syncTm=null,_syncRetryTm=null,_pendingEntrySync=false;
+function queueSync(){
+  _pendingEntrySync=true;
+  if(!msalAccount&&!accessToken)return; // Demo-/Lokalmodus: kein SharePoint vorhanden
+  clearTimeout(syncTm);
+  syncTm=setTimeout(function(){runEntrySync(1)},3000);
+}
+async function runEntrySync(attempt){
+  attempt=attempt||1;
+  if(!msalAccount&&!accessToken)return false;
+  clearTimeout(_syncRetryTm);
+  setSyncStatus('syncing');
+  try{
+    await SP.saveEntries({quiet:true});
+    _pendingEntrySync=false;
+    setSyncStatus('online');
+    hideOfflineBanner();
+    return true;
+  }catch(e){
+    _pendingEntrySync=true;
+    logDiag('eintraege-sync',e);
+    console.error('[Sync] Eintraege NICHT auf SharePoint gespeichert:',e.message);
+    setSyncStatus('offline');
+    if(attempt<3){
+      _syncRetryTm=setTimeout(function(){runEntrySync(attempt+1)},attempt*5000);
+    }else{
+      toast('Eintr\u00e4ge nicht auf SharePoint gespeichert: '+e.message,'error');
+      showOfflineBanner('Eintr\u00e4ge noch nicht hochgeladen \u2013 auf Status tippen f\u00fcr Details');
+    }
+    return false;
+  }
+}
 
 async function syncWithRetry(attempt){
   attempt=attempt||1;
@@ -1370,7 +1560,10 @@ function initLogin(){
     if(accounts&&accounts.length>0){
       msalAccount=accounts[0];
       try{
-        await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});
+        // Ergebnis MUSS in accessToken landen - saemtliche Sync-Funktionen pruefen
+        // diese Variable, sonst laeuft die Sitzung bis zum ersten fullSync ohne Upload.
+        const _restored=await msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:msalAccount});
+        if(_restored&&_restored.accessToken)accessToken=_restored.accessToken;
         // Restore user from localStorage if available
         const saved=lsGet(C.LS+'session');
         if(saved){try{user=JSON.parse(saved);safeCall(showApp,'showApp');syncWithRetry()}catch{await afterMsalLogin()}}
@@ -1453,7 +1646,7 @@ $('pauseDiscard').onclick=function(){
   if(!confirm('Timer wirklich verwerfen?\nDie erfasste Zeit wird NICHT gespeichert.'))return;
   resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null;
   // Clear remote timer state
-  if(accessToken&&user)SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).catch(()=>{});
+  if(accessToken&&user)SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()},{quiet:true}).catch(()=>{});
   toast('Timer verworfen','info');
 };
 $('pauseConfirm').onclick=function(){let p=0;const z=$('pZn');const hasZnueni=z&&z.checked;if(hasZnueni)p+=15;const l=document.querySelector('input[name=lunch]:checked');const lunchVal=l?parseInt(l.value):0;p+=lunchVal;const lunchType=lunchVal===60?'60min':lunchVal===30?'30min':'none';const e=pendingEntry;addEntry({date:e.date,startTime:e.startTime,endTime:e.endTime,start:e.startTime,end:e.endTime,pauseMin:p,durationMin:timeToMin(e.endTime)-timeToMin(e.startTime)-p,project:e.project,projectName:e.project,kostenstelle:e.kostenstelle,costCenter:e.kostenstelle,bemerkung:e.bemerkung,note:e.bemerkung,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:lunchType,mittagsPause:lunchType});resetTimer();$('pauseModal').classList.remove('show');pendingEntry=null;
@@ -1720,8 +1913,80 @@ $('addProjSave').onclick=function(){const id=$('newProjId').value.trim(),name=$(
 $('importProjFile').onchange=function(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(ev){try{const data=JSON.parse(ev.target.result);if(data.projekte&&Array.isArray(data.projekte)){projects=data.projekte;lsSet(C.LS+'projects',JSON.stringify(projects),true);renderProjectList();toast(projects.length+' Projekte importiert','success');if(accessToken)SP.saveProjects()}else toast('Ung\u00fcltiges Format','error')}catch{toast('JSON-Fehler','error')}};reader.readAsText(file)};
 $('loadSPProj').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}await SP.loadProjects()};
 $('exportProjBtn').onclick=function(){const blob=new Blob([JSON.stringify({lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='projekte.json';a.click();toast('projekte.json exportiert','success')};
-$('syncNowBtn').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}await SP.fullSync()};
-$('forceSPUpload').onclick=async function(){if(!accessToken){toast('Bitte mit Microsoft anmelden','warning');return}setSyncStatus('syncing');try{await SP.saveEntries();await SP.saveProjects();setSyncStatus('online');toast('Alles hochgeladen','success')}catch(e){setSyncStatus('offline');toast('Fehler: '+e.message,'error')}};
+$('syncNowBtn').onclick=async function(){if(!accessToken&&!msalAccount){toast('Bitte mit Microsoft anmelden','warning');return}await SP.fullSync()};
+$('forceSPUpload').onclick=function(){forceUploadNow()};
+if($('timerForceUpload'))$('timerForceUpload').onclick=function(){forceUploadNow()};
+// Force-Upload mit Rueckmeldung pro Datei. Bewusst auch im Timer-Tab erreichbar,
+// damit ein normaler MA ohne Admin-Rechte seine Eintraege selbst hochschieben kann.
+let _forceUploadRunning=false;
+async function forceUploadNow(){
+  if(_forceUploadRunning){toast('Upload l\u00e4uft bereits','info');return}
+  if(!accessToken&&!msalAccount){toast('Bitte mit Microsoft anmelden','warning');return}
+  _forceUploadRunning=true;
+  const ov=showUploadReport(null);
+  setSyncStatus('syncing');
+  let rep=[];
+  try{
+    rep=await SP.forceUpload(function(partial){showUploadReport(partial,ov)});
+  }catch(e){
+    rep.push({file:'Upload',ok:false,msg:(e&&e.message)||String(e)});
+  }
+  _forceUploadRunning=false;
+  showUploadReport(rep,ov,true);
+  const bad=rep.filter(r=>!r.ok);
+  if(bad.length){
+    setSyncStatus('offline');
+    toast(bad.length+' von '+rep.length+' Dateien fehlgeschlagen','error');
+  }else{
+    setSyncStatus('online');
+    hideOfflineBanner();
+    toast('Alles auf SharePoint hochgeladen','success');
+  }
+}
+// Overlay mit Ergebnisliste; wird waehrend des Uploads laufend aktualisiert.
+function showUploadReport(rep,existing,done){
+  let o=existing||document.getElementById('uploadOverlay');
+  let body;
+  if(!o){
+    o=document.createElement('div');
+    o.id='uploadOverlay';
+    o.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px';
+    const box=document.createElement('div');
+    box.style.cssText='background:var(--card,#fff);color:var(--text,#111);border-radius:12px;max-width:560px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+    const head=document.createElement('div');
+    head.style.cssText='padding:12px 16px;font-weight:600;border-bottom:1px solid var(--border,#ddd)';
+    head.textContent='\ud83d\udce4 Upload auf SharePoint';
+    body=document.createElement('div');
+    body.id='uploadReportBody';
+    body.style.cssText='flex:1;overflow:auto;padding:10px 16px;font-size:.8rem;line-height:1.5';
+    const foot=document.createElement('div');
+    foot.style.cssText='padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border,#ddd);flex-wrap:wrap';
+    const bDiag=document.createElement('button');
+    bDiag.className='btn btn-secondary btn-sm';bDiag.textContent='Diagnose';
+    bDiag.onclick=function(){o.remove();showDiag()};
+    const bClose=document.createElement('button');
+    bClose.className='btn btn-sm';bClose.textContent='Schliessen';bClose.id='uploadReportClose';
+    bClose.onclick=function(){o.remove()};
+    foot.appendChild(bDiag);foot.appendChild(bClose);
+    box.appendChild(head);box.appendChild(body);box.appendChild(foot);
+    o.appendChild(box);
+    document.body.appendChild(o);
+  }else{
+    body=o.querySelector('#uploadReportBody');
+  }
+  if(!body)return o;
+  if(!rep||!rep.length){
+    body.innerHTML='<div style="padding:14px 0">\u23f3 Upload l\u00e4uft \u2026</div>';
+    return o;
+  }
+  body.innerHTML=rep.map(function(r){
+    const icon=r.ok?'\u2705':'\u274c';
+    const col=r.ok?'var(--text,#111)':'#dc2626';
+    const cnt=(r.count!==undefined&&r.count!==null)?(' \u00b7 '+r.count+' Datens\u00e4tze'):'';
+    return '<div style="padding:5px 0;border-bottom:1px solid var(--border,#eee);color:'+col+'">'+icon+' <strong>'+r.file+'</strong>'+cnt+'<div style="font-size:.72rem;opacity:.85;word-break:break-word">'+(r.msg||'')+'</div></div>';
+  }).join('')+(done?'':'<div style="padding:8px 0">\u23f3 \u2026</div>');
+  return o;
+}
 
 // EXPORT
 $('expWeek').onclick=function(){exportCSV('week')};$('expMonth').onclick=function(){exportCSV('month')};$('expAll').onclick=function(){exportCSV('all')};
@@ -1778,7 +2043,7 @@ setInterval(()=>{
 // PUSH NOTIFICATIONS
 const NOTIF_DEFAULTS={morning:'06:55',morningOn:true,lunch:'12:00',lunchOn:true,eveningMoDo:'16:45',eveningOn:true,eveningFr:'13:45',fridayOn:true,overflowH:10,overflowOn:true};
 function getNotifSettings(){try{return JSON.parse(lsGet(C.LS+'notif_settings'))||{...NOTIF_DEFAULTS}}catch{return{...NOTIF_DEFAULTS}}}
-function saveNotifSettings(s){lsSet(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s).then(()=>console.log('[SP] notif_settings gespeichert')).catch(e=>console.warn('[SP] notif_settings Fehler:',e))}
+function saveNotifSettings(s){lsSet(C.LS+'notif_settings',JSON.stringify(s));if(accessToken)SP.writeFile('notif_settings.json',s).then(ok=>console.log('[SP] notif_settings '+(ok?'gespeichert':'FEHLGESCHLAGEN'))).catch(e=>console.error('[SP] notif_settings Fehler:',e))}
 function loadNotifUI(){
   const s=getNotifSettings();
   if($('notifMorning'))$('notifMorning').value=s.morning||'06:55';
@@ -2066,7 +2331,7 @@ function calcFerienAnspruch(empId,year){
   return Math.round(ferienTage*(pensum/100)*(months/12)*10)/10;
 }
 function getEmpSettings(){try{return JSON.parse(lsGet(C.LS+'emp_settings'))||{}}catch{return{}}}
-function saveEmpSettings(s){lsSet(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s).then(()=>console.log('[SP] emp_settings gespeichert')).catch(e=>console.warn('[SP] emp_settings Fehler:',e))}
+function saveEmpSettings(s){lsSet(C.LS+'emp_settings',JSON.stringify(s));if(accessToken)SP.writeFile('emp_settings.json',s).then(ok=>console.log('[SP] emp_settings '+(ok?'gespeichert':'FEHLGESCHLAGEN'))).catch(e=>console.error('[SP] emp_settings Fehler:',e))}
 function getEmpSetting(empId){const all=getEmpSettings();return all[empId]||{...EMP_DEFAULTS}}
 function setEmpSetting(empId,data){const all=getEmpSettings();all[empId]={...EMP_DEFAULTS,...(all[empId]||{}),...data};saveEmpSettings(all)}
 
@@ -2397,14 +2662,22 @@ function recalcAbsenceDaysManual(){
 
 let absSyncTm=null;
 let _absNeedsSync=false;
-function queueAbsSync(){_absNeedsSync=true;if(!accessToken)return;clearTimeout(absSyncTm);absSyncTm=setTimeout(syncAbsToSP,2000)}
-async function syncAbsToSP(){
-  if(!accessToken){_absNeedsSync=true;return}
+function queueAbsSync(){_absNeedsSync=true;if(!accessToken&&!msalAccount)return;clearTimeout(absSyncTm);absSyncTm=setTimeout(function(){syncAbsToSP().catch(e=>logDiag('absenz-sync',e))},2000)}
+// Read-Merge-Write fuer die Abwesenheiten. Wirft bei Misserfolg, damit der Aufrufer
+// es merkt; _absNeedsSync bleibt dann gesetzt und der naechste Sync versucht es erneut.
+async function syncAbsToSP(opts){
+  opts=opts||{};
+  if(!accessToken&&!msalAccount){_absNeedsSync=true;throw new Error('Nicht mit Microsoft angemeldet')}
   try{
-    const remote=await SP.readFile('Abwesenheiten/alle.json').catch(()=>null);
+    const res=await SP.readFileEx('Abwesenheiten/alle.json');
+    if(!res.ok){
+      // Nicht blind ueberschreiben - sonst gingen die Absenzen der anderen MA verloren.
+      throw new Error('Bestehende Absenzen konnten nicht gelesen werden ('+res.error+') - Upload abgebrochen');
+    }
+    const remote=res.data;
     const local=getRawAbsences();
     const map=new Map();
-    if(remote&&remote.absences){
+    if(remote&&Array.isArray(remote.absences)){
       remote.absences.forEach(a=>{if(a&&a.id)map.set(a.id,{...a})});
     }
     local.forEach(a=>{
@@ -2417,10 +2690,12 @@ async function syncAbsToSP(){
     // Write to SP, exclude soft-deleted older than 30 days
     const cutoff=Date.now()-30*86400000;
     const toWrite=merged.filter(a=>!a._deleted||(a.lastModified&&a.lastModified>cutoff));
-    await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:toWrite});
+    const ok=await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:toWrite},{quiet:!!opts.quiet});
+    if(!ok)throw new Error(SP._lastWriteError||'SharePoint hat das Speichern abgelehnt');
     _absNeedsSync=false;
     console.log('[SP] Abwesenheiten gespeichert:',toWrite.length);
-  }catch(e){_absNeedsSync=true;console.warn('Abs sync:',e)}
+    return toWrite.length;
+  }catch(e){_absNeedsSync=true;logDiag('absenzen-speichern',e);console.error('[SP] Abwesenheiten NICHT gespeichert:',e.message);throw e}
 }
 
 function countWorkdays(from,to,empId){
@@ -2947,41 +3222,60 @@ function getEntriesForEmployee(empId,from,to){
 }
 
 // Save another employee's entries to SharePoint
-function syncEmpEntriesToSP(empId){
-  if(!accessToken)return;
-  const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return;
+// Eintraege eines anderen MA speichern (Admin/Approver aus MA-Edit heraus).
+// Wichtig: erst lesen, dann mergen, dann schreiben. Der fruehere Blind-Write hat den
+// - womoeglich veralteten - lokalen Stand des Admins ueber die Datei des MA gelegt
+// und damit dessen neuere Eintraege auf SharePoint geloescht.
+async function syncEmpEntriesToSP(empId){
+  if(!accessToken&&!msalAccount)return false;
+  const emp=EMPLOYEES.find(e=>e.id===empId);if(!emp)return false;
   const key=C.LS+empId+'_entries';
+  const fn=SP.entriesFile(emp.name);
   try{
-    const all=JSON.parse(lsGet(key)||'[]');
+    const local=JSON.parse(lsGet(key)||'[]');
+    const res=await SP.readFileEx(fn);
+    if(!res.ok)throw new Error('Lesen fehlgeschlagen ('+res.error+') - nicht ueberschrieben');
+    const spEntries=(res.data&&Array.isArray(res.data.entries))?res.data.entries:[];
+    const merged=mergeEntries(local,spEntries);
+    lsSet(key,JSON.stringify(merged));
     const cutoff=Date.now()-30*86400000;
-    const toWrite=all.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
-    const fn='Mitarbeiter/'+emp.name.replace(/\s/g,'_')+'_'+new Date().getFullYear()+'.json';
-    SP.writeFile(fn,{employee:emp.name,employeeId:empId,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:toWrite})
-      .then(()=>console.log('[SP] Einträge gespeichert für:',emp.name))
-      .catch(e=>console.warn('[SP] Einträge Fehler für',emp.name,':',e));
-  }catch(e){console.warn('syncEmpEntries:',e)}
+    const toWrite=merged.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
+    const ok=await SP.writeFile(fn,{employee:emp.name,employeeId:empId,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:toWrite});
+    if(!ok)throw new Error(SP._lastWriteError||'abgelehnt');
+    console.log('[SP] Eintraege gespeichert fuer:',emp.name,toWrite.length);
+    return true;
+  }catch(e){
+    logDiag('ma-eintraege '+emp.name,e);
+    console.error('[SP] Eintraege NICHT gespeichert fuer',emp.name+':',e.message);
+    toast('Eintr\u00e4ge von '+emp.name+' nicht gespeichert: '+e.message,'error');
+    return false;
+  }
 }
 
 // Load all employees' entries from SP (for admin/reports)
 async function loadAllEntriesFromSP(){
-  if(!accessToken)return;
-  const year=new Date().getFullYear();
+  if(!accessToken&&!msalAccount)return;
+  const failed=[];
+  let loaded=0;
   for(const emp of EMPLOYEES){
-    try{
-      const fn='Mitarbeiter/'+emp.name.replace(/\s/g,'_')+'_'+year+'.json';
-      const data=await SP.readFile(fn);
-      if(data&&Array.isArray(data.entries)){
-        const key=C.LS+emp.id+'_entries';
-        const local=JSON.parse(lsGet(key)||'[]');
-        const localIds=new Set(local.map(e=>e.id));
-        const spIds=new Set(data.entries.map(e=>e.id));
-        // Merge: use mergeEntries logic (timestamp-based, respects _deleted)
-        const merged=mergeEntries(local,data.entries);
-        lsSet(key,JSON.stringify(merged),true);
-      }
-    }catch(e){/* skip - file might not exist */}
+    // Die eigenen Eintraege macht loadEntries/saveEntries - hier nicht nochmal
+    // anfassen, sonst landet der eigene Stand im verwerfbaren Cache-Bereich.
+    if(user&&emp.id===user.id)continue;
+    const fn=SP.entriesFile(emp.name);
+    const res=await SP.readFileEx(fn);
+    if(!res.ok){failed.push(emp.name+' ('+res.error+')');logDiag('ma-laden '+emp.name,res.error);continue}
+    if(res.missing||!res.data||!Array.isArray(res.data.entries))continue;
+    const key=C.LS+emp.id+'_entries';
+    let local=[];
+    try{local=JSON.parse(lsGet(key)||'[]')}catch(e){local=[]}
+    // Timestamp-basiert mergen, damit lokal noch nicht hochgeladene Aenderungen
+    // eines Admins nicht vom SharePoint-Stand ueberbuegelt werden.
+    const merged=mergeEntries(local,res.data.entries);
+    lsSet(key,JSON.stringify(merged),true);
+    loaded++;
   }
-  console.log('[SP] Alle MA-Einträge geladen');
+  console.log('[SP] MA-Eintraege geladen:',loaded,failed.length?('- Fehler bei: '+failed.join(', ')):'');
+  if(failed.length)logDiag('ma-laden',failed.length+' Mitarbeiter nicht ladbar');
   refreshView();
 }
 
@@ -3765,7 +4059,7 @@ function maeSaveEdit(){
   const mittagVal=$('maeEditMittag').value;
   let p=0;if(hasZnueni)p+=15;if(mittagVal==='60min')p+=60;else if(mittagVal==='30min')p+=30;
   const brutto=eM-sM;
-  const upd={date:dt,start:st,end:en,startTime:st,endTime:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,bemerkung:$('maeEditNote').value.trim(),note:$('maeEditNote').value.trim(),pauseMin:p,durationMin:brutto-p,hours:(brutto-p)/60,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:mittagVal,mittagsPause:mittagVal,breakMinutes:p,editedBy:user.name,editedAt:new Date().toISOString()};
+  const upd={date:dt,start:st,end:en,startTime:st,endTime:en,project:pr,projectName:pr,kostenstelle:ks,costCenter:ks,bemerkung:$('maeEditNote').value.trim(),note:$('maeEditNote').value.trim(),pauseMin:p,durationMin:brutto-p,hours:(brutto-p)/60,pauseZnueni:hasZnueni,znueniPause:hasZnueni,pauseMittag:mittagVal,mittagsPause:mittagVal,breakMinutes:p,editedBy:user.name,editedAt:new Date().toISOString(),lastModified:Date.now()};
 
   if(id){
     // Update existing - need to load correct user's entries
@@ -3798,8 +4092,12 @@ function maeDeleteEntry(id){
   if(!confirm('Eintrag wirklich löschen?'))return;
   const empKey=C.LS+_maeEmpId+'_entries';
   try{
-    let all=JSON.parse(lsGet(empKey)||'[]');
-    all=all.filter(e=>e.id!==id);
+    const all=JSON.parse(lsGet(empKey)||'[]');
+    const i=all.findIndex(e=>e.id===id);
+    if(i<0){toast('Eintrag nicht gefunden','error');return}
+    // Soft-Delete wie ueberall sonst: ein hart geloeschter Eintrag kaeme beim
+    // naechsten Read-Merge von SharePoint sofort wieder zurueck.
+    all[i]._deleted=true;all[i].lastModified=Date.now();all[i].deletedBy=user.name;
     lsSet(empKey,JSON.stringify(all));
     syncEmpEntriesToSP(_maeEmpId);
     toast('Eintrag gelöscht','success');
@@ -3978,7 +4276,7 @@ function maeDoImport(){
         bemerkung:d.raw.bemerkung,note:d.raw.bemerkung,
         pauseMin:d.pauseMin,durationMin:d.netMin,hours:d.netMin/60,
         pauseZnueni:d.hasZnueni,znueniPause:d.hasZnueni,pauseMittag:d.mittagVal,mittagsPause:d.mittagVal,breakMinutes:d.pauseMin,
-        created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString()
+        created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString(),lastModified:Date.now()
       });
     });
     lsSet(empKey,JSON.stringify(all));
@@ -3992,7 +4290,7 @@ function maeDoImport(){
 
 // ==================== BETRIEBSFERIEN & BRÜCKENTAGE ====================
 function getBetriebsferien(){try{return JSON.parse(lsGet(C.LS+'betriebsferien')||'[]')}catch{return[]}}
-function saveBetriebsferien(bf){lsSet(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf}).then(()=>console.log('[SP] betriebsferien gespeichert')).catch(e=>console.warn('[SP] betriebsferien Fehler:',e))}
+function saveBetriebsferien(bf){lsSet(C.LS+'betriebsferien',JSON.stringify(bf));if(accessToken)SP.writeFile('betriebsferien.json',{betriebsferien:bf}).then(ok=>console.log('[SP] betriebsferien '+(ok?'gespeichert':'FEHLGESCHLAGEN'))).catch(e=>console.error('[SP] betriebsferien Fehler:',e))}
 
 function renderBetriebsferien(){
   const el=$('bfList');if(!el)return;
@@ -4234,7 +4532,7 @@ function maeDoAbsImport(){
       employeeId:_maeEmpId,employeeName:emp?emp.name:'',
       type:d.typ,from:d.fromStr,to:d.toStr,duration:d.dur,status:d.status,
       days:d.days,note:d.bemerkung,
-      created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString()
+      created:new Date().toISOString(),createdBy:user.name,importedAt:new Date().toISOString(),lastModified:Date.now()
     });
   });
   saveAllAbsences(allAbs);
@@ -4562,7 +4860,7 @@ document.addEventListener('visibilitychange',function(){
         if(token){
           hideOfflineBanner();
           setSyncStatus('syncing');
-          Promise.all([SP.saveEntries(),loadAbsencesFromSP(),loadEmpSettingsFromSP(),loadEmployeesFromSP()]).then(()=>{if(_absNeedsSync)syncAbsToSP();setSyncStatus('online');refreshView()}).catch(e=>{console.warn('[Sync]',e.message);setSyncStatus('offline')});
+          Promise.all([SP.saveEntries({quiet:true}),loadAbsencesFromSP(),loadEmpSettingsFromSP(),loadEmployeesFromSP()]).then(()=>{if(_absNeedsSync)syncAbsToSP().catch(e=>logDiag('absenz-sync',e));setSyncStatus('online');hideOfflineBanner();refreshView()}).catch(e=>{logDiag('focus-sync',e);console.error('[Sync] Focus-Sync fehlgeschlagen:',e.message);setSyncStatus('offline');toast('Sync fehlgeschlagen: '+e.message,'error');showOfflineBanner('Sync fehlgeschlagen \u2013 auf Status tippen f\u00fcr Details')});
         }else{
           showOfflineBanner('Token abgelaufen');
         }
@@ -4716,7 +5014,7 @@ async function syncTimerToSP(){
       segments:timer.segments,
       lastUpdate:Date.now()
     };
-    await SP.writeFile('timer_'+user.id+'.json',state);
+    await SP.writeFile('timer_'+user.id+'.json',state,{quiet:true});
   }catch(e){console.warn('[TimerSync] Upload fehlgeschlagen:',e.message)}
 }
 
@@ -4725,7 +5023,7 @@ async function checkRemoteTimer(){
   // First: if we have a pending timer-off, sync it now
   if(_pendingTimerOff&&!timer.on){
     try{
-      await SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()});
+      await SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()},{quiet:true});
       _pendingTimerOff=false;
     }catch{}
   }
@@ -4764,7 +5062,7 @@ async function checkRemoteTimer(){
     }else{
       // User declined - mark remote timer as stopped to prevent repeated prompts
       try{
-        await SP.writeFile('timer_'+user.id+'.json',{deviceId:remote.deviceId,userId:user.id,on:false,lastUpdate:Date.now(),stoppedBy:_deviceId});
+        await SP.writeFile('timer_'+user.id+'.json',{deviceId:remote.deviceId,userId:user.id,on:false,lastUpdate:Date.now(),stoppedBy:_deviceId},{quiet:true});
       }catch{}
     }
   }catch(e){console.warn('[TimerSync] Remote check:',e.message)}
@@ -4776,7 +5074,7 @@ function startTimerSync(){
     if(!accessToken)return;
     if(timer.on)syncTimerToSP();
     else if(_pendingTimerOff){
-      SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).then(()=>{_pendingTimerOff=false;console.log('[TimerSync] Pending off synced')}).catch(()=>{});
+      SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()},{quiet:true}).then(()=>{_pendingTimerOff=false;console.log('[TimerSync] Pending off synced')}).catch(()=>{});
     }
   },30000);
   // Immediate sync
@@ -4803,7 +5101,7 @@ $('btnStop').onclick=function(){
   _origBtnStop.call(this);
   // Clear remote timer state, mark pending if offline
   if(accessToken&&user){
-    SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()}).then(()=>{_pendingTimerOff=false}).catch(()=>{_pendingTimerOff=true});
+    SP.writeFile('timer_'+user.id+'.json',{deviceId:_deviceId,userId:user.id,on:false,lastUpdate:Date.now()},{quiet:true}).then(()=>{_pendingTimerOff=false}).catch(()=>{_pendingTimerOff=true});
   }else{_pendingTimerOff=true}
 };
 
