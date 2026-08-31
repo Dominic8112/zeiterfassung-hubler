@@ -602,10 +602,21 @@ function diagText(){
   L.push('MSAL-Konto: '+(msalAccount?(msalAccount.username||'ja'):'KEINES'));
   L.push('Access-Token: '+(accessToken?('ja ('+accessToken.length+' Zeichen)'):'NEIN'));
   L.push('Drive-ID: '+(SP._driveId||lsGet(C.LS+'sp_driveId')||'KEINE'));
+  if(SP._driveInfo){
+    const d=SP._driveInfo;
+    L.push('  gefunden ueber: '+(d.quelle||'?'));
+    if(d.siteName)L.push('  Site: '+d.siteName+(d.siteUrl?' ('+d.siteUrl+')':''));
+    if(d.driveName)L.push('  Bibliothek: '+d.driveName+(d.driveUrl?' ('+d.driveUrl+')':''));
+  }
+  L.push('Zielpfad: '+(user?SP._targetPath(SP.entriesFile(user.name)):C.SP_PATH));
   L.push('Benutzer: '+(user?(user.name+' / '+user.id+(user.admin?' / Admin':'')):'keiner'));
   L.push('Sync-Status: '+_syncStatus);
   L.push('Letzter Upload OK: '+(SP._lastWriteOk?new Date(SP._lastWriteOk).toLocaleTimeString('de-CH'):'noch keiner'));
   L.push('Letzter Schreibfehler: '+(SP._lastWriteError||'keiner'));
+  if(SP._lastWriteInfo){
+    L.push('--- Letzter Upload im Detail ---');
+    L.push(_writeInfoText(SP._lastWriteInfo));
+  }
   L.push('Eintraege lokal: '+(typeof getRawEntries==='function'?getRawEntries().length:'?')+(typeof _pendingEntrySync!=='undefined'&&_pendingEntrySync?' (Upload ausstehend!)':''));
   L.push('localStorage: '+_lsBytes());
   L.push('');
@@ -1077,6 +1088,48 @@ async function _graphErrText(resp){
     return t.slice(0,300);
   }catch(e){return resp.statusText||''}
 }
+// JSON-Bytes zaehlen: String.length sind UTF-16-Einheiten, SharePoint zaehlt Bytes.
+// Ohne das stimmt der Groessenabgleich bei Umlauten nie.
+function _byteLen(s){
+  try{return new TextEncoder().encode(String(s)).length}
+  catch(e){return unescape(encodeURIComponent(String(s))).length}
+}
+// Die Header, die bei einem Graph-Problem wirklich weiterhelfen.
+function _pickHeaders(resp){
+  const out={};
+  try{
+    ['request-id','client-request-id','date','content-type','content-length','location','retry-after'].forEach(function(h){
+      const v=resp.headers&&resp.headers.get&&resp.headers.get(h);
+      if(v)out[h]=v;
+    });
+  }catch(e){}
+  return out;
+}
+// Fehlertext aus einem bereits gelesenen Body (resp.text() geht nur einmal).
+function _graphErrFromText(t,resp){
+  try{
+    if(!t)return (resp&&resp.statusText)||'';
+    try{const j=JSON.parse(t);if(j&&j.error)return ((j.error.code||'')+' '+(j.error.message||'')).trim()}catch(_){}
+    return String(t).slice(0,300);
+  }catch(e){return (resp&&resp.statusText)||''}
+}
+// Request/Response eines Uploads als lesbaren Block fuer den Upload-Bericht.
+function _writeInfoText(i){
+  if(!i)return '';
+  const L=[];
+  L.push('Pfad: '+i.pfad);
+  L.push('URL: '+i.url);
+  L.push('Gesendet: '+i.bytes+' Bytes, Token '+i.tokenLen+' Zeichen, Versuch '+i.versuch);
+  L.push('Antwort: HTTP '+i.status+' '+(i.statusText||''));
+  if(i.headers&&Object.keys(i.headers).length)L.push('Header: '+Object.keys(i.headers).map(k=>k+'='+i.headers[k]).join(', '));
+  if(i.size!==undefined)L.push('Server-Groesse: '+i.size+' Bytes'+(i.serverStand?', Stand '+i.serverStand:''));
+  if(i.ordner)L.push('Abgelegt in: '+i.ordner);
+  if(i.webUrl)L.push('Datei-URL: '+i.webUrl);
+  if(i.publication)L.push('Veroeffentlichung: '+i.publication+' (Bibliothek verlangt Auschecken/Freigabe!)');
+  if(i.verify)L.push('Gegenpruefung: '+i.verify);
+  if(i.body)L.push('Body: '+i.body);
+  return L.join('\n');
+}
 // Pro Datei hoechstens alle 10s einen Toast, damit ein fehlgeschlagener Voll-Sync
 // (8 Dateien x 3 Versuche) nicht den halben Bildschirm mit Meldungen zupflastert.
 var _writeFailToastAt={};
@@ -1091,6 +1144,21 @@ function _toastWriteFail(path,msg){
 
 const SP={
   _driveId:null,
+  _driveInfo:null,
+  // Prueft, ob im Drive wirklich der Ordner /Shared Documents/Zeiterfassung liegt.
+  // Zeigt ein PUT spaeter 200, die Datei taucht aber nirgends auf, dann wurde in
+  // aller Regel in die falsche Bibliothek geschrieben - genau das faengt das hier ab.
+  async _driveHasZeiterfassung(driveId){
+    try{
+      const f=await this.gf('/drives/'+driveId+'/root:'+C.SP_PATH);
+      return{ok:true,folder:f};
+    }catch(e){
+      const st=(e&&e.status)||0;
+      // Nur bei einem klaren 404 verwerfen. Ein Netz- oder Tokenfehler darf ein
+      // funktionierendes Drive nicht wegwerfen.
+      return{ok:st!==404,missing:st===404,error:(e&&e.message)||String(e)};
+    }
+  },
   async getDriveId(){
     if(this._driveId)return this._driveId;
     // Try cached driveId from localStorage first
@@ -1098,41 +1166,77 @@ const SP={
     if(cached){
       console.log('[SP] Using cached driveId');
       this._driveId=cached;
-      // Verify it still works in background
-      this.gf('/drives/'+cached+'/root').then(()=>{console.log('[SP] Cached driveId valid')}).catch(()=>{
-        console.warn('[SP] Cached driveId invalid, clearing');
-        lsDel(C.LS+'sp_driveId');this._driveId=null;
+      if(!this._driveInfo)this._driveInfo={driveId:cached,quelle:'aus lokalem Cache'};
+      // Im Hintergrund pruefen, ob der Zeiterfassungs-Ordner in diesem Drive liegt.
+      // Ein einmal falsch aufgeloestes Drive haelt sich sonst dauerhaft im
+      // localStorage und alle Uploads landen weiter in der falschen Bibliothek.
+      this._driveHasZeiterfassung(cached).then(r=>{
+        if(r.missing){
+          logDiag('drive','Gecachte Drive-ID enthaelt keinen Zeiterfassungs-Ordner - wird verworfen');
+          console.warn('[SP] Cached driveId zeigt auf die falsche Bibliothek, wird verworfen');
+          lsDel(C.LS+'sp_driveId');this._driveId=null;this._driveInfo=null;
+        }else if(r.ok){
+          console.log('[SP] Cached driveId valid');
+          this.gf('/drives/'+cached).then(d=>{this._driveInfo={driveId:cached,quelle:'aus lokalem Cache',driveName:d&&d.name,driveUrl:d&&d.webUrl}}).catch(()=>{});
+        }
       });
       return this._driveId;
     }
     try{
       console.log('[SP] Suche SharePoint-Site...');
       // Method 1: Search by name
-      let site=null;
+      let site=null,quelle='';
       try{
         const search=await this.gf('/sites?search=HublerMetallbauDatenablage');
-        if(search&&search.value&&search.value.length>0)site=search.value[0];
+        // Nicht blind value[0] nehmen - die Suche liefert auch fremde Sites.
+        if(search&&search.value&&search.value.length>0){
+          site=search.value.find(s=>/HublerMetallbauDatenablage/i.test(s.webUrl||s.name||''))||search.value[0];
+          quelle='Suche';
+        }
       }catch(e){logDiag('site-search',e)}
       // Method 2: Try direct site access by hostname
       if(!site){
         try{
           site=await this.gf('/sites/hublermetallbau.sharepoint.com:/sites/HublerMetallbauDatenablage');
+          quelle='direkter Pfad';
         }catch(e){logDiag('site-direkt',e)}
       }
       // Method 3: Try root site
+      // Achtung: das ist eine ANDERE Site als die Datenablage. Landet der Upload
+      // hier, meldet Graph brav 200 - in der Datenablage aendert sich aber nichts.
       if(!site){
         try{
           site=await this.gf('/sites/hublermetallbau.sharepoint.com');
+          quelle='Root-Site (Notfall-Fallback!)';
+          logDiag('site','Nur ueber die Root-Site gefunden - Uploads landen moeglicherweise in der falschen Bibliothek');
         }catch(e){logDiag('site-root',e)}
       }
       if(site){
-        console.log('[SP] Site gefunden:',site.displayName||site.name,'ID:',site.id);
+        console.log('[SP] Site gefunden:',site.displayName||site.name,'ID:',site.id,site.webUrl||'');
+        logDiag('site',(site.displayName||site.name||'?')+' ueber '+quelle+' - '+(site.webUrl||'keine URL'));
         const drives=await this.gf('/sites/'+site.id+'/drives');
         if(drives&&drives.value){
-          const docDrive=drives.value.find(d=>d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')||drives.value[0];
+          // Erst das Drive nehmen, in dem der Zeiterfassungs-Ordner tatsaechlich
+          // liegt. Sonst kann "drives.value[0]" eine beliebige andere Bibliothek
+          // sein - der Upload meldet dann 200 und niemand findet die Datei.
+          const kandidaten=drives.value.slice().sort((a,b)=>{
+            const s=d=>(d.name==='Dokumente'||d.name==='Documents'||d.name==='Shared Documents')?0:1;
+            return s(a)-s(b);
+          });
+          let docDrive=null;
+          for(const d of kandidaten){
+            const chk=await this._driveHasZeiterfassung(d.id);
+            if(chk.missing){logDiag('drive','"'+d.name+'" enthaelt keinen Zeiterfassungs-Ordner - uebersprungen');continue}
+            docDrive=d;break;
+          }
+          if(!docDrive){
+            docDrive=kandidaten[0];
+            logDiag('drive','Kein Drive mit Zeiterfassungs-Ordner gefunden - nehme "'+(docDrive&&docDrive.name)+'"');
+          }
           this._driveId=docDrive.id;
+          this._driveInfo={driveId:docDrive.id,quelle:quelle,siteName:site.displayName||site.name,siteUrl:site.webUrl,driveName:docDrive.name,driveUrl:docDrive.webUrl};
           lsSet(C.LS+'sp_driveId',this._driveId);
-          console.log('[SP] Drive gefunden:',docDrive.name,'ID:',docDrive.id);
+          console.log('[SP] Drive gefunden:',docDrive.name,'ID:',docDrive.id,docDrive.webUrl||'');
           return this._driveId;
         }
       }
@@ -1186,13 +1290,20 @@ const SP={
   async readFile(path){const r=await this.readFileEx(path);return r.data},
   _lastWriteError:null,
   _lastWriteOk:null,
+  _lastWriteInfo:null,
+  // Exakter Zielpfad und Graph-URL an einer Stelle, damit Log und Bericht genau
+  // das zeigen, was auch wirklich gesendet wird.
+  _contentUrl(driveId,path){return 'https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content'},
+  _targetPath(path){return C.SP_PATH+'/'+path},
   // Schreiben mit Wiederholung und lauter Fehlermeldung. Frueher wurde jeder Fehler
   // nur mit console.warn geloggt und false zurueckgegeben - der Sync sah dann fuer
   // den Benutzer wie "erledigt" aus, obwohl nichts auf SharePoint ankam.
   async writeFile(path,content,opts){
     opts=opts||{};
     const body=typeof content==='string'?content:JSON.stringify(content,null,2);
-    const kb=Math.round(body.length/1024);
+    const bytes=_byteLen(body);
+    const kb=Math.round(bytes/1024);
+    const ziel=this._targetPath(path);
     let lastErr='unbekannter Fehler';
     for(let attempt=1;attempt<=3;attempt++){
       try{
@@ -1202,14 +1313,53 @@ const SP={
         // haeufigste Ursache fuer still fehlschlagende PUT-Requests (401).
         const token=await this.getToken(attempt>1);
         if(!token)throw new Error('Kein Zugriffstoken - Anmeldung abgelaufen');
-        const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+C.SP_PATH+'/'+path+':/content',{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});
+        const url=this._contentUrl(driveId,path);
+        const info={pfad:ziel,url:url,bytes:bytes,tokenLen:token.length,versuch:attempt,driveId:driveId};
+        const resp=await fetch(url,{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body});
+        info.status=resp.status;
+        info.statusText=resp.statusText||'';
+        info.headers=_pickHeaders(resp);
+        // Graph liefert bei Erfolg das DriveItem zurueck. Erst daraus geht hervor,
+        // WO die Datei gelandet ist - ein 200 allein sagt darueber nichts aus.
+        const rawBody=await resp.text().catch(()=>'');
+        info.body=String(rawBody).slice(0,500);
+        let item=null;
+        try{item=JSON.parse(rawBody)}catch(_){}
         if(resp.ok){
+          if(item){
+            info.itemId=item.id;info.webUrl=item.webUrl;info.size=item.size;
+            info.serverStand=item.lastModifiedDateTime;
+            info.ordner=item.parentReference&&item.parentReference.path;
+            info.itemDriveId=item.parentReference&&item.parentReference.driveId;
+            if(item.publication)info.publication=(item.publication.level||'')+'/'+(item.publication.versionId||'');
+          }
+          // Groessenabgleich: der Server muss genau unsere Bytes haben.
+          if(item&&typeof item.size==='number'&&item.size!==bytes){
+            lastErr='Server meldet '+item.size+' Bytes, gesendet wurden '+bytes;
+            info.verify='FEHLER: '+lastErr;
+            this._lastWriteInfo=info;
+            logDiag('write '+path,lastErr);
+            break;
+          }
+          if(opts.verify){
+            const v=await this._verifyWrite(driveId,item,body,bytes);
+            info.verify=v.msg;
+            if(!v.ok){
+              lastErr='Verify fehlgeschlagen: '+v.msg;
+              this._lastWriteInfo=info;
+              logDiag('write '+path,lastErr);
+              console.error('[SP] Verify fehlgeschlagen:',ziel,v.msg);
+              break;
+            }
+          }
           if(attempt>1)logDiag('write '+path,'OK nach Versuch '+attempt);
-          console.log('[SP] geschrieben: '+path+' ('+kb+' KB)');
-          this._lastWriteError=null;this._lastWriteOk=Date.now();
+          console.log('[SP] geschrieben: '+ziel+' ('+kb+' KB, HTTP '+resp.status+')'+(info.webUrl?' -> '+info.webUrl:''));
+          logDiag('write '+path,'HTTP '+resp.status+', '+bytes+' Bytes'+(info.verify?', '+info.verify:''));
+          this._lastWriteError=null;this._lastWriteOk=Date.now();this._lastWriteInfo=info;
           return true;
         }
-        const detail=await _graphErrText(resp);
+        this._lastWriteInfo=info;
+        const detail=_graphErrFromText(rawBody,resp);
         lastErr='PUT '+resp.status+(detail?' - '+detail:'');
         if(resp.status===401&&attempt<3){logDiag('write '+path,lastErr+' - Token wird erneuert');continue}
         if((resp.status===409||resp.status===423||resp.status===429||resp.status>=500)&&attempt<3){
@@ -1224,10 +1374,26 @@ const SP={
       }
     }
     this._lastWriteError=path+': '+lastErr;
-    logDiag('write '+path,lastErr+' ('+kb+' KB)');
-    console.error('[SP] Schreiben fehlgeschlagen:',path,lastErr);
+    logDiag('write '+path,lastErr+' ('+kb+' KB, Ziel '+ziel+')');
+    console.error('[SP] Schreiben fehlgeschlagen:',ziel,lastErr,this._lastWriteInfo||'');
     if(!opts.quiet)_toastWriteFail(path,lastErr);
     return false;
+  },
+  // Nach dem PUT die Datei nochmal vom Server holen und Byte fuer Byte vergleichen.
+  // Nur beim Force-Upload, fuer den normalen Sync waere das doppelter Traffic.
+  async _verifyWrite(driveId,item,body,bytes){
+    if(!item||!item.id)return{ok:false,msg:'Server hat kein DriveItem zurueckgegeben - Ziel unbekannt'};
+    try{
+      const token=await this.getToken();
+      if(!token)return{ok:false,msg:'Kein Token fuer die Gegenpruefung'};
+      const resp=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+item.id+'/content',
+        {headers:{'Authorization':'Bearer '+token,'Cache-Control':'no-cache'},cache:'no-store'});
+      if(!resp.ok)return{ok:false,msg:'Gegenlesen fehlgeschlagen (HTTP '+resp.status+')'};
+      const txt=await resp.text();
+      if(txt===body)return{ok:true,msg:'gegengelesen, '+bytes+' Bytes identisch'};
+      if(_byteLen(txt)===bytes)return{ok:true,msg:'gegengelesen, Groesse identisch ('+bytes+' Bytes)'};
+      return{ok:false,msg:'Server liefert anderen Inhalt zurueck ('+_byteLen(txt)+' statt '+bytes+' Bytes)'};
+    }catch(e){return{ok:false,msg:'Gegenlesen: '+((e&&e.message)||String(e))}}
   },
   async loadProjects(){const data=await this.readFile('projekte.json');if(data&&data.projekte){projects=data.projekte;lsSet(C.LS+'projects',JSON.stringify(projects),true);toast('Projekte von SharePoint geladen','success');renderProjectList();return true}return false},
   async saveProjects(){const ok=await this.writeFile('projekte.json',{lastUpdated:new Date().toISOString().split('T')[0],count:projects.length,projekte:projects});if(ok)toast('projekte.json auf SharePoint','success');return ok},
@@ -1267,7 +1433,7 @@ const SP={
     // 3. Write: Soft-Deletes aelter als 30 Tage werden nicht mehr mitgeschleppt
     const cutoff=Date.now()-30*86400000;
     const toWrite=merged.filter(e=>!e._deleted||(e.lastModified&&e.lastModified>cutoff));
-    const ok=await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:toWrite},{quiet:!!opts.quiet});
+    const ok=await this.writeFile(fn,{employee:user.name,employeeId:user.id,lastUpdated:new Date().toISOString(),year:new Date().getFullYear(),entries:toWrite},{quiet:!!opts.quiet,verify:!!opts.verify});
     if(!ok)throw new Error(this._lastWriteError||'SharePoint hat das Speichern abgelehnt');
     console.log('[SP] Eintraege gespeichert:',toWrite.length,'('+fn+')');
     return toWrite.length;
@@ -1277,20 +1443,36 @@ const SP={
   // Erfolg oder Fehlergrund zurueck. Aufruf ueber den Button "Upload erzwingen".
   async forceUpload(onProgress){
     const rep=[];
-    const note=(file,ok,msg,count)=>{rep.push({file:file,ok:ok,msg:msg||'',count:count});if(onProgress)onProgress(rep);return rep[rep.length-1]};
+    const note=(file,ok,msg,count,detail)=>{rep.push({file:file,ok:ok,msg:msg||'',count:count,detail:detail||''});if(onProgress)onProgress(rep);return rep[rep.length-1]};
+    // Nach jedem Upload den kompletten Request/Response-Block mitgeben - ohne den
+    // laesst sich ein "HTTP 200, aber nichts kommt an" nicht auseinanderhalten.
+    const letzterBlock=()=>_writeInfoText(this._lastWriteInfo);
     if(!user){note('Anmeldung',false,'Kein Benutzer angemeldet');return rep}
     const token=await this.getToken();
     if(!token){note('Anmeldung',false,'Kein Zugriffstoken - bitte neu mit Microsoft anmelden');return rep}
+    this._lastWriteInfo=null;
     const driveId=await this.getDriveId();
     if(!driveId){note('SharePoint-Site',false,'Drive-ID nicht gefunden - fehlende Berechtigung?');return rep}
-    note('Verbindung',true,'Token und Drive-ID OK');
-    // 1) Eigene Zeiteintraege
+    // Wohin schreiben wir ueberhaupt? Bei "200, aber die Datei aendert sich nicht"
+    // ist fast immer die Bibliothek eine andere als die, in der nachgeschaut wird.
+    const di=this._driveInfo||{};
+    const ordner=await this._driveHasZeiterfassung(driveId);
+    const zielBlock=[
+      'Drive-ID: '+driveId,
+      'Gefunden ueber: '+(di.quelle||'unbekannt'),
+      di.siteName?('Site: '+di.siteName+(di.siteUrl?' - '+di.siteUrl:'')):null,
+      di.driveName?('Bibliothek: '+di.driveName+(di.driveUrl?' - '+di.driveUrl:'')):null,
+      'Zielordner '+C.SP_PATH+': '+(ordner.missing?'FEHLT IN DIESER BIBLIOTHEK!':(ordner.ok?'vorhanden':'nicht pruefbar ('+ordner.error+')')),
+      ordner.folder&&ordner.folder.webUrl?('Ordner-URL: '+ordner.folder.webUrl):null
+    ].filter(Boolean).join('\n');
+    note('Ziel-Bibliothek',!ordner.missing,ordner.missing?'Der Zeiterfassungs-Ordner liegt nicht in dieser Bibliothek - Uploads landen am falschen Ort':'Token und Drive-ID OK',null,zielBlock);
+    // 1) Eigene Zeiteintraege - mit Gegenpruefung
     const fnE=this.entriesFile(user.name);
-    try{const n=await this.saveEntries({quiet:true});note(fnE,true,'hochgeladen',n)}
-    catch(e){note(fnE,false,e.message)}
+    try{const n=await this.saveEntries({quiet:true,verify:true});note(fnE,true,'hochgeladen und gegengelesen',n,letzterBlock())}
+    catch(e){note(fnE,false,e.message,null,letzterBlock())}
     // 2) Abwesenheiten
-    try{const n=await syncAbsToSP({quiet:true});note('Abwesenheiten/alle.json',true,'hochgeladen',n)}
-    catch(e){note('Abwesenheiten/alle.json',false,e.message)}
+    try{const n=await syncAbsToSP({quiet:true,verify:true});note('Abwesenheiten/alle.json',true,'hochgeladen und gegengelesen',n,letzterBlock())}
+    catch(e){note('Abwesenheiten/alle.json',false,e.message,null,letzterBlock())}
     // 3) Admin-Daten nur fuer Admins - normale MA haben darauf keinen Schreibzugriff
     if(user.admin){
       const jobs=[
@@ -1302,10 +1484,10 @@ const SP={
       for(const job of jobs){
         const fn=job[0];
         try{
-          const ok=await this.writeFile(fn,job[1](),{quiet:true});
-          if(ok)note(fn,true,'hochgeladen',job[2]());
-          else note(fn,false,this._lastWriteError||'abgelehnt');
-        }catch(e){note(fn,false,(e&&e.message)||String(e))}
+          const ok=await this.writeFile(fn,job[1](),{quiet:true,verify:true});
+          if(ok)note(fn,true,'hochgeladen und gegengelesen',job[2](),letzterBlock());
+          else note(fn,false,this._lastWriteError||'abgelehnt',null,letzterBlock());
+        }catch(e){note(fn,false,(e&&e.message)||String(e),null,letzterBlock())}
       }
     }
     return rep;
@@ -1961,13 +2143,22 @@ function showUploadReport(rep,existing,done){
     body.style.cssText='flex:1;overflow:auto;padding:10px 16px;font-size:.8rem;line-height:1.5';
     const foot=document.createElement('div');
     foot.style.cssText='padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border,#ddd);flex-wrap:wrap';
+    const bCopy=document.createElement('button');
+    bCopy.className='btn btn-secondary btn-sm';bCopy.textContent='Kopieren';
+    bCopy.onclick=function(){
+      const txt=(window.__lastUploadReport||[]).map(function(r){
+        return (r.ok?'OK  ':'FEHLER  ')+r.file+(r.count!=null?' ('+r.count+')':'')+': '+r.msg+(r.detail?'\n'+r.detail:'');
+      }).join('\n\n');
+      try{navigator.clipboard.writeText(txt);toast('Bericht kopiert','success')}
+      catch(e){toast('Bitte Text markieren und kopieren','warning')}
+    };
     const bDiag=document.createElement('button');
     bDiag.className='btn btn-secondary btn-sm';bDiag.textContent='Diagnose';
     bDiag.onclick=function(){o.remove();showDiag()};
     const bClose=document.createElement('button');
     bClose.className='btn btn-sm';bClose.textContent='Schliessen';bClose.id='uploadReportClose';
     bClose.onclick=function(){o.remove()};
-    foot.appendChild(bDiag);foot.appendChild(bClose);
+    foot.appendChild(bCopy);foot.appendChild(bDiag);foot.appendChild(bClose);
     box.appendChild(head);box.appendChild(body);box.appendChild(foot);
     o.appendChild(box);
     document.body.appendChild(o);
@@ -1975,15 +2166,22 @@ function showUploadReport(rep,existing,done){
     body=o.querySelector('#uploadReportBody');
   }
   if(!body)return o;
+  window.__lastUploadReport=rep||[];
   if(!rep||!rep.length){
     body.innerHTML='<div style="padding:14px 0">\u23f3 Upload l\u00e4uft \u2026</div>';
     return o;
   }
-  body.innerHTML=rep.map(function(r){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  body.innerHTML=rep.map(function(r,i){
     const icon=r.ok?'\u2705':'\u274c';
     const col=r.ok?'var(--text,#111)':'#dc2626';
     const cnt=(r.count!==undefined&&r.count!==null)?(' \u00b7 '+r.count+' Datens\u00e4tze'):'';
-    return '<div style="padding:5px 0;border-bottom:1px solid var(--border,#eee);color:'+col+'">'+icon+' <strong>'+r.file+'</strong>'+cnt+'<div style="font-size:.72rem;opacity:.85;word-break:break-word">'+(r.msg||'')+'</div></div>';
+    // Details eingeklappt: im Alltag stoert der Block nicht, fuer die Fehlersuche
+    // steht alles drin (Pfad, URL, Status, Header, Datei-URL, Gegenpruefung).
+    const det=r.detail?('<details'+(r.ok?'':' open')+' style="margin-top:3px"><summary style="cursor:pointer;font-size:.7rem;opacity:.8">Details</summary>'+
+      '<pre style="font-family:ui-monospace,monospace;font-size:.66rem;line-height:1.4;white-space:pre-wrap;word-break:break-all;margin:4px 0 0;padding:6px;background:rgba(127,127,127,.12);border-radius:6px">'+esc(r.detail)+'</pre></details>'):'';
+    return '<div style="padding:5px 0;border-bottom:1px solid var(--border,#eee);color:'+col+'">'+icon+' <strong>'+esc(r.file)+'</strong>'+cnt+
+      '<div style="font-size:.72rem;opacity:.85;word-break:break-word">'+esc(r.msg||'')+'</div>'+det+'</div>';
   }).join('')+(done?'':'<div style="padding:8px 0">\u23f3 \u2026</div>');
   return o;
 }
@@ -2690,7 +2888,7 @@ async function syncAbsToSP(opts){
     // Write to SP, exclude soft-deleted older than 30 days
     const cutoff=Date.now()-30*86400000;
     const toWrite=merged.filter(a=>!a._deleted||(a.lastModified&&a.lastModified>cutoff));
-    const ok=await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:toWrite},{quiet:!!opts.quiet});
+    const ok=await SP.writeFile('Abwesenheiten/alle.json',{lastUpdated:new Date().toISOString(),absences:toWrite},{quiet:!!opts.quiet,verify:!!opts.verify});
     if(!ok)throw new Error(SP._lastWriteError||'SharePoint hat das Speichern abgelehnt');
     _absNeedsSync=false;
     console.log('[SP] Abwesenheiten gespeichert:',toWrite.length);
